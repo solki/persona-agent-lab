@@ -36,3 +36,5 @@ The memory API is scoped under `/agents/{agent_id}/memories`. A memory record ca
 Qdrant is accessed through a vector store abstraction. Agents must not directly access the Qdrant client.
 
 If Qdrant is unavailable, vector search should return a clear unavailable status and basic app startup should continue.
+
+Milestone 3 adds the vector abstraction and Qdrant adapter shell. Both search and upsert require `agent_id` before any vector-store operation can run, preserving memory isolation by default.

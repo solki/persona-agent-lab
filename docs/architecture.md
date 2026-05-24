@@ -36,3 +36,9 @@ The backend is a FastAPI application with Pydantic settings and SQLAlchemy metad
 Milestone 2 adds service-backed CRUD APIs for agents, souls, tools, agent-tool assignment, agent context, and agent memory. Context and memory services always filter by `agent_id`; update and delete operations on another agent's records return `404`.
 
 Runtime execution, Tool Gateway execution, and vector memory integration are added in later milestones.
+
+## Tool Gateway
+
+Milestone 3 introduces the Tool Gateway boundary. Tools are registered in a local registry, but execution must pass through `ToolGateway`, which checks that the requested tool exists, is active, and is assigned to the requesting agent before calling the wrapper.
+
+Tavily search is represented as a Tool Gateway wrapper. If `TAVILY_API_KEY` is missing, the wrapper returns a configuration error instead of crashing.

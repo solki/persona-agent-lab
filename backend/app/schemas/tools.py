@@ -27,3 +27,12 @@ class ToolRead(ToolBase):
     id: int
 
     model_config = {"from_attributes": True}
+
+
+class ToolResult(BaseModel):
+    tool_name: str
+    agent_id: int
+    allowed: bool
+    success: bool
+    output: dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
