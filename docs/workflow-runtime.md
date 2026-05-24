@@ -37,3 +37,7 @@ Snapshots make mock and real-provider behavior inspectable and reproducible.
 ## Mock Provider
 
 The mock provider returns deterministic placeholder responses based on the assembled prompt. It records metadata showing that context and memory were injected, but it does not call external LLM APIs.
+
+## Frontend Runtime UI
+
+Milestone 6 adds workflow list, workflow editor, workflow run, and run trace pages. The UI keeps workflow composition separate from agent configuration by editing only workflow metadata and `graph_config.agent_sequence`. Run details expose the saved config snapshot and ordered trace events for inspection.

@@ -1,4 +1,4 @@
-import type { Agent, AgentContext, AgentMemory, Soul, Tool } from "@/lib/types";
+import type { Agent, AgentContext, AgentMemory, Run, Soul, Tool, TraceEvent, Workflow } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -70,5 +70,16 @@ export const api = {
   approveMemory: (agentId: number, memoryId: number) =>
     request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}/approve`, { method: "POST" }),
   rejectMemory: (agentId: number, memoryId: number) =>
-    request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}/reject`, { method: "POST" })
+    request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}/reject`, { method: "POST" }),
+
+  listWorkflows: () => request<Workflow[]>("/workflows"),
+  getWorkflow: (id: number) => request<Workflow>(`/workflows/${id}`),
+  createWorkflow: (body: JsonBody) => request<Workflow>("/workflows", jsonOptions("POST", body)),
+  updateWorkflow: (id: number, body: JsonBody) => request<Workflow>(`/workflows/${id}`, jsonOptions("PUT", body)),
+  deleteWorkflow: (id: number) => request<void>(`/workflows/${id}`, { method: "DELETE" }),
+  runWorkflow: (id: number, task: string) => request<Run>(`/workflows/${id}/run`, jsonOptions("POST", { task })),
+
+  listRuns: () => request<Run[]>("/runs"),
+  getRun: (id: number) => request<Run>(`/runs/${id}`),
+  getRunTrace: (id: number) => request<TraceEvent[]>(`/runs/${id}/trace`)
 };

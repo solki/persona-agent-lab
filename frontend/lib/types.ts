@@ -71,3 +71,32 @@ export interface AgentMemory {
   importance: number;
   status: MemoryStatus;
 }
+
+export type WorkflowType = "sequential" | "supervisor" | "handoff_swarm";
+export type RunStatus = "pending" | "running" | "completed" | "failed";
+
+export interface Workflow {
+  id: number;
+  name: string;
+  description?: string | null;
+  workflow_type: WorkflowType;
+  graph_config: Record<string, unknown>;
+  is_active: boolean;
+}
+
+export interface Run {
+  id: number;
+  workflow_id: number;
+  input: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  status: RunStatus;
+  config_snapshot: Record<string, unknown>;
+}
+
+export interface TraceEvent {
+  id: number;
+  run_id: number;
+  event_type: string;
+  agent_id?: number | null;
+  payload: Record<string, unknown>;
+}
