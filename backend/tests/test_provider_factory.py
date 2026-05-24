@@ -6,8 +6,12 @@ from app.runtime.openai_compatible_provider import OpenAICompatibleProvider, Pro
 from app.runtime.provider_factory import create_provider
 
 
+def isolated_settings(**values):
+    return Settings(_env_file=None, **values)
+
+
 def test_mock_provider_selection_still_works():
-    settings = Settings(llm_provider="mock")
+    settings = isolated_settings(llm_provider="mock")
 
     provider = create_provider(settings)
 
@@ -15,7 +19,7 @@ def test_mock_provider_selection_still_works():
 
 
 def test_openai_compatible_provider_selection_works_with_required_values():
-    settings = Settings(
+    settings = isolated_settings(
         llm_provider="openai_compatible",
         openai_compatible_api_key="test-key",
         openai_compatible_base_url="https://example.test/v1",
@@ -47,11 +51,11 @@ def test_openai_compatible_provider_requires_configuration(field, message):
     values[field] = None
 
     with pytest.raises(ProviderConfigurationError, match=message):
-        create_provider(Settings(**values))
+        create_provider(isolated_settings(**values))
 
 
 def test_openai_compatible_provider_name_is_optional_and_defaults_metadata():
-    settings = Settings(
+    settings = isolated_settings(
         llm_provider="openai_compatible",
         openai_compatible_api_key="test-key",
         openai_compatible_base_url="https://example.test/v1",

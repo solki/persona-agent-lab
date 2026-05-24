@@ -15,7 +15,7 @@ class QdrantVectorStore:
     @property
     def client(self) -> QdrantClient:
         if self._client is None:
-            self._client = QdrantClient(url=self.url, api_key=self.api_key)
+            self._client = QdrantClient(url=self.url, api_key=self.api_key or None)
         return self._client
 
     def status(self) -> VectorStoreStatus:

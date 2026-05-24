@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 os.environ.setdefault("CREATE_TABLES_ON_STARTUP", "false")
+os.environ["LLM_PROVIDER"] = "mock"
 
 import pytest
 from fastapi.testclient import TestClient

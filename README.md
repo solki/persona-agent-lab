@@ -4,6 +4,8 @@ Agent Swarm Lab is a configurable platform for creating, editing, deleting, conf
 
 The MVP starts with mock LLM mode so the full workflow can run locally without API cost. It also includes a generic OpenAI-compatible provider for model APIs that support the OpenAI chat completions format.
 
+Local development is self-contained. Docker Compose starts the required PostgreSQL and Qdrant services, so a new developer does not need a pre-existing local vector database.
+
 ## Core Architecture Rules
 
 - Agents are isolated by default.
@@ -38,13 +40,25 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
    cp frontend/.env.example frontend/.env.local
    ```
 
-2. Start local dependencies when backend code is available:
+2. Start required local infrastructure:
 
    ```bash
-   docker compose up -d postgres
+   docker compose up -d postgres qdrant
    ```
 
-3. Run the backend after Milestone 1 adds the FastAPI app:
+   If you later add backend or frontend services to Compose, `docker compose up -d` can start the full local stack.
+
+3. Verify the infrastructure:
+
+   ```bash
+   docker compose ps
+   docker compose logs postgres
+   curl http://localhost:6333/collections
+   ```
+
+   The Qdrant dashboard is available at [http://localhost:6333/dashboard](http://localhost:6333/dashboard).
+
+4. Run the backend:
 
    ```bash
    cd backend
@@ -54,7 +68,7 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
    uvicorn app.main:app --reload
    ```
 
-4. Run the frontend:
+5. Run the frontend:
 
    ```bash
    cd frontend
@@ -62,16 +76,29 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
    npm run dev
    ```
 
+To stop services:
+
+```bash
+docker compose down
+```
+
+To stop services and remove local PostgreSQL and Qdrant data:
+
+```bash
+docker compose down -v
+```
+
 ## Environment Variables
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string. |
+| `POSTGRES_HOST_PORT` | Host port mapped to PostgreSQL container port `5432`; defaults to `5433`. |
+| `DATABASE_URL` | PostgreSQL connection string. Local default is `postgresql://postgres:postgres@localhost:5433/agent_swarm_lab`. |
 | `FRONTEND_API_BASE_URL` | Frontend-facing backend API URL. |
 | `CORS_ORIGINS` | Comma-separated browser origins allowed to call the backend. |
 | `CREATE_TABLES_ON_STARTUP` | Creates MVP tables on backend startup for local development. |
-| `QDRANT_URL` | Local or remote Qdrant endpoint. |
-| `QDRANT_API_KEY` | Optional Qdrant API key. |
+| `QDRANT_URL` | Local or remote Qdrant endpoint. Local default is `http://localhost:6333`. Use `http://qdrant:6333` from backend containers. |
+| `QDRANT_API_KEY` | Optional Qdrant API key. Local Compose Qdrant does not require one. |
 | `QDRANT_COLLECTION_PREFIX` | Prefix for Agent Swarm Lab vector collections. |
 | `TAVILY_API_KEY` | Optional Tavily API key for Tool Gateway search. |
 | `LLM_PROVIDER` | Provider selector: `mock`, `openai_compatible`, `openai`, `anthropic`, or `ollama`. Defaults to `mock`. |
@@ -120,7 +147,22 @@ To verify the active provider, start the backend and call `GET /health`; the res
 
 ## Qdrant Notes
 
-Qdrant is expected to be reusable if it is already installed locally. The app should start even when Qdrant is unavailable; vector memory search should report a clear disabled or unavailable status instead of crashing. Agents must never access a raw Qdrant client directly.
+Qdrant is included in Docker Compose by default and persists data in the `qdrant_data` named volume. The app should start even when Qdrant is unavailable; vector memory search should report a clear disabled or unavailable status instead of crashing. Agents must never access a raw Qdrant client directly.
+
+For a backend running on the host machine, use:
+
+```bash
+QDRANT_URL=http://localhost:6333
+```
+
+For a backend running inside Docker Compose, use:
+
+```bash
+QDRANT_URL=http://qdrant:6333
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/agent_swarm_lab
+```
+
+The local Qdrant dashboard is available at [http://localhost:6333/dashboard](http://localhost:6333/dashboard).
 
 ## Tavily Notes
 

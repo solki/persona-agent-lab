@@ -8,9 +8,9 @@ This guide describes the local development setup for Agent Swarm Lab.
 - Node.js 20 or newer
 - Docker and Docker Compose
 - PostgreSQL through Docker Compose
-- Optional local Qdrant instance
+- Qdrant through Docker Compose
 
-Qdrant is not forced by this project scaffold. If Qdrant is unavailable, the backend should still start and report vector memory search as unavailable once that service is implemented.
+Agent Swarm Lab is a self-contained local development project. Docker Compose starts both PostgreSQL and Qdrant, so you do not need an existing Qdrant service on your machine. If Qdrant is unavailable, the backend should still start and report vector memory search as unavailable once that service is implemented.
 
 ## Environment Files
 
@@ -27,6 +27,29 @@ Do not commit `.env`, `backend/.env`, or `frontend/.env.local`.
 For local browser access, keep `CORS_ORIGINS` aligned with the frontend dev URL. The default permits `http://localhost:3000` and `http://127.0.0.1:3000`.
 
 Keep all LLM API keys in backend-only environment files or deployment secrets. Do not add LLM API keys to `frontend/.env.local`.
+
+The default local database URL is:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/agent_swarm_lab
+```
+
+The default local Qdrant settings are:
+
+```bash
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=
+QDRANT_COLLECTION_PREFIX=agent_swarm_lab
+```
+
+Local development Qdrant does not require an API key. The dashboard is available at [http://localhost:6333/dashboard](http://localhost:6333/dashboard).
+
+If the backend runs inside Docker Compose instead of on the host machine, use service names:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/agent_swarm_lab
+QDRANT_URL=http://qdrant:6333
+```
 
 ### LLM Provider Configuration
 
@@ -70,6 +93,33 @@ The health response includes `llm_provider`. For workflow runs, inspect the run 
 
 ## Backend
 
+Start required infrastructure before running the backend:
+
+```bash
+docker compose up -d postgres qdrant
+```
+
+If backend or frontend services are later added to Compose, use this to start the full local stack:
+
+```bash
+docker compose up -d
+```
+
+Verify PostgreSQL:
+
+```bash
+docker compose ps
+docker compose logs postgres
+```
+
+Verify Qdrant:
+
+```bash
+curl http://localhost:6333/collections
+```
+
+The Qdrant dashboard is available at [http://localhost:6333/dashboard](http://localhost:6333/dashboard).
+
 The backend foundation includes FastAPI, Pydantic settings, SQLAlchemy metadata, and the health endpoint.
 
 Local commands:
@@ -83,6 +133,18 @@ uvicorn app.main:app --reload
 ```
 
 `CREATE_TABLES_ON_STARTUP=true` creates the MVP tables automatically for local development. Use migrations before production deployment.
+
+Stop services without removing data:
+
+```bash
+docker compose down
+```
+
+Stop services and remove local PostgreSQL and Qdrant data:
+
+```bash
+docker compose down -v
+```
 
 ## Frontend
 

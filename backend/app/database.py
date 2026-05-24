@@ -12,7 +12,15 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+
+
+def sqlalchemy_database_url(database_url: str) -> str:
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
+engine = create_engine(sqlalchemy_database_url(settings.database_url), pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

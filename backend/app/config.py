@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     app_name: str = "agent-swarm-lab-backend"
     app_version: str = "0.1.0"
-    database_url: str = "postgresql+psycopg://agent_lab:agent_lab@localhost:5432/agent_lab"
+    database_url: str = "postgresql://postgres:postgres@localhost:5433/agent_swarm_lab"
     frontend_api_base_url: str = "http://localhost:8000"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     create_tables_on_startup: bool = True
