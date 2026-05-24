@@ -37,6 +37,22 @@ class AgentCreate(AgentBase):
     pass
 
 
+class AgentUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    role: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    system_prompt: Optional[str] = Field(default=None, min_length=1)
+    soul_id: Optional[int] = None
+    llm_provider: Optional[Literal["mock", "openai", "anthropic", "ollama"]] = None
+    model: Optional[str] = None
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=None, ge=1, le=200000)
+    memory_policy: Optional[MemoryPolicy] = None
+    context_policy: Optional[ContextPolicy] = None
+    handoff_policy: Optional[HandoffPolicy] = None
+    is_active: Optional[bool] = None
+
+
 class AgentRead(AgentBase):
     id: int
 

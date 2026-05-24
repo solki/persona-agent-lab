@@ -15,6 +15,14 @@ class AgentMemoryCreate(AgentMemoryBase):
     pass
 
 
+class AgentMemoryUpdate(BaseModel):
+    memory_type: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    content: Optional[str] = Field(default=None, min_length=1)
+    source: Optional[str] = None
+    importance: Optional[int] = Field(default=None, ge=0, le=100)
+    status: Optional[Literal["active", "pending", "rejected", "archived"]] = None
+
+
 class AgentMemoryRead(AgentMemoryBase):
     id: int
     agent_id: int

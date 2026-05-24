@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +13,14 @@ class AgentContextBase(BaseModel):
 
 class AgentContextCreate(AgentContextBase):
     pass
+
+
+class AgentContextUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    context_type: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    content: Optional[str] = Field(default=None, min_length=1)
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class AgentContextRead(AgentContextBase):

@@ -29,6 +29,10 @@ PostgreSQL stores durable state for agents, souls, tools, contexts, memories, wo
 
 Qdrant or a compatible vector store abstraction supports semantic memory retrieval. The application must tolerate unavailable Qdrant during basic startup.
 
-## Backend Foundation
+## Backend Foundation and CRUD
 
-The backend is a FastAPI application with Pydantic settings and SQLAlchemy metadata. Milestone 1 registers the required MVP tables and exposes `GET /health`. CRUD APIs, services, runtime execution, Tool Gateway, and vector memory integration are added in later milestones.
+The backend is a FastAPI application with Pydantic settings and SQLAlchemy metadata. Milestone 1 registers the required MVP tables and exposes `GET /health`.
+
+Milestone 2 adds service-backed CRUD APIs for agents, souls, tools, agent-tool assignment, agent context, and agent memory. Context and memory services always filter by `agent_id`; update and delete operations on another agent's records return `404`.
+
+Runtime execution, Tool Gateway execution, and vector memory integration are added in later milestones.
