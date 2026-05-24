@@ -28,3 +28,7 @@ The first runtime target is mock LLM mode. Mock mode should assemble the same co
 PostgreSQL stores durable state for agents, souls, tools, contexts, memories, workflows, runs, trace events, experiments, and config snapshots.
 
 Qdrant or a compatible vector store abstraction supports semantic memory retrieval. The application must tolerate unavailable Qdrant during basic startup.
+
+## Backend Foundation
+
+The backend is a FastAPI application with Pydantic settings and SQLAlchemy metadata. Milestone 1 registers the required MVP tables and exposes `GET /health`. CRUD APIs, services, runtime execution, Tool Gateway, and vector memory integration are added in later milestones.

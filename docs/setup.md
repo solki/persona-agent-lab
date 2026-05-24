@@ -26,9 +26,9 @@ Do not commit `.env`, `backend/.env`, or `frontend/.env.local`.
 
 ## Backend
 
-Backend implementation starts in Milestone 1.
+The backend foundation includes FastAPI, Pydantic settings, SQLAlchemy metadata, and the health endpoint.
 
-Planned local commands:
+Local commands:
 
 ```bash
 cd backend
@@ -55,6 +55,5 @@ npm run dev
 Backend tests begin in Milestone 1:
 
 ```bash
-cd backend
-pytest
+backend/.venv/bin/pytest backend/tests
 ```
