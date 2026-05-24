@@ -100,3 +100,32 @@ export interface TraceEvent {
   agent_id?: number | null;
   payload: Record<string, unknown>;
 }
+
+export interface Experiment {
+  id: number;
+  name: string;
+  description?: string | null;
+  task_prompt: string;
+  agent_ids: number[];
+  evaluation_config: Record<string, unknown>;
+}
+
+export interface ExperimentAgentResult {
+  agent_id: number;
+  agent_name: string;
+  run_id: number;
+  trace_url: string;
+  output: string;
+}
+
+export interface ExperimentRun {
+  id: number;
+  experiment_id: number;
+  run_ids: number[];
+  comparison_result?: {
+    experiment_id: number;
+    task_prompt: string;
+    agent_results: ExperimentAgentResult[];
+    evaluation_config: Record<string, unknown>;
+  } | null;
+}

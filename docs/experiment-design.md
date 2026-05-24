@@ -12,6 +12,8 @@ The first experiment module should allow a user to:
 - Compare outputs side by side.
 - Open trace links for each run.
 
+Milestone 7 implements this flow with backend experiment APIs and frontend experiment pages. Each selected agent is run through its own single-agent sequential workflow so the same task is compared without sharing private context or memory across agents.
+
 ## Experiment Discipline
 
 Each experiment should define:

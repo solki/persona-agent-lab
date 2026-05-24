@@ -107,5 +107,5 @@ npm run build
 
 - Milestone 0 contains scaffolding and documentation only.
 - Backend API implementation starts in Milestone 1.
-- Experiments are implemented in a later milestone.
+- The MVP experiment module compares two or more agents on the same task and links to per-run traces.
 - Real LLM providers are placeholders until mock mode is working end to end.

@@ -7,7 +7,7 @@ class ExperimentBase(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
     task_prompt: str = Field(min_length=1)
-    agent_ids: list[int] = Field(default_factory=list)
+    agent_ids: list[int] = Field(min_length=2)
     evaluation_config: dict[str, Any] = Field(default_factory=dict)
 
 

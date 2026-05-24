@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.agents import router as agents_router
 from app.api.contexts import router as contexts_router
+from app.api.experiments import router as experiments_router
 from app.api.health import router as health_router
 from app.api.memories import router as memories_router
 from app.api.runs import router as runs_router
@@ -22,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(memories_router)
     app.include_router(workflows_router)
     app.include_router(runs_router)
+    app.include_router(experiments_router)
     return app
 
 

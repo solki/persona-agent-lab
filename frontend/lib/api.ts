@@ -1,4 +1,15 @@
-import type { Agent, AgentContext, AgentMemory, Run, Soul, Tool, TraceEvent, Workflow } from "@/lib/types";
+import type {
+  Agent,
+  AgentContext,
+  AgentMemory,
+  Experiment,
+  ExperimentRun,
+  Run,
+  Soul,
+  Tool,
+  TraceEvent,
+  Workflow
+} from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -81,5 +92,10 @@ export const api = {
 
   listRuns: () => request<Run[]>("/runs"),
   getRun: (id: number) => request<Run>(`/runs/${id}`),
-  getRunTrace: (id: number) => request<TraceEvent[]>(`/runs/${id}/trace`)
+  getRunTrace: (id: number) => request<TraceEvent[]>(`/runs/${id}/trace`),
+
+  listExperiments: () => request<Experiment[]>("/experiments"),
+  getExperiment: (id: number) => request<Experiment>(`/experiments/${id}`),
+  createExperiment: (body: JsonBody) => request<Experiment>("/experiments", jsonOptions("POST", body)),
+  runExperiment: (id: number) => request<ExperimentRun>(`/experiments/${id}/run`, { method: "POST" })
 };
