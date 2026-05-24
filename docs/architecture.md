@@ -43,6 +43,12 @@ Milestone 3 introduces the Tool Gateway boundary. Tools are registered in a loca
 
 Tavily search is represented as a Tool Gateway wrapper. If `TAVILY_API_KEY` is missing, the wrapper returns a configuration error instead of crashing.
 
+Tool Gateway calls can attach to a run id. When a run id is provided, the gateway persists `tool_call_requested`, `tool_call_allowed`, `tool_call_denied`, and `tool_call_result` trace events so tool decisions are auditable.
+
 ## Runtime Foundation
 
 Milestone 4 adds workflow and run APIs, deterministic context assembly, mock LLM generation, sequential workflow execution, run trace events, and config snapshots. Context and memory are assembled per agent; private context or memory from another agent is not injected into the active agent's prompt.
+
+## Milestone 8 Review Fixes
+
+The review pass added local CORS configuration for the frontend, startup table initialization for local development, and trace persistence for Tool Gateway decisions.

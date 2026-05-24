@@ -24,6 +24,8 @@ cp frontend/.env.example frontend/.env.local
 
 Do not commit `.env`, `backend/.env`, or `frontend/.env.local`.
 
+For local browser access, keep `CORS_ORIGINS` aligned with the frontend dev URL. The default permits `http://localhost:3000` and `http://127.0.0.1:3000`.
+
 ## Backend
 
 The backend foundation includes FastAPI, Pydantic settings, SQLAlchemy metadata, and the health endpoint.
@@ -37,6 +39,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+`CREATE_TABLES_ON_STARTUP=true` creates the MVP tables automatically for local development. Use migrations before production deployment.
 
 ## Frontend
 

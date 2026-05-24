@@ -68,6 +68,8 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string. |
 | `FRONTEND_API_BASE_URL` | Frontend-facing backend API URL. |
+| `CORS_ORIGINS` | Comma-separated browser origins allowed to call the backend. |
+| `CREATE_TABLES_ON_STARTUP` | Creates MVP tables on backend startup for local development. |
 | `QDRANT_URL` | Local or remote Qdrant endpoint. |
 | `QDRANT_API_KEY` | Optional Qdrant API key. |
 | `QDRANT_COLLECTION_PREFIX` | Prefix for Agent Swarm Lab vector collections. |
@@ -84,6 +86,10 @@ Qdrant is expected to be reusable if it is already installed locally. The app sh
 ## Tavily Notes
 
 Tavily search will be implemented as a Tool Gateway tool. A missing `TAVILY_API_KEY` must return a clear configuration error from the tool wrapper and must not crash the app.
+
+## Review Status
+
+Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls.
 
 ## Running Tests
 

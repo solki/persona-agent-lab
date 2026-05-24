@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     database_url: str = "postgresql+psycopg://agent_lab:agent_lab@localhost:5432/agent_lab"
     frontend_api_base_url: str = "http://localhost:8000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    create_tables_on_startup: bool = True
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: Optional[str] = None
     qdrant_collection_prefix: str = "agent_swarm_lab"
@@ -20,6 +22,10 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     ollama_base_url: str = "http://localhost:11434"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
