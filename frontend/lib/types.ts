@@ -22,7 +22,7 @@ export interface Agent {
   role: string;
   system_prompt: string;
   soul_id?: number | null;
-  llm_provider: "mock" | "openai" | "anthropic" | "ollama";
+  llm_provider: "mock" | "openai_compatible" | "openai" | "anthropic" | "ollama";
   model: string;
   temperature: number;
   max_tokens: number;

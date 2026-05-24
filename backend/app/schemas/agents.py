@@ -23,7 +23,7 @@ class AgentBase(BaseModel):
     role: str = Field(min_length=1, max_length=120)
     system_prompt: str = Field(min_length=1)
     soul_id: Optional[int] = None
-    llm_provider: Literal["mock", "openai", "anthropic", "ollama"] = "mock"
+    llm_provider: Literal["mock", "openai_compatible", "openai", "anthropic", "ollama"] = "mock"
     model: str = "mock-deterministic"
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=200000)
@@ -43,7 +43,7 @@ class AgentUpdate(BaseModel):
     role: Optional[str] = Field(default=None, min_length=1, max_length=120)
     system_prompt: Optional[str] = Field(default=None, min_length=1)
     soul_id: Optional[int] = None
-    llm_provider: Optional[Literal["mock", "openai", "anthropic", "ollama"]] = None
+    llm_provider: Optional[Literal["mock", "openai_compatible", "openai", "anthropic", "ollama"]] = None
     model: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=200000)

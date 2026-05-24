@@ -95,6 +95,7 @@ export function AgentForm({ mode, agentId }: AgentFormProps) {
           <Field label="Provider">
             <select className={inputClass} value={form.llm_provider} onChange={(event) => setForm({ ...form, llm_provider: event.target.value })}>
               <option value="mock">mock</option>
+              <option value="openai_compatible">openai_compatible</option>
               <option value="openai">openai</option>
               <option value="anthropic">anthropic</option>
               <option value="ollama">ollama</option>

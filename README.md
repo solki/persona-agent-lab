@@ -2,7 +2,7 @@
 
 Agent Swarm Lab is a configurable platform for creating, editing, deleting, configuring, and composing independent AI agents. Each agent owns its own model settings, soul/persona, system prompt, context entries, memory store, tool permissions, and handoff policy.
 
-The MVP starts with mock LLM mode so the full workflow can run locally without API cost. Real provider integrations can be added behind the provider abstraction in later milestones.
+The MVP starts with mock LLM mode so the full workflow can run locally without API cost. It also includes a generic OpenAI-compatible provider for model APIs that support the OpenAI chat completions format.
 
 ## Core Architecture Rules
 
@@ -74,10 +74,49 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
 | `QDRANT_API_KEY` | Optional Qdrant API key. |
 | `QDRANT_COLLECTION_PREFIX` | Prefix for Agent Swarm Lab vector collections. |
 | `TAVILY_API_KEY` | Optional Tavily API key for Tool Gateway search. |
-| `LLM_PROVIDER` | Provider selector; defaults to `mock`. |
-| `OPENAI_API_KEY` | Placeholder for future OpenAI provider integration. |
+| `LLM_PROVIDER` | Provider selector: `mock`, `openai_compatible`, `openai`, `anthropic`, or `ollama`. Defaults to `mock`. |
+| `OPENAI_COMPATIBLE_API_KEY` | Backend-only API key for any OpenAI-compatible endpoint. Required when `LLM_PROVIDER=openai_compatible`. |
+| `OPENAI_COMPATIBLE_BASE_URL` | Base URL for the compatible endpoint. Required when `LLM_PROVIDER=openai_compatible`. |
+| `OPENAI_COMPATIBLE_MODEL` | Model name passed to chat completions. Required when `LLM_PROVIDER=openai_compatible`. |
+| `OPENAI_COMPATIBLE_PROVIDER_NAME` | Optional label stored in provider metadata, such as `deepseek` or `openrouter`. |
+| `OPENAI_API_KEY` | Placeholder for standard OpenAI provider integration. |
+| `OPENAI_MODEL` | Optional default model for standard OpenAI provider integration. |
 | `ANTHROPIC_API_KEY` | Placeholder for future Anthropic provider integration. |
+| `ANTHROPIC_MODEL` | Optional default model for Anthropic provider integration. |
 | `OLLAMA_BASE_URL` | Placeholder for future Ollama provider integration. |
+| `OLLAMA_MODEL` | Optional default model for Ollama provider integration. |
+
+## LLM Providers
+
+Mock mode is the default:
+
+```bash
+LLM_PROVIDER=mock
+```
+
+Use the generic OpenAI-compatible provider when a model vendor exposes an OpenAI-style chat completions API:
+
+```bash
+LLM_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_PROVIDER_NAME=your-provider-name
+OPENAI_COMPATIBLE_API_KEY=your_provider_api_key
+OPENAI_COMPATIBLE_BASE_URL=https://provider.example.com
+OPENAI_COMPATIBLE_MODEL=provider-model-name
+```
+
+DeepSeek is one example. Its API documentation describes OpenAI-compatible endpoints at `https://api.deepseek.com` and current model names including `deepseek-v4-flash` and `deepseek-v4-pro`:
+
+```bash
+LLM_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_PROVIDER_NAME=deepseek
+OPENAI_COMPATIBLE_API_KEY=your_deepseek_api_key
+OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com
+OPENAI_COMPATIBLE_MODEL=deepseek-v4-flash
+```
+
+LLM API keys belong only in backend environment files such as `backend/.env` or a server-side deployment secret store. Do not put LLM API keys in `frontend/.env.local` or expose them through frontend variables.
+
+To verify the active provider, start the backend and call `GET /health`; the response includes `llm_provider`. Workflow run trace output also stores provider metadata on agent output events.
 
 ## Qdrant Notes
 
@@ -114,4 +153,4 @@ npm run build
 - Milestone 0 contains scaffolding and documentation only.
 - Backend API implementation starts in Milestone 1.
 - The MVP experiment module compares two or more agents on the same task and links to per-run traces.
-- Real LLM providers are placeholders until mock mode is working end to end.
+- `openai_compatible` can call compatible chat completions APIs. Standard OpenAI, Anthropic, and Ollama providers remain placeholders.

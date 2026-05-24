@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from app.models.agent import Agent
 from app.models.workflow import Workflow
 from app.models.run import Run
+from app.config import get_settings
 from app.runtime.context_assembler import ContextAssembler
-from app.runtime.mock_llm_runner import MockProvider
+from app.runtime.provider_factory import create_provider
 from app.services.trace_service import create_trace_event
 
 
@@ -14,7 +15,7 @@ class WorkflowRunner:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.context_assembler = ContextAssembler(db)
-        self.mock_provider = MockProvider()
+        self.provider = create_provider(get_settings())
 
     def run(self, workflow: Workflow, task: str) -> Run:
         if workflow.workflow_type != "sequential":
@@ -59,9 +60,15 @@ class WorkflowRunner:
                 {"memory_ids": assembled.metadata["memory_ids"]},
                 agent.id,
             )
-            provider_response = self.mock_provider.generate(
+            provider_response = self.provider.generate(
                 assembled.prompt,
-                {"agent_name": agent.name, "task": current_task, "model": agent.model, "temperature": agent.temperature},
+                {
+                    "agent_name": agent.name,
+                    "task": current_task,
+                    "model": agent.model,
+                    "temperature": agent.temperature,
+                    "max_tokens": agent.max_tokens,
+                },
             )
             agent_output = {
                 "agent_id": agent.id,

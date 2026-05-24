@@ -18,10 +18,17 @@ class Settings(BaseSettings):
     qdrant_api_key: Optional[str] = None
     qdrant_collection_prefix: str = "agent_swarm_lab"
     tavily_api_key: Optional[str] = None
-    llm_provider: str = Field(default="mock", pattern="^(mock|openai|anthropic|ollama)$")
+    llm_provider: str = Field(default="mock", pattern="^(mock|openai_compatible|openai|anthropic|ollama)$")
+    openai_compatible_api_key: Optional[str] = None
+    openai_compatible_base_url: Optional[str] = None
+    openai_compatible_model: Optional[str] = None
+    openai_compatible_provider_name: Optional[str] = None
     openai_api_key: Optional[str] = None
+    openai_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    anthropic_model: Optional[str] = None
     ollama_base_url: str = "http://localhost:11434"
+    ollama_model: Optional[str] = None
 
     @property
     def cors_origin_list(self) -> list[str]:
