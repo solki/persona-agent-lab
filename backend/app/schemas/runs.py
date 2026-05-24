@@ -8,6 +8,10 @@ class RunCreate(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkflowRunRequest(BaseModel):
+    task: str = Field(min_length=1)
+
+
 class RunRead(BaseModel):
     id: int
     workflow_id: int

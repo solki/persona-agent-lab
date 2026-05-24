@@ -42,3 +42,7 @@ Runtime execution, Tool Gateway execution, and vector memory integration are add
 Milestone 3 introduces the Tool Gateway boundary. Tools are registered in a local registry, but execution must pass through `ToolGateway`, which checks that the requested tool exists, is active, and is assigned to the requesting agent before calling the wrapper.
 
 Tavily search is represented as a Tool Gateway wrapper. If `TAVILY_API_KEY` is missing, the wrapper returns a configuration error instead of crashing.
+
+## Runtime Foundation
+
+Milestone 4 adds workflow and run APIs, deterministic context assembly, mock LLM generation, sequential workflow execution, run trace events, and config snapshots. Context and memory are assembled per agent; private context or memory from another agent is not injected into the active agent's prompt.
