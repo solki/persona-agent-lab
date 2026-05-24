@@ -40,14 +40,23 @@ uvicorn app.main:app --reload
 
 ## Frontend
 
-Frontend implementation starts in Milestone 5.
+The frontend foundation starts in Milestone 5 with Next.js, TypeScript, Tailwind CSS, and typed API helpers.
 
-Planned local commands:
+Local commands:
 
 ```bash
 cd frontend
 npm install
 npm run dev
+```
+
+Frontend verification:
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm run build
 ```
 
 ## Tests

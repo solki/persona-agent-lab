@@ -54,7 +54,7 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
    uvicorn app.main:app --reload
    ```
 
-4. Run the frontend after Milestone 5 adds the Next.js app:
+4. Run the frontend:
 
    ```bash
    cd frontend
@@ -94,11 +94,18 @@ cd backend
 pytest
 ```
 
-Frontend tests are optional for the first MVP milestones.
+Frontend checks:
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm run build
+```
 
 ## Current MVP Limitations
 
 - Milestone 0 contains scaffolding and documentation only.
 - Backend API implementation starts in Milestone 1.
-- CRUD APIs, Tool Gateway, runtime, experiments, and frontend pages are implemented in later milestones.
+- Workflow run UI, trace viewer UI, and experiments are implemented in later milestones.
 - Real LLM providers are placeholders until mock mode is working end to end.
