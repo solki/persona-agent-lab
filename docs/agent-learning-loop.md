@@ -19,7 +19,7 @@ Run output
 
 Learning is scoped by `agent_id`. Feedback and evaluations are linked to a specific run and a specific participating agent. A proposed memory cannot become active until a user approves it.
 
-Milestone 9 does not implement Agent Runtime Observatory, live monitoring, token usage dashboards, automatic soul/persona rewriting, or automatic agent configuration mutation. Soul/persona updates remain a future enhancement and should require an explicit user action.
+Milestone 9 did not implement Agent Runtime Observatory, live monitoring, token usage dashboards, automatic soul/persona rewriting, or automatic agent configuration mutation. Milestone 10 adds the observatory separately. Soul/persona updates remain a future enhancement and should require an explicit user action.
 
 ## Data Model
 

@@ -15,6 +15,7 @@ from app.schemas.learning import (
     ReflectionRequest,
 )
 from app.services.trace_service import create_trace_event
+from app.services.observatory_service import create_learning_event
 
 
 def list_feedback_for_agent(db: Session, agent_id: int) -> list[AgentFeedback]:
@@ -36,6 +37,16 @@ def create_feedback(db: Session, run: Run, agent: Agent, payload: AgentFeedbackC
         {"feedback_id": feedback.id, "feedback_type": feedback.feedback_type, "rating": feedback.rating},
         agent.id,
     )
+    create_learning_event(
+        db,
+        agent.id,
+        "feedback_added",
+        source_type="feedback",
+        source_id=feedback.id,
+        content=feedback.feedback_text,
+        status="created",
+        run_id=run.id,
+    )
     return feedback
 
 
@@ -51,6 +62,16 @@ def create_evaluation(db: Session, run: Run, agent: Agent, payload: AgentEvaluat
         "learning_evaluation_recorded",
         {"evaluation_id": evaluation.id, "evaluator_type": evaluation.evaluator_type, "scores": evaluation.scores},
         agent.id,
+    )
+    create_learning_event(
+        db,
+        agent.id,
+        "evaluation_created",
+        source_type="evaluation",
+        source_id=evaluation.id,
+        content=str(evaluation.recommendations),
+        status="created",
+        run_id=run.id,
     )
     return evaluation
 
@@ -77,6 +98,17 @@ def create_proposed_memory(db: Session, agent: Agent, payload: ProposedMemoryCre
     db.commit()
     db.refresh(proposed_memory)
     _trace_proposed_memory(db, proposed_memory, "memory_proposed")
+    run_id = _source_run_id(db, proposed_memory)
+    create_learning_event(
+        db,
+        agent.id,
+        "proposed_memory_created",
+        source_type="proposed_memory",
+        source_id=proposed_memory.id,
+        content=proposed_memory.content,
+        status=proposed_memory.status,
+        run_id=run_id,
+    )
     return proposed_memory
 
 
@@ -102,6 +134,27 @@ def approve_proposed_memory(db: Session, proposed_memory: ProposedMemory) -> tup
     db.refresh(proposed_memory)
     db.refresh(agent_memory)
     _trace_proposed_memory(db, proposed_memory, "proposed_memory_approved", {"agent_memory_id": agent_memory.id})
+    run_id = _source_run_id(db, proposed_memory)
+    create_learning_event(
+        db,
+        proposed_memory.agent_id,
+        "memory_approved",
+        source_type="proposed_memory",
+        source_id=proposed_memory.id,
+        content=proposed_memory.content,
+        status=proposed_memory.status,
+        run_id=run_id,
+    )
+    create_learning_event(
+        db,
+        proposed_memory.agent_id,
+        "memory_activated",
+        source_type="agent_memory",
+        source_id=agent_memory.id,
+        content=agent_memory.content,
+        status=agent_memory.status,
+        run_id=run_id,
+    )
     return proposed_memory, agent_memory
 
 
@@ -113,6 +166,16 @@ def reject_proposed_memory(db: Session, proposed_memory: ProposedMemory) -> Prop
     db.commit()
     db.refresh(proposed_memory)
     _trace_proposed_memory(db, proposed_memory, "proposed_memory_rejected")
+    create_learning_event(
+        db,
+        proposed_memory.agent_id,
+        "memory_rejected",
+        source_type="proposed_memory",
+        source_id=proposed_memory.id,
+        content=proposed_memory.content,
+        status=proposed_memory.status,
+        run_id=_source_run_id(db, proposed_memory),
+    )
     return proposed_memory
 
 
@@ -145,6 +208,16 @@ class ReflectionService:
             "learning_reflection_created",
             {"proposed_memory_id": proposed.id, "reflection": reflection},
             agent.id,
+        )
+        create_learning_event(
+            self.db,
+            agent.id,
+            "reflection_created",
+            source_type="proposed_memory",
+            source_id=proposed.id,
+            content=reflection,
+            status=proposed.status,
+            run_id=run.id,
         )
         return reflection, proposed
 

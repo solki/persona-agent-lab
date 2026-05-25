@@ -52,3 +52,27 @@ The experiment should assert:
 - Soul/persona fields are unchanged.
 
 This is intentionally manual in Milestone 9. A dedicated before/after comparison UI can be added later without changing the isolation model.
+
+## Observatory-Assisted Experiments
+
+Milestone 10 adds runtime observability to make experiments easier to audit.
+
+For each run, record and inspect:
+
+- agent execution status and elapsed time
+- assembled context for each execution
+- retrieved memory IDs
+- model request/response summaries
+- token usage
+- learning events
+- execution errors
+
+Useful experiment questions:
+
+- Did approved memory change future behavior for the same agent?
+- Did token usage change after adding context or memory?
+- Did the agent retrieve only its own memory?
+- Did feedback and evaluation events attach to the correct `agent_id`?
+- Did different agent personas produce different outputs while preserving isolation?
+
+The observatory should support the analysis without introducing hidden shared state. Conclusions should compare execution records, token summaries, outputs, and learning events across runs.

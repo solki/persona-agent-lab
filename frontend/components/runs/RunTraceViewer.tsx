@@ -31,7 +31,17 @@ export function RunTraceViewer({ runId }: { runId: number }) {
       {run ? (
         <>
           <section className="mb-5 rounded border border-line bg-white p-5">
-            <h2 className="text-base font-semibold">Run {run.id}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">Run {run.id}</h2>
+              <div className="flex flex-wrap gap-2">
+                <a className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${run.id}/monitor`}>
+                  Monitor
+                </a>
+                <a className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${run.id}/executions`}>
+                  Executions
+                </a>
+              </div>
+            </div>
             <p className="mt-2 text-sm text-slate-600">Status: {run.status} · Workflow: {run.workflow_id}</p>
             <h3 className="mt-4 text-sm font-semibold">Config Snapshot</h3>
             <pre className="mt-2 max-h-72 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">

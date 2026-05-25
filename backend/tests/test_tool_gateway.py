@@ -1,8 +1,10 @@
 from app.models.agent import Agent
+from app.models.observatory import AgentExecution
 from app.models.run import Run
 from app.models.tool import Tool
 from app.models.workflow import Workflow
 from app.services.agent_service import assign_tool
+from app.services.observatory_service import list_execution_events
 from app.services.trace_service import list_trace_events
 from app.tools.gateway import ToolGateway
 from app.tools.registry import ToolRegistry
@@ -61,6 +63,41 @@ def test_gateway_persists_trace_events_for_allowed_tool_call(db_session):
 
     event_types = [event.event_type for event in list_trace_events(db_session, run.id)]
     assert event_types == ["tool_call_requested", "tool_call_allowed", "tool_call_result"]
+
+
+def test_gateway_persists_execution_events_when_execution_id_is_provided(db_session):
+    agent, tool = create_agent_and_tool(db_session)
+    assign_tool(db_session, agent.id, tool.id)
+    workflow = Workflow(name="Execution trace workflow", workflow_type="sequential", graph_config={"agent_sequence": [agent.id]})
+    db_session.add(workflow)
+    db_session.commit()
+    db_session.refresh(workflow)
+    run = Run(workflow_id=workflow.id, input={"task": "trace"}, status="running", config_snapshot={})
+    db_session.add(run)
+    db_session.commit()
+    db_session.refresh(run)
+    execution = AgentExecution(
+        run_id=run.id,
+        agent_id=agent.id,
+        agent_name_snapshot=agent.name,
+        status="running",
+        sequence_index=0,
+        input_payload={"task": "trace"},
+        provider="mock",
+        model="mock-deterministic",
+        temperature=0.2,
+        config_snapshot={},
+    )
+    db_session.add(execution)
+    db_session.commit()
+    db_session.refresh(execution)
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    ToolGateway(db_session, registry).execute(agent.id, "echo", {"message": "hello"}, run_id=run.id, execution_id=execution.id)
+
+    event_types = [event.event_type for event in list_execution_events(db_session, run.id, execution.id)]
+    assert event_types == ["tool_call_requested", "tool_call_allowed", "tool_call_completed"]
 
 
 def test_gateway_denies_unassigned_tool(db_session):

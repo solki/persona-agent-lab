@@ -1,8 +1,8 @@
 # Milestone History
 
-This file summarizes repository state through Milestones 0-9 and the follow-up infrastructure/provider hardening work. It is intended to help a fresh Codex session continue without relying on long conversation history.
+This file summarizes repository state through Milestones 0-10 and the follow-up infrastructure/provider hardening work. It is intended to help a fresh Codex session continue without relying on long conversation history.
 
-## Completed Milestones 0-9
+## Completed Milestones 0-10
 
 ### Milestone 0: Project Scaffold And Planning
 
@@ -90,6 +90,16 @@ This file summarizes repository state through Milestones 0-9 and the follow-up i
 - Added agent detail proposed-memory review UI.
 - Added tests for feedback scoping, evaluation score validation, reflection, proposal defaults, approval writeback, rejection behavior, and cross-agent memory isolation.
 
+### Milestone 10: Agent Runtime Observatory
+
+- Added persistent agent execution records for each sequential workflow step.
+- Added agent execution events for queued, started, context assembly, memory retrieval, LLM request/response, memory write proposal, completion, and failure phases.
+- Added token usage persistence with mock-provider estimates.
+- Added learning event persistence integrated with feedback, evaluations, reflection, proposed memories, approval, rejection, and memory activation.
+- Added monitor, execution list/detail, token usage, agent evolution, and performance summary APIs.
+- Added frontend pages for run monitor, run executions, execution detail, and agent evolution.
+- Added tests for execution/event creation, mock token usage, monitor output, memory isolation in execution details, learning-event scoping, and performance aggregation.
+
 ## Follow-Up Work Completed After Milestone 8
 
 - Added a generic OpenAI-compatible LLM provider using the OpenAI Python SDK.
@@ -109,6 +119,7 @@ This file summarizes repository state through Milestones 0-9 and the follow-up i
 - Handoff policy is not integrated into a full workflow execution path.
 - Before/after learning comparison is manual through run traces and repeated workflow runs.
 - Learning updates only agent memory; soul/persona is not rewritten automatically.
+- Runtime monitoring is polling-based; WebSocket streaming is not implemented.
 - Frontend has no automated tests.
 - Database migrations are not set up.
 - Authentication and production deployment are not implemented.
@@ -130,6 +141,15 @@ Implemented focus:
 
 Do not implement Milestone 10 as part of Milestone 9.
 
-## Milestone 10 Planned Objective
+## Milestone 10 Completed Objective
 
-Milestone 10 is not implemented and the repository does not yet define a concrete objective for it. Treat it as a future milestone to be planned after Milestone 9 is complete and reviewed.
+Milestone 10 implements the Agent Runtime Observatory.
+
+Implemented focus:
+
+- Polling-based run monitor.
+- Per-agent execution records and event timelines.
+- Mock token usage estimates and token usage summaries.
+- Agent evolution timeline from memory, feedback, evaluations, proposed memories, learning events, executions, and token usage.
+- Post-run execution detail views that show only context and memory injected into that execution.
+- Documentation for monitoring, token usage, learning events, persona observation, and polling limitations.

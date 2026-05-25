@@ -8,6 +8,8 @@ Local development is self-contained. Docker Compose starts the required PostgreS
 
 Milestone 9 adds an agent learning loop. Users can attach feedback and optional evaluations to a run output, reflect that feedback into a pending proposed memory, manually approve or reject it, and let approved memories affect future runs through the normal agent-scoped memory retrieval path.
 
+Milestone 10 adds an Agent Runtime Observatory. Users can monitor run status by polling, inspect agent execution records and events, review token usage, and track agent evolution over time.
+
 ## Core Architecture Rules
 
 - Agents are isolated by default.
@@ -25,6 +27,7 @@ Milestone 9 adds an agent learning loop. Users can attach feedback and optional 
 - Learning happens through agent-specific memory updates only.
 - Proposed memories require manual approval before they become active memory.
 - Soul/persona is not rewritten automatically.
+- Runtime observability must not expose another agent's private memory or provider secrets.
 
 ## Project Structure
 
@@ -197,9 +200,34 @@ Approved proposed memories create active `AgentMemory` records for the same `age
 
 See [docs/agent-learning-loop.md](docs/agent-learning-loop.md) for the full flow and before/after experiment process.
 
+## Agent Runtime Observatory
+
+The runtime observatory records every agent step in a workflow run.
+
+Relevant endpoints:
+
+- `GET /runs/{run_id}/monitor`
+- `GET /runs/{run_id}/executions`
+- `GET /runs/{run_id}/executions/{execution_id}`
+- `GET /runs/{run_id}/executions/{execution_id}/events`
+- `GET /runs/{run_id}/token-usage`
+- `GET /agents/{agent_id}/evolution`
+- `GET /agents/{agent_id}/performance-summary`
+
+Frontend pages:
+
+- `/runs/[id]/monitor`
+- `/runs/[id]/executions`
+- `/runs/[id]/executions/[executionId]`
+- `/agents/[id]/evolution`
+
+The MVP monitor uses polling rather than WebSockets. Mock provider token usage is estimated from text length and marked as estimated.
+
+See [docs/agent-runtime-observatory.md](docs/agent-runtime-observatory.md) for the full observability model.
+
 ## Review Status
 
-Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval.
+Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views.
 
 ## Running Tests
 
@@ -224,4 +252,5 @@ npm run build
 - The MVP experiment module compares two or more agents on the same task and links to per-run traces.
 - Learning updates only agent memory; it does not rewrite soul/persona automatically.
 - The before/after learning comparison flow is manual through run traces and repeated workflow runs.
+- Runtime monitoring is polling-based; WebSocket streaming is not implemented yet.
 - `openai_compatible` can call compatible chat completions APIs. Standard OpenAI, Anthropic, and Ollama providers remain placeholders.

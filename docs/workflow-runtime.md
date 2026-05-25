@@ -32,6 +32,28 @@ Every run should record:
 - Run completed
 - Run failed
 
+## Agent Runtime Observatory
+
+Milestone 10 records each sequential workflow step as an `AgentExecution`.
+
+Each execution stores the agent snapshot, sequence index, status, input payload, output payload, provider, model, temperature, timestamps, elapsed milliseconds, and an agent config snapshot. The runner also writes `AgentExecutionEvent` rows for context assembly, memory retrieval, LLM request/response, memory write proposal, completion, and failure.
+
+The monitor endpoint is polling-based:
+
+```http
+GET /runs/{run_id}/monitor
+```
+
+It returns run status, active execution, all executions, latest execution events, token usage summary, learning event summary, elapsed time, and errors.
+
+The execution detail endpoint:
+
+```http
+GET /runs/{run_id}/executions/{execution_id}
+```
+
+shows only the context and memory injected into that specific execution. It must not expose another agent's private memory.
+
 ## Config Snapshots
 
 Runs should save snapshots of agent definitions, workflow definitions, model settings, soul/persona, system prompt, tool permissions, handoff policy, context assembly metadata, and memory retrieval metadata.
@@ -63,3 +85,5 @@ OPENAI_COMPATIBLE_MODEL=deepseek-v4-flash
 Milestone 6 adds workflow list, workflow editor, workflow run, and run trace pages. The UI keeps workflow composition separate from agent configuration by editing only workflow metadata and `graph_config.agent_sequence`. Run details expose the saved config snapshot and ordered trace events for inspection.
 
 Milestone 9 extends the run trace page with feedback capture and reflection into proposed memory. Proposed memory approval remains on the agent detail page. Once approved, the memory is retrieved by the same context assembly path used by any other active agent memory.
+
+Milestone 10 adds `/runs/[id]/monitor`, `/runs/[id]/executions`, and `/runs/[id]/executions/[executionId]` for runtime observability. The monitor polls the backend instead of opening a WebSocket stream.

@@ -53,6 +53,17 @@ run feedback -> reflection -> pending proposed memory -> approval -> active Agen
 
 This milestone does not rewrite soul/persona fields automatically. Any persona update should be handled as a separate explicit user action in a later milestone.
 
+## Observatory Memory Inspection
+
+Milestone 10 adds execution detail views that show the context and memory injected into one agent execution.
+
+The observatory does not perform new memory retrieval. It records what the existing context assembler selected for the current `agent_id`. This means:
+
+- An execution detail can show only the memory injected into that execution.
+- Another agent's private memory must not appear unless it was explicitly included by an authorized future handoff path.
+- Rejected proposed memories remain absent because they never become active `AgentMemory` rows.
+- Approved feedback-derived memory appears only through the normal active memory retrieval path for the same agent.
+
 ## Vector Store
 
 Qdrant is accessed through a vector store abstraction. Agents must not directly access the Qdrant client.

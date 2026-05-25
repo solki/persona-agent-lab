@@ -9,6 +9,7 @@ from app.api.experiments import router as experiments_router
 from app.api.health import router as health_router
 from app.api.learning import router as learning_router
 from app.api.memories import router as memories_router
+from app.api.observatory import router as observatory_router
 from app.api.runs import router as runs_router
 from app.api.souls import router as souls_router
 from app.api.tools import router as tools_router
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(runs_router)
     app.include_router(experiments_router)
     app.include_router(learning_router)
+    app.include_router(observatory_router)
     return app
 
 

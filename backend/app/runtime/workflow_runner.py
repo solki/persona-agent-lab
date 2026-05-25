@@ -8,6 +8,7 @@ from app.models.run import Run
 from app.config import get_settings
 from app.runtime.context_assembler import ContextAssembler
 from app.runtime.provider_factory import create_provider
+from app.services import observatory_service
 from app.services.trace_service import create_trace_event
 
 
@@ -15,7 +16,8 @@ class WorkflowRunner:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.context_assembler = ContextAssembler(db)
-        self.provider = create_provider(get_settings())
+        self.settings = get_settings()
+        self.provider = create_provider(self.settings)
 
     def run(self, workflow: Workflow, task: str) -> Run:
         if workflow.workflow_type != "sequential":
@@ -43,9 +45,36 @@ class WorkflowRunner:
 
         agent_outputs = []
         current_task = task
-        for agent in agents:
+        for sequence_index, agent in enumerate(agents):
+            execution = observatory_service.create_execution(
+                self.db,
+                run.id,
+                agent,
+                sequence_index,
+                {"task": current_task},
+                provider=self.settings.llm_provider,
+            )
             create_trace_event(self.db, run.id, "agent_selected", {"agent_id": agent.id, "agent_name": agent.name}, agent.id)
+            observatory_service.start_execution(self.db, execution)
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "context_assembly_started",
+                {"task": current_task},
+            )
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "memory_retrieval_started",
+                {"agent_id": agent.id},
+            )
             assembled = self.context_assembler.assemble(agent.id, current_task)
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "context_assembled",
+                {"prompt": assembled.prompt, "metadata": assembled.metadata, "sections": assembled.sections},
+            )
             create_trace_event(
                 self.db,
                 run.id,
@@ -60,15 +89,44 @@ class WorkflowRunner:
                 {"memory_ids": assembled.metadata["memory_ids"]},
                 agent.id,
             )
-            provider_response = self.provider.generate(
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "memory_retrieved",
+                {"memory_ids": assembled.metadata["memory_ids"]},
+            )
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "llm_request_started",
+                {"provider": self.settings.llm_provider, "model": agent.model, "temperature": agent.temperature},
+            )
+            try:
+                provider_response = self.provider.generate(
+                    assembled.prompt,
+                    {
+                        "agent_name": agent.name,
+                        "task": current_task,
+                        "model": agent.model,
+                        "temperature": agent.temperature,
+                        "max_tokens": agent.max_tokens,
+                    },
+                )
+            except Exception as exc:
+                observatory_service.fail_execution(self.db, execution, str(exc))
+                raise
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "llm_response_received",
+                {"metadata": provider_response.metadata, "content_preview": provider_response.content[:500]},
+            )
+            observatory_service.record_token_usage(
+                self.db,
+                execution,
                 assembled.prompt,
-                {
-                    "agent_name": agent.name,
-                    "task": current_task,
-                    "model": agent.model,
-                    "temperature": agent.temperature,
-                    "max_tokens": agent.max_tokens,
-                },
+                provider_response.content,
+                provider_response.metadata,
             )
             agent_output = {
                 "agent_id": agent.id,
@@ -85,6 +143,13 @@ class WorkflowRunner:
                 {"write_mode": agent.memory_policy.get("write_mode", "manual_review"), "proposed": False},
                 agent.id,
             )
+            observatory_service.create_execution_event(
+                self.db,
+                execution,
+                "memory_write_proposed",
+                {"write_mode": agent.memory_policy.get("write_mode", "manual_review"), "proposed": False},
+            )
+            observatory_service.complete_execution(self.db, execution, agent_output)
             current_task = provider_response.content
 
         run.status = "completed"

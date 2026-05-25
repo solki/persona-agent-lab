@@ -1,8 +1,13 @@
 import type {
   Agent,
   AgentContext,
+  AgentEvolution,
+  AgentExecution,
+  AgentExecutionDetail,
+  AgentExecutionEvent,
   AgentFeedback,
   AgentMemory,
+  AgentPerformanceSummary,
   AgentEvaluation,
   Experiment,
   ExperimentRun,
@@ -11,7 +16,9 @@ import type {
   ProposedMemoryRejection,
   ReflectionResponse,
   Run,
+  RunMonitor,
   Soul,
+  TokenUsageSummary,
   Tool,
   TraceEvent,
   Workflow
@@ -114,6 +121,16 @@ export const api = {
   listRuns: () => request<Run[]>("/runs"),
   getRun: (id: number) => request<Run>(`/runs/${id}`),
   getRunTrace: (id: number) => request<TraceEvent[]>(`/runs/${id}/trace`),
+  getRunMonitor: (id: number) => request<RunMonitor>(`/runs/${id}/monitor`),
+  listRunExecutions: (id: number) => request<AgentExecution[]>(`/runs/${id}/executions`),
+  getRunExecution: (runId: number, executionId: number) =>
+    request<AgentExecutionDetail>(`/runs/${runId}/executions/${executionId}`),
+  listRunExecutionEvents: (runId: number, executionId: number) =>
+    request<AgentExecutionEvent[]>(`/runs/${runId}/executions/${executionId}/events`),
+  getRunTokenUsage: (id: number) => request<TokenUsageSummary>(`/runs/${id}/token-usage`),
+  getAgentEvolution: (agentId: number) => request<AgentEvolution>(`/agents/${agentId}/evolution`),
+  getAgentPerformanceSummary: (agentId: number) =>
+    request<AgentPerformanceSummary>(`/agents/${agentId}/performance-summary`),
 
   listExperiments: () => request<Experiment[]>("/experiments"),
   getExperiment: (id: number) => request<Experiment>(`/experiments/${id}`),
