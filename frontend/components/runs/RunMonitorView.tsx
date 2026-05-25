@@ -28,7 +28,7 @@ export function RunMonitorView({ runId }: { runId: number }) {
       }
     }
     void load();
-    const interval = window.setInterval(load, 2500);
+    const interval = window.setInterval(load, 1000);
     return () => {
       active = false;
       window.clearInterval(interval);
@@ -47,6 +47,7 @@ export function RunMonitorView({ runId }: { runId: number }) {
         description="Poll live run state, agent execution progress, runtime events, token usage, and learning activity."
       />
       {error ? <StatusMessage title="Error" body={error} /> : null}
+      {!monitor && !error ? <StatusMessage title="Loading" body="Loading live run monitor." /> : null}
       {monitor ? (
         <div className="grid gap-5">
           <section className="grid gap-3 md:grid-cols-4">
@@ -69,11 +70,19 @@ export function RunMonitorView({ runId }: { runId: number }) {
           <section className="rounded border border-line bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-base font-semibold">Agent Status</h2>
-              <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}/executions`}>
-                View executions
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}`}>
+                  View trace
+                </Link>
+                <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}/executions`}>
+                  View executions
+                </Link>
+              </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {monitor.agent_executions.length === 0 ? (
+                <p className="text-sm text-slate-600">Waiting for agent executions to be queued.</p>
+              ) : null}
               {monitor.agent_executions.map((execution) => (
                 <Link
                   key={execution.id}

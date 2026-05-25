@@ -86,7 +86,7 @@ Milestone 10 status: implemented.
 - Learning evaluations: `POST /runs/{run_id}/agents/{agent_id}/evaluate`, `GET /runs/{run_id}/evaluations`
 - Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
 - Reflection: `POST /runs/{run_id}/agents/{agent_id}/reflect`
-- Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`
+- Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
 - Runs: `GET /runs`, `GET /runs/{run_id}`, `GET /runs/{run_id}/trace`
 - Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
 - Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
@@ -142,7 +142,7 @@ Milestone 10 status: implemented.
 - Experiment runs create a single-agent sequential workflow per selected agent, run the same task for each selected agent, and persist an `ExperimentRun` with run ids, trace links, outputs, task prompt, and evaluation config.
 - Experiments preserve isolation by running each selected agent in its own workflow run.
 - Before/after learning experiments are supported manually by comparing a baseline run with a later run after proposed-memory approval.
-- Runtime observatory pages support polling-based run monitoring, execution detail inspection, token usage review, and agent evolution timelines.
+- Runtime observatory pages support polling-based run monitoring, execution detail inspection, token usage review, and agent evolution timelines. The workflow run page starts monitor-first async runs and redirects to `/runs/{run_id}/monitor`.
 
 ## Current Frontend Configuration Behavior
 

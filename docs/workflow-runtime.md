@@ -46,6 +46,18 @@ GET /runs/{run_id}/monitor
 
 It returns run status, active execution, all executions, latest execution events, token usage summary, learning event summary, elapsed time, and errors.
 
+The frontend workflow run page uses the monitor-first run endpoint:
+
+```http
+POST /workflows/{workflow_id}/run-async
+```
+
+This endpoint creates a `Run`, queues one `AgentExecution` for each selected workflow agent, returns the run immediately, and executes the workflow in a background task. The frontend redirects to `/runs/{run_id}/monitor` so users can watch agents move through queued, running, completed, or failed states. The existing synchronous endpoint remains available for backend tests and direct API use:
+
+```http
+POST /workflows/{workflow_id}/run
+```
+
 The execution detail endpoint:
 
 ```http
@@ -86,4 +98,4 @@ Milestone 6 adds workflow list, workflow editor, workflow run, and run trace pag
 
 Milestone 9 extends the run trace page with feedback capture and reflection into proposed memory. Proposed memory approval remains on the agent detail page. Once approved, the memory is retrieved by the same context assembly path used by any other active agent memory.
 
-Milestone 10 adds `/runs/[id]/monitor`, `/runs/[id]/executions`, and `/runs/[id]/executions/[executionId]` for runtime observability. The monitor polls the backend instead of opening a WebSocket stream.
+Milestone 10 adds `/runs/[id]/monitor`, `/runs/[id]/executions`, and `/runs/[id]/executions/[executionId]` for runtime observability. The monitor polls the backend instead of opening a WebSocket stream. The workflow run form now opens the monitor page immediately after starting a run.

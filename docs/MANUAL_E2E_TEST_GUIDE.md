@@ -284,12 +284,12 @@ Expected result:
 Expected result:
 
 - A run is created.
-- The page shows the run status and output preview.
-- A **View trace** link appears.
+- The app immediately opens the run monitor page.
+- The monitor shows workflow status, active agent, queued/running/completed agent cards, event timeline, latest output, and token usage.
 
 ### L. Inspect Run Detail And Trace
 
-1. Select **View trace**.
+1. From the monitor page, select **View trace**.
 2. Confirm the run status is `completed`.
 3. Confirm **Run Input** contains the BI dashboard discrepancy task.
 4. Confirm **Run Output** contains a mock response with dashboard and Excel terms.
@@ -311,15 +311,14 @@ Expected result:
 
 ### M. Inspect Monitor, Executions, And Token Usage
 
-From the run trace page:
+From the monitor page:
 
-1. Select **Monitor**.
-2. Confirm status is `completed`.
+1. Confirm status eventually becomes `completed`.
+2. Confirm each workflow agent appears as an agent status card.
 3. Confirm token usage is shown.
-4. Go back to the run trace page.
-5. Select **Executions**.
-6. Open an execution detail.
-7. Confirm **Assembled Context**, **Retrieved Memories**, **Output Payload**, and **Token Usage** sections are visible.
+4. Select **View executions**.
+5. Open an execution detail.
+6. Confirm **Assembled Context**, **Retrieved Memories**, **Output Payload**, and **Token Usage** sections are visible.
 
 Expected result:
 
@@ -611,9 +610,9 @@ Invalid workflow configuration:
 - Symptom: workflow save or run fails.
 - Fix: make sure at least one active agent appears in the Agent sequence.
 
-No run id returned:
+No monitor opens after running:
 
-- Symptom: no **View trace** link appears after running.
+- Symptom: the app stays on the workflow run page after selecting **Run workflow**.
 - Fix: inspect the backend terminal logs and confirm the workflow has active agents.
 
 Provider configuration error:

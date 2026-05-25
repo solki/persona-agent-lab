@@ -20,6 +20,10 @@ class WorkflowRunner:
         self.provider = create_provider(self.settings)
 
     def run(self, workflow: Workflow, task: str) -> Run:
+        run = self.start(workflow, task)
+        return self.execute_run(run.id)
+
+    def start(self, workflow: Workflow, task: str) -> Run:
         if workflow.workflow_type != "sequential":
             raise ValueError(f"Workflow type {workflow.workflow_type} is a placeholder in the MVP runtime.")
 
@@ -43,17 +47,45 @@ class WorkflowRunner:
             {"workflow_id": workflow.id, "workflow_type": workflow.workflow_type, "agent_sequence": [agent.id for agent in agents]},
         )
 
-        agent_outputs = []
-        current_task = task
         for sequence_index, agent in enumerate(agents):
-            execution = observatory_service.create_execution(
+            observatory_service.create_execution(
                 self.db,
                 run.id,
                 agent,
                 sequence_index,
-                {"task": current_task},
+                {"task": task if sequence_index == 0 else None},
                 provider=self.settings.llm_provider,
             )
+
+        return run
+
+    def execute_run(self, run_id: int) -> Run:
+        run = self.db.get(Run, run_id)
+        if run is None:
+            raise ValueError("Run not found.")
+        workflow = self.db.get(Workflow, run.workflow_id)
+        if workflow is None:
+            raise ValueError("Workflow not found.")
+        agents = self._snapshot_agents(run)
+        executions = observatory_service.list_executions_for_run(self.db, run.id)
+        executions_by_step = {(execution.agent_id, execution.sequence_index): execution for execution in executions}
+        agent_outputs = []
+        current_task = str(run.input.get("task", ""))
+        for sequence_index, agent in enumerate(agents):
+            execution = executions_by_step.get((agent.id, sequence_index))
+            if execution is None:
+                execution = observatory_service.create_execution(
+                    self.db,
+                    run.id,
+                    agent,
+                    sequence_index,
+                    {"task": current_task},
+                    provider=self.settings.llm_provider,
+                )
+            else:
+                execution.input_payload = {"task": current_task}
+                self.db.commit()
+                self.db.refresh(execution)
             create_trace_event(self.db, run.id, "agent_selected", {"agent_id": agent.id, "agent_name": agent.name}, agent.id)
             observatory_service.start_execution(self.db, execution)
             observatory_service.create_execution_event(
@@ -181,8 +213,33 @@ class WorkflowRunner:
         create_trace_event(self.db, run.id, "run_completed", {"status": run.status, "agent_count": len(agent_outputs)})
         return run
 
+    def fail_run(self, run_id: int, error_message: str) -> Run:
+        run = self.db.get(Run, run_id)
+        if run is None:
+            raise ValueError("Run not found.")
+        for execution in observatory_service.list_executions_for_run(self.db, run.id):
+            if execution.status in {"queued", "running"}:
+                observatory_service.fail_execution(self.db, execution, error_message)
+        run.status = "failed"
+        run.output = {"error": error_message}
+        run.ended_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(run)
+        create_trace_event(self.db, run.id, "run_failed", {"error_message": error_message})
+        return run
+
     def _workflow_agents(self, workflow: Workflow) -> list[Agent]:
         agent_ids = workflow.graph_config.get("agent_sequence", [])
+        agents = []
+        for agent_id in agent_ids:
+            agent = self.db.get(Agent, agent_id)
+            if agent is None or not agent.is_active:
+                raise ValueError(f"Workflow references missing or inactive agent {agent_id}.")
+            agents.append(agent)
+        return agents
+
+    def _snapshot_agents(self, run: Run) -> list[Agent]:
+        agent_ids = [agent["id"] for agent in run.config_snapshot.get("agents", []) if "id" in agent]
         agents = []
         for agent_id in agent_ids:
             agent = self.db.get(Agent, agent_id)

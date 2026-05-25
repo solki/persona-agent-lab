@@ -398,11 +398,16 @@ async function runWorkflowViaUi(page: Page, workflowId: number, task: string) {
   await page.goto(`/workflows/${workflowId}/run`);
   await page.getByLabel("Task prompt").fill(task);
   await page.getByRole("button", { name: "Run workflow" }).click();
-  await expect(page.getByRole("link", { name: "View trace" })).toBeVisible();
+  await page.waitForURL(/\/runs\/\d+\/monitor$/);
+  await expect(page.getByRole("heading", { name: "Run Monitor" })).toBeVisible();
+  const runId = idFromUrl(page.url());
+  await expect.poll(async () => {
+    const run = await apiGet<{ status: string }>(`/runs/${runId}`);
+    return run.status;
+  }).toBe("completed");
   await page.getByRole("link", { name: "View trace" }).click();
-  await page.waitForURL(/\/runs\/\d+$/);
   await expect(page.getByRole("heading", { name: "Run Trace" })).toBeVisible();
-  return idFromUrl(page.url());
+  return runId;
 }
 
 async function createAgentApi(name: string, role: string) {
@@ -443,7 +448,7 @@ async function apiPost<T>(path: string, body: Record<string, unknown>): Promise<
 }
 
 function idFromUrl(url: string) {
-  const id = Number(url.match(/\/(\d+)(?:$|\?)/)?.[1]);
+  const id = Number(url.match(/\/(\d+)(?:$|\/|\?)/)?.[1]);
   expect(Number.isFinite(id), `Expected numeric id in ${url}`).toBeTruthy();
   return id;
 }

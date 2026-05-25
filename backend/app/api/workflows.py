@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.runtime.workflow_runner import WorkflowRunner
 from app.schemas.runs import RunRead, WorkflowRunRequest
 from app.schemas.workflows import WorkflowCreate, WorkflowRead, WorkflowUpdate
@@ -52,3 +52,31 @@ def run_workflow(workflow_id: int, payload: WorkflowRunRequest, db: Session = De
         return WorkflowRunner(db).run(workflow, payload.task)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/{workflow_id}/run-async", response_model=RunRead, status_code=status.HTTP_201_CREATED)
+def start_workflow_run(
+    workflow_id: int,
+    payload: WorkflowRunRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    workflow = require_workflow(db, workflow_id)
+    try:
+        run = WorkflowRunner(db).start(workflow, payload.task)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    background_tasks.add_task(_execute_workflow_run, run.id)
+    return run
+
+
+def _execute_workflow_run(run_id: int) -> None:
+    db = SessionLocal()
+    runner = WorkflowRunner(db)
+    try:
+        runner.execute_run(run_id)
+    except Exception as exc:
+        db.rollback()
+        runner.fail_run(run_id, str(exc))
+    finally:
+        db.close()

@@ -144,6 +144,7 @@ export const api = {
   updateWorkflow: (id: number, body: JsonBody) => request<Workflow>(`/workflows/${id}`, jsonOptions("PUT", body)),
   deleteWorkflow: (id: number) => request<void>(`/workflows/${id}`, { method: "DELETE" }),
   runWorkflow: (id: number, task: string) => request<Run>(`/workflows/${id}/run`, jsonOptions("POST", { task })),
+  startWorkflowRun: (id: number, task: string) => request<Run>(`/workflows/${id}/run-async`, jsonOptions("POST", { task })),
 
   listRuns: () => request<Run[]>("/runs"),
   getRun: (id: number) => request<Run>(`/runs/${id}`),

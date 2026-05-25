@@ -1,3 +1,8 @@
+from app.models.workflow import Workflow
+from app.runtime.workflow_runner import WorkflowRunner
+from app.services import observatory_service
+
+
 def create_agent(client, name, system_prompt):
     response = client.post(
         "/agents",
@@ -104,6 +109,31 @@ def test_sequential_workflow_run_creates_trace_events_and_snapshot(client):
     assert "FIRST_MEMORY" in first_context_event["payload"]["prompt"]
     assert "SECOND_CONTEXT" not in first_context_event["payload"]["prompt"]
     assert "SECOND_MEMORY" not in first_context_event["payload"]["prompt"]
+
+
+def test_workflow_start_creates_run_and_queued_executions_before_completion(client, db_session):
+    first_agent = create_agent(client, "Queued First", "Run after monitor opens.")
+    second_agent = create_agent(client, "Queued Second", "Run second after monitor opens.")
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "Monitor-first Workflow",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [first_agent["id"], second_agent["id"]]},
+        },
+    ).json()
+
+    started_run = WorkflowRunner(db_session).start(db_session.get(Workflow, workflow["id"]), "Start with monitor.")
+
+    assert started_run.status == "running"
+    executions = observatory_service.list_executions_for_run(db_session, started_run.id)
+    assert [execution.agent_id for execution in executions] == [first_agent["id"], second_agent["id"]]
+    assert [execution.status for execution in executions] == ["queued", "queued"]
+    monitor = observatory_service.monitor_for_run(db_session, started_run)
+    assert monitor["active_agent_execution"].agent_id == first_agent["id"]
+
+    completed_run = WorkflowRunner(db_session).execute_run(started_run.id)
+    assert completed_run.status == "completed"
 
 
 def test_runs_list_and_detail(client):
