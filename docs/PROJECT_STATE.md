@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after Milestone 10 Agent Runtime Observatory.
+Last updated after the frontend configuration completeness pass.
 
 ## Project Purpose
 
@@ -13,7 +13,7 @@ Milestone 10 status: implemented.
 ## Current Architecture
 
 - Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
-- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, and experiment comparison UI.
+- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, complete configuration management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, and experiment comparison UI.
 - Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
@@ -35,16 +35,16 @@ Milestone 10 status: implemented.
 ## Current Frontend Modules
 
 - `app/page.tsx`: Dashboard with navigation cards and isolation summary.
-- `app/agents`: Agent list, create page, edit/detail page with context, proposed-memory, and memory managers.
-- `app/souls`: Soul/persona list, create, and edit pages.
-- `app/tools`: Tool registry page.
+- `app/agents`: Agent list, create page, edit/detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review, and memory CRUD.
+- `app/souls`: Soul/persona list, create, edit, and delete flows.
+- `app/tools`: Tool registry page with create, edit, delete, config JSON, and active flag controls.
 - `app/workflows`: Workflow list, create/edit pages, and workflow run page.
 - `app/runs/[id]`: Run trace viewer with learning feedback and reflection panel; monitor and execution detail subpages.
 - `app/agents/[id]/evolution`: Agent evolution timeline and performance summary.
 - `app/experiments`: Experiment list, create page, and experiment run/comparison page.
-- `components/agents`: Agent form/list/detail, context manager, proposed-memory manager, memory manager.
-- `components/souls`: Soul list and form.
-- `components/tools`: Tool registry form/list.
+- `components/agents`: Agent form/list/detail, assigned-tool manager, context manager, proposed-memory manager, memory manager.
+- `components/souls`: Soul list and form with delete support.
+- `components/tools`: Tool registry form/list with edit/delete support.
 - `components/workflows`: Workflow list/form/run panel.
 - `components/runs`: Run trace viewer, learning feedback panel, monitor, execution list, and execution detail views.
 - `components/experiments`: Experiment list/form/runner.
@@ -114,8 +114,10 @@ Milestone 10 status: implemented.
 
 - Context entries are stored under `/agents/{agent_id}/contexts` and service queries always filter by `agent_id`.
 - Context updates and deletes through the wrong agent route return `404`.
+- The frontend supports context create, edit, delete, priority changes, and active/inactive status from the agent detail page.
 - Memory entries are stored under `/agents/{agent_id}/memories` and service queries always filter by `agent_id`.
 - Memory updates, deletes, approve, and reject operations through the wrong agent route return `404`.
+- The frontend supports memory create, edit, delete, status changes, approve, and reject from the agent detail page.
 - Memory statuses are `active`, `pending`, `rejected`, and `archived`; default created memory is `pending`.
 - Proposed memory statuses are `pending`, `approved`, and `rejected`; proposed memories always start as `pending`.
 - Feedback and evaluations are linked to a specific `run_id` and participating `agent_id`.
@@ -141,6 +143,15 @@ Milestone 10 status: implemented.
 - Experiments preserve isolation by running each selected agent in its own workflow run.
 - Before/after learning experiments are supported manually by comparing a baseline run with a later run after proposed-memory approval.
 - Runtime observatory pages support polling-based run monitoring, execution detail inspection, token usage review, and agent evolution timelines.
+
+## Current Frontend Configuration Behavior
+
+- Agent create/edit exposes soul selection, active status, provider, free-text model, temperature, max tokens, system prompt, and JSON editors for memory, context, and handoff policies.
+- Policy editors validate JSON before submitting to the backend. Default templates use manual memory review, active context inclusion, and handoff disabled.
+- Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
+- Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
+- Souls expose persona fields and can be created, edited, or deleted.
+- Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
 
 ## Current Test Coverage Summary
 

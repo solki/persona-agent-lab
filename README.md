@@ -225,9 +225,21 @@ The MVP monitor uses polling rather than WebSockets. Mock provider token usage i
 
 See [docs/agent-runtime-observatory.md](docs/agent-runtime-observatory.md) for the full observability model.
 
+## Frontend Configuration Management
+
+The frontend exposes the main backend-supported configuration records:
+
+- Agents can be created, edited, deleted, activated or deactivated, linked to a soul, and configured with provider/model settings plus JSON `memory_policy`, `context_policy`, and `handoff_policy`.
+- Souls can be created, edited, and deleted from the Souls pages.
+- Tools can be created, edited, deleted, activated or deactivated, and assigned or unassigned per agent from the agent detail page.
+- Agent contexts can be created, edited, deleted, prioritized, and activated or deactivated from the agent detail page.
+- Agent memories can be created, edited, deleted, approved, rejected, archived, or activated from the agent detail page.
+
+Policy and tool config editors validate JSON in the browser before sending requests. LLM API keys must still remain backend-only; the frontend uses only `NEXT_PUBLIC_API_BASE_URL` to reach the FastAPI API.
+
 ## Review Status
 
-Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views.
+Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views. The current frontend configuration pass completes CRUD and major field coverage for agents, souls, tools, contexts, memories, policies, active flags, and agent-tool assignments.
 
 ## Running Tests
 

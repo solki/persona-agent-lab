@@ -27,6 +27,7 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
   const [form, setForm] = useState(defaultSoul);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (mode === "edit" && soulId) {
@@ -49,14 +50,36 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
     try {
       const saved = mode === "create" ? await api.createSoul(form) : await api.updateSoul(soulId as number, form);
       setMessage("Soul saved.");
       if (mode === "create") {
         router.push(`/souls/${saved.id}`);
       }
-    } catch {
-      setError("Unable to save the soul.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save the soul.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteSoul() {
+    if (!soulId || !window.confirm("Delete this soul? Agents using it will need a different soul selected later.")) {
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.deleteSoul(soulId);
+      router.push("/souls");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete the soul.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -84,9 +107,16 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
             <textarea className={inputClass} rows={2} value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
           </Field>
         ))}
-        <button className="focus-ring w-fit rounded bg-accent px-4 py-2 text-sm font-medium text-white" type="submit">
-          Save soul
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="focus-ring w-fit rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={loading} type="submit">
+            {loading ? "Saving..." : "Save soul"}
+          </button>
+          {mode === "edit" ? (
+            <button className="focus-ring w-fit rounded border border-line bg-white px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60" disabled={loading} onClick={deleteSoul} type="button">
+              Delete
+            </button>
+          ) : null}
+        </div>
       </form>
     </>
   );

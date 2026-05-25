@@ -44,7 +44,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new ApiError(`Request failed: ${response.status}`, response.status);
+    let message = `Request failed: ${response.status}`;
+    try {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const body = (await response.json()) as { detail?: unknown; message?: unknown };
+        if (typeof body.detail === "string") {
+          message = body.detail;
+        } else if (Array.isArray(body.detail)) {
+          message = body.detail.map((item) => JSON.stringify(item)).join("; ");
+        } else if (typeof body.message === "string") {
+          message = body.message;
+        }
+      } else {
+        const text = await response.text();
+        if (text) {
+          message = text;
+        }
+      }
+    } catch {
+      message = `Request failed: ${response.status}`;
+    }
+    throw new ApiError(message, response.status);
   }
 
   if (response.status === 204) {
@@ -69,8 +90,10 @@ export const api = {
   getSoul: (id: number) => request<Soul>(`/souls/${id}`),
   createSoul: (body: JsonBody) => request<Soul>("/souls", jsonOptions("POST", body)),
   updateSoul: (id: number, body: JsonBody) => request<Soul>(`/souls/${id}`, jsonOptions("PUT", body)),
+  deleteSoul: (id: number) => request<void>(`/souls/${id}`, { method: "DELETE" }),
 
   listTools: () => request<Tool[]>("/tools"),
+  getTool: (id: number) => request<Tool>(`/tools/${id}`),
   createTool: (body: JsonBody) => request<Tool>("/tools", jsonOptions("POST", body)),
   updateTool: (id: number, body: JsonBody) => request<Tool>(`/tools/${id}`, jsonOptions("PUT", body)),
   deleteTool: (id: number) => request<void>(`/tools/${id}`, { method: "DELETE" }),
@@ -91,6 +114,10 @@ export const api = {
   listMemories: (agentId: number) => request<AgentMemory[]>(`/agents/${agentId}/memories`),
   createMemory: (agentId: number, body: JsonBody) =>
     request<AgentMemory>(`/agents/${agentId}/memories`, jsonOptions("POST", body)),
+  updateMemory: (agentId: number, memoryId: number, body: JsonBody) =>
+    request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}`, jsonOptions("PUT", body)),
+  deleteMemory: (agentId: number, memoryId: number) =>
+    request<void>(`/agents/${agentId}/memories/${memoryId}`, { method: "DELETE" }),
   approveMemory: (agentId: number, memoryId: number) =>
     request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}/approve`, { method: "POST" }),
   rejectMemory: (agentId: number, memoryId: number) =>

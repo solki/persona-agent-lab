@@ -30,6 +30,8 @@ export interface Agent {
   context_policy: ContextPolicy;
   handoff_policy: HandoffPolicy;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Soul {
@@ -41,6 +43,8 @@ export interface Soul {
   collaboration_style?: string | null;
   failure_handling_style?: string | null;
   escalation_style?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Tool {
@@ -50,6 +54,8 @@ export interface Tool {
   tool_type: string;
   config: Record<string, unknown>;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AgentContext {
@@ -60,6 +66,8 @@ export interface AgentContext {
   content: string;
   priority: number;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AgentMemory {
@@ -70,6 +78,9 @@ export interface AgentMemory {
   source?: string | null;
   importance: number;
   status: MemoryStatus;
+  created_at?: string;
+  updated_at?: string;
+  last_accessed_at?: string | null;
 }
 
 export interface AgentFeedback {
@@ -249,6 +260,8 @@ export interface Workflow {
   workflow_type: WorkflowType;
   graph_config: Record<string, unknown>;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Run {
@@ -258,6 +271,8 @@ export interface Run {
   output?: Record<string, unknown> | null;
   status: RunStatus;
   config_snapshot: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface TraceEvent {
@@ -275,6 +290,8 @@ export interface Experiment {
   task_prompt: string;
   agent_ids: number[];
   evaluation_config: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ExperimentAgentResult {

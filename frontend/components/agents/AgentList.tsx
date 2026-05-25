@@ -36,7 +36,12 @@ export function AgentList() {
           <Link key={agent.id} href={`/agents/${agent.id}`} className="focus-ring rounded border border-line bg-white p-4 hover:border-accent">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-ink">{agent.name}</h2>
-              <span className="rounded bg-panel px-2 py-1 text-xs text-slate-600">{agent.llm_provider}:{agent.model}</span>
+              <div className="flex flex-wrap justify-end gap-2">
+                <span className={`rounded px-2 py-1 text-xs ${agent.is_active ? "bg-success text-white" : "bg-panel text-slate-600"}`}>
+                  {agent.is_active ? "Active" : "Inactive"}
+                </span>
+                <span className="rounded bg-panel px-2 py-1 text-xs text-slate-600">{agent.llm_provider}:{agent.model}</span>
+              </div>
             </div>
             <p className="mt-2 text-sm text-slate-600">{agent.description || agent.role}</p>
             <p className="mt-3 text-xs text-slate-500">Memory: {agent.memory_policy.write_mode} · Handoff: {agent.handoff_policy.allow_handoff ? "allowed" : "off"}</p>

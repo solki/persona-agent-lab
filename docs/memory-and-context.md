@@ -10,6 +10,8 @@ Context assembly must be deterministic and inspectable. Trace events should show
 
 The context API is scoped under `/agents/{agent_id}/contexts`. A context record cannot be updated or deleted through another agent's route.
 
+The frontend agent detail page exposes context create, edit, delete, priority, type, content, and active/inactive controls. Inactive context remains stored but is excluded from active context assembly.
+
 ## Memory
 
 Memory items are learned or recorded observations attached to one agent. Memory retrieval and writeback must always use the current `agent_id`.
@@ -30,6 +32,8 @@ Supported memory write modes:
 The default write mode is `manual_review`. Pending memory must be visible and can be approved or rejected.
 
 The memory API is scoped under `/agents/{agent_id}/memories`. A memory record cannot be updated, deleted, approved, or rejected through another agent's route.
+
+The frontend agent detail page exposes memory create, edit, delete, source, importance, status, approve, and reject controls. Status changes affect future retrieval through the normal active-memory path; pending, rejected, and archived records are visible for review but not injected into future runs.
 
 ## Proposed Memory Review
 
