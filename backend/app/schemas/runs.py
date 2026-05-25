@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,9 @@ class RunRead(BaseModel):
     output: Optional[dict[str, Any]] = None
     status: Literal["pending", "running", "completed", "failed"]
     config_snapshot: dict[str, Any]
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -29,5 +33,6 @@ class TraceEventRead(BaseModel):
     event_type: str
     agent_id: Optional[int] = None
     payload: dict[str, Any]
+    created_at: datetime
 
     model_config = {"from_attributes": True}

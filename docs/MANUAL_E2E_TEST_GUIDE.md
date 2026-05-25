@@ -286,10 +286,11 @@ Expected result:
 - A run is created.
 - The app immediately opens the run monitor page.
 - The monitor shows workflow status, active agent, queued/running/completed agent cards, event timeline, latest output, and token usage.
+- Event payloads are collapsed by default. Select **Expand** on an event row to inspect formatted JSON, or use **Expand all** and **Collapse all**.
 
 ### L. Inspect Run Detail And Trace
 
-1. From the monitor page, select **View trace**.
+1. From the monitor page, select **Trace**.
 2. Confirm the run status is `completed`.
 3. Confirm **Run Input** contains the BI dashboard discrepancy task.
 4. Confirm **Run Output** contains a mock response with dashboard and Excel terms.
@@ -316,14 +317,19 @@ From the monitor page:
 1. Confirm status eventually becomes `completed`.
 2. Confirm each workflow agent appears as an agent status card.
 3. Confirm token usage is shown.
-4. Select **View executions**.
-5. Open an execution detail.
-6. Confirm **Assembled Context**, **Retrieved Memories**, **Output Payload**, and **Token Usage** sections are visible.
+4. Use the event filters to show only memory events, then return to **All events**.
+5. Select **Expand** on one event and confirm the JSON payload appears.
+6. Select **Collapse** and confirm the JSON payload is hidden again.
+7. Select **Executions**.
+8. Open an execution detail.
+9. Confirm **Assembled Context**, **Retrieved Memories**, **Output Payload**, and **Token Usage** sections are visible.
+10. Return to the monitor and select **Token Usage**.
 
 Expected result:
 
 - Monitor and execution pages are available.
 - Execution detail shows only the context and memory injected into that specific agent execution.
+- Long JSON payloads stay inside scrollable code blocks and do not stretch the page horizontally.
 
 ### N. Add Feedback
 
@@ -384,6 +390,24 @@ Expected result:
 
 - The page shows the agent's memories, feedback, proposed memories, learning events, executions, and token usage.
 - It does not show private learning data from other agents.
+
+### S. Manage And Clean Up Runs
+
+1. Open **Runs** from the sidebar.
+2. Confirm the page lists the runs you created.
+3. Use the status filter to show `completed` runs.
+4. Use the workflow filter to show only the BI Dashboard Discrepancy workflow.
+5. Open a run with **Monitor**, **Trace**, **Executions**, and **Token Usage**.
+6. Return to **Runs**.
+7. Select one old test run with its checkbox.
+8. Select **Delete selected**.
+9. Confirm the browser prompt.
+
+Expected result:
+
+- The selected run disappears from the Runs list.
+- Agents, workflows, souls, tools, contexts, and active approved memories remain available.
+- If deletion fails, the page shows the backend error message.
 
 ## 6. Exact Sample Content
 
@@ -574,9 +598,12 @@ This agent should first check dashboard filters, date range, metric definition, 
 - Run detail shows status, input, output, config snapshot, and trace events.
 - Trace shows context assembly, memory retrieval, LLM request/response, agent completion, and run completion.
 - Monitor and execution pages show token usage and execution detail.
+- Monitor event payloads are collapsed by default and expandable on demand.
 - Proposed memory starts as pending.
 - Approved proposed memory becomes active memory.
 - Re-running the workflow includes approved memory for the same agent only.
+- Runs page lists run history and links to monitor, trace, executions, and token usage.
+- Deleting an old run removes the run result but keeps agent and workflow configuration. Approved memories and their approved proposed-memory records are preserved.
 
 ## 8. Troubleshooting
 
@@ -614,6 +641,11 @@ No monitor opens after running:
 
 - Symptom: the app stays on the workflow run page after selecting **Run workflow**.
 - Fix: inspect the backend terminal logs and confirm the workflow has active agents.
+
+Run delete fails:
+
+- Symptom: the Runs page shows an error after selecting **Delete** or **Delete selected**.
+- Fix: refresh the Runs page and check backend logs. Confirm the backend is running and the run still exists.
 
 Provider configuration error:
 
@@ -662,6 +694,9 @@ Inactive agent selected:
 - [ ] Run detail shows input and output.
 - [ ] Trace events are visible.
 - [ ] Monitor and execution pages are visible.
+- [ ] Monitor events are collapsed by default.
+- [ ] Expand and Collapse reveal and hide event JSON payloads.
+- [ ] Token usage page opens from the monitor or Runs page.
 - [ ] Feedback is saved for Persistent Troubleshooter.
 - [ ] Proposed memory is generated with pending status.
 - [ ] Proposed memory is approved.
@@ -669,6 +704,8 @@ Inactive agent selected:
 - [ ] Re-run includes approved memory for Persistent Troubleshooter.
 - [ ] Re-run does not retrieve that memory for other agents.
 - [ ] Agent evolution page shows the agent-specific timeline.
+- [ ] Runs page lists run history.
+- [ ] Deleting a test run does not delete agents, workflows, tools, souls, contexts, or active memories.
 
 ## 10. Current Limitations
 
@@ -678,4 +715,5 @@ Inactive agent selected:
 - Learning updates agent memory only. Soul/persona rewriting is not automatic.
 - The before/after comparison flow is manual through run traces, execution details, and repeated workflow runs.
 - Runtime monitoring uses polling rather than WebSockets.
+- Run cleanup is hard delete for run-local records; there is no archive view yet. Approved proposed-memory records that back active memories are preserved.
 - Authentication and multi-user authorization are not implemented in the MVP.

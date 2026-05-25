@@ -271,6 +271,8 @@ export interface Run {
   output?: Record<string, unknown> | null;
   status: RunStatus;
   config_snapshot: Record<string, unknown>;
+  started_at?: string | null;
+  ended_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -281,6 +283,7 @@ export interface TraceEvent {
   event_type: string;
   agent_id?: number | null;
   payload: Record<string, unknown>;
+  created_at?: string;
 }
 
 export interface Experiment {

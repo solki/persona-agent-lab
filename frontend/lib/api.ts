@@ -148,6 +148,7 @@ export const api = {
 
   listRuns: () => request<Run[]>("/runs"),
   getRun: (id: number) => request<Run>(`/runs/${id}`),
+  deleteRun: (id: number) => request<void>(`/runs/${id}`, { method: "DELETE" }),
   getRunTrace: (id: number) => request<TraceEvent[]>(`/runs/${id}/trace`),
   getRunMonitor: (id: number) => request<RunMonitor>(`/runs/${id}/monitor`),
   listRunExecutions: (id: number) => request<AgentExecution[]>(`/runs/${id}/executions`),

@@ -46,6 +46,8 @@ GET /runs/{run_id}/monitor
 
 It returns run status, active execution, all executions, latest execution events, token usage summary, learning event summary, elapsed time, and errors.
 
+The frontend monitor renders execution events as compact rows by default. Each row shows the event type, agent, time, and step metadata. The JSON payload is hidden until the user expands the row, and the page includes expand/collapse-all controls, agent filters, event category filters, and payload text search.
+
 The frontend workflow run page uses the monitor-first run endpoint:
 
 ```http
@@ -99,3 +101,5 @@ Milestone 6 adds workflow list, workflow editor, workflow run, and run trace pag
 Milestone 9 extends the run trace page with feedback capture and reflection into proposed memory. Proposed memory approval remains on the agent detail page. Once approved, the memory is retrieved by the same context assembly path used by any other active agent memory.
 
 Milestone 10 adds `/runs/[id]/monitor`, `/runs/[id]/executions`, and `/runs/[id]/executions/[executionId]` for runtime observability. The monitor polls the backend instead of opening a WebSocket stream. The workflow run form now opens the monitor page immediately after starting a run.
+
+The Runs page at `/runs` lists run history, links to monitor, trace, executions, and token usage pages, and provides confirmed cleanup for old run-local results. Deleting a run removes trace, execution, token usage, feedback/evaluation, pending or rejected proposed-memory, and learning-event records tied to that run. It does not delete agents, workflows, souls, tools, contexts, active approved agent memories, or approved proposed-memory records that back active memories.

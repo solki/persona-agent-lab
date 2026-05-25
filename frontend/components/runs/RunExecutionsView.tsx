@@ -19,6 +19,20 @@ export function RunExecutionsView({ runId }: { runId: number }) {
     <>
       <PageHeader title="Agent Executions" description="Inspect each agent step persisted for this workflow run." />
       {error ? <StatusMessage title="Error" body={error} /> : null}
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href="/runs">
+          Back to Runs
+        </Link>
+        <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}`}>
+          Run Detail
+        </Link>
+        <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}/monitor`}>
+          Monitor
+        </Link>
+        <Link className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}/token-usage`}>
+          Token Usage
+        </Link>
+      </div>
       <div className="grid gap-3">
         {executions.map((execution) => (
           <Link

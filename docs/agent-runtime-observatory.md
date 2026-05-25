@@ -8,7 +8,7 @@ The observatory records each agent step inside a workflow run so users can inspe
 
 The MVP uses polling. It does not add WebSockets, live infrastructure monitoring, automatic soul/persona rewriting, or provider secret logging.
 
-The observatory is read-only from the frontend. It records and displays:
+The observatory records and displays:
 
 - run status
 - active workflow step
@@ -20,6 +20,8 @@ The observatory is read-only from the frontend. It records and displays:
 - token usage
 - learning events
 - execution errors
+
+Run management is available from the frontend and through the API. Users can list runs, open monitor, trace, executions, and token usage pages, and delete old run-local results after confirmation.
 
 ## Execution Records
 
@@ -93,6 +95,9 @@ Milestone 10 does not automatically change soul/persona. Persona event names are
 Runtime monitor:
 
 ```http
+GET /runs
+GET /runs/{run_id}
+DELETE /runs/{run_id}
 GET /runs/{run_id}/monitor
 ```
 
@@ -121,12 +126,32 @@ GET /agents/{agent_id}/performance-summary
 
 Frontend routes:
 
+- `/runs`
+- `/runs/[id]`
 - `/runs/[id]/monitor`
 - `/runs/[id]/executions`
 - `/runs/[id]/executions/[executionId]`
+- `/runs/[id]/token-usage`
 - `/agents/[id]/evolution`
 
-The monitor page polls the backend every few seconds. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
+The monitor page polls the backend every second. Event rows are collapsed by default and show event type, agent, time, and step metadata. Use **Expand** to inspect formatted JSON payloads, or **Expand all** and **Collapse all** for bulk inspection. Filters support agent, event category, and text search.
+
+The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and delete actions. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
+
+## Run Cleanup
+
+`DELETE /runs/{run_id}` removes only run-local records:
+
+- trace events
+- agent executions
+- execution events
+- token usage
+- feedback and evaluations linked to the run
+- pending or rejected proposed memories sourced from that run's feedback or evaluations
+- learning events linked to the run
+- the run record
+
+Cleanup does not delete agents, workflows, souls, tools, contexts, active `AgentMemory` records, or approved `ProposedMemory` records that back active memories. Approved proposed memories are detached from the deleted run-local feedback/evaluation source so the active memory does not point at a missing proposal.
 
 ## Privacy And Isolation
 

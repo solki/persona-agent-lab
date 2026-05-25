@@ -206,6 +206,9 @@ The runtime observatory records every agent step in a workflow run.
 
 Relevant endpoints:
 
+- `GET /runs`
+- `GET /runs/{run_id}`
+- `DELETE /runs/{run_id}`
 - `GET /runs/{run_id}/monitor`
 - `GET /runs/{run_id}/executions`
 - `GET /runs/{run_id}/executions/{execution_id}`
@@ -216,12 +219,17 @@ Relevant endpoints:
 
 Frontend pages:
 
+- `/runs`
+- `/runs/[id]`
 - `/runs/[id]/monitor`
 - `/runs/[id]/executions`
 - `/runs/[id]/executions/[executionId]`
+- `/runs/[id]/token-usage`
 - `/agents/[id]/evolution`
 
-The MVP monitor uses polling rather than WebSockets. Mock provider token usage is estimated from text length and marked as estimated.
+The Runs page is the main run management entry point. It lists runs, filters by status and workflow, links to monitor, trace, executions, and token usage pages, and supports confirmed single or selected run deletion. Deleting a run removes run-local trace, execution, token usage, feedback, evaluation, pending or rejected proposed memory, and learning event records. It does not delete agents, workflows, tools, souls, contexts, active approved agent memories, or the approved proposed-memory records that back those active memories.
+
+The MVP monitor uses polling rather than WebSockets. Event payloads are collapsed by default; expand an event row to inspect formatted JSON. Mock provider token usage is estimated from text length and marked as estimated.
 
 See [docs/agent-runtime-observatory.md](docs/agent-runtime-observatory.md) for the full observability model.
 
@@ -239,7 +247,7 @@ Policy and tool config editors validate JSON in the browser before sending reque
 
 ## Review Status
 
-Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views. The current frontend configuration pass completes CRUD and major field coverage for agents, souls, tools, contexts, memories, policies, active flags, and agent-tool assignments.
+Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views. The current frontend configuration pass completes CRUD and major field coverage for agents, souls, tools, contexts, memories, policies, active flags, and agent-tool assignments. Run management now includes a discoverable Runs page, collapsed event payloads, token usage navigation, and safe cleanup for old run-local records.
 
 ## Running Tests
 

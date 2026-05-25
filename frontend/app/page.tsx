@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bot, Brain, Hammer, Layers, ShieldCheck } from "lucide-react";
+import { Activity, Bot, Brain, Hammer, Layers, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 
 const cards = [
@@ -20,6 +20,12 @@ const cards = [
     title: "Tool Registry",
     body: "Register tools and assign access per agent before Tool Gateway execution.",
     icon: Hammer
+  },
+  {
+    href: "/runs",
+    title: "Runtime Runs",
+    body: "Inspect workflow runs, monitor agent execution, review traces, and manage old results.",
+    icon: Activity
   }
 ];
 
@@ -30,7 +36,7 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Operate isolated agents from one work surface. Each agent keeps independent settings, context, memory, and tool permissions unless a workflow explicitly grants access."
       />
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon;
           return (

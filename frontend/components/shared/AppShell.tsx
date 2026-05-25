@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bot, Brain, Database, Home, Hammer, Network } from "lucide-react";
+import { Activity, Bot, Brain, Database, Home, Hammer, Network } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: Home },
@@ -7,6 +7,7 @@ const navItems = [
   { href: "/souls", label: "Souls", icon: Brain },
   { href: "/tools", label: "Tools", icon: Hammer },
   { href: "/workflows", label: "Workflows", icon: Network },
+  { href: "/runs", label: "Runs", icon: Activity },
   { href: "/experiments", label: "Experiments", icon: Database }
 ];
 

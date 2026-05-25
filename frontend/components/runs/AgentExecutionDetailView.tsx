@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { AgentExecutionDetail } from "@/lib/types";
+import { JsonCollapsePanel } from "@/components/runs/JsonCollapsePanel";
+import { RuntimeEventList } from "@/components/runs/RuntimeEventList";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
 
@@ -24,7 +26,20 @@ export function AgentExecutionDetailView({ runId, executionId }: { runId: number
       {detail ? (
         <div className="grid gap-5">
           <section className="rounded border border-line bg-white p-5">
-            <h2 className="text-base font-semibold">{detail.execution.agent_name_snapshot}</h2>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h2 className="text-base font-semibold">{detail.execution.agent_name_snapshot}</h2>
+              <div className="flex flex-wrap gap-2">
+                <a className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}`}>
+                  Back to Run
+                </a>
+                <a className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}/monitor`}>
+                  Monitor
+                </a>
+                <a className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm" href={`/runs/${runId}/executions`}>
+                  Executions
+                </a>
+              </div>
+            </div>
             <p className="mt-2 text-sm text-slate-600">
               Status: {detail.execution.status} · Agent {detail.execution.agent_id} · Step {detail.execution.sequence_index + 1}
             </p>
@@ -32,28 +47,21 @@ export function AgentExecutionDetailView({ runId, executionId }: { runId: number
               Provider: {detail.execution.provider} · Model: {detail.execution.model} · Temperature: {detail.execution.temperature}
             </p>
           </section>
-          <JsonSection title="Input Payload" value={detail.execution.input_payload} />
-          <JsonSection title="Assembled Context" value={detail.assembled_context} />
-          <JsonSection title="Retrieved Memories" value={detail.retrieved_memory} />
-          <JsonSection title="Tool Calls" value={detail.tool_calls} />
-          <JsonSection title="LLM Events" value={detail.events.filter((event) => event.event_type.startsWith("llm_"))} />
-          <JsonSection title="Output Payload" value={detail.execution.output_payload} />
-          <JsonSection title="Token Usage" value={detail.token_usage} />
-          <JsonSection title="Learning Events" value={detail.learning_events} />
-          <JsonSection title="All Execution Events" value={detail.events} />
+          <JsonCollapsePanel title="Input Payload" value={detail.execution.input_payload} />
+          <JsonCollapsePanel title="Assembled Context" value={detail.assembled_context} />
+          <JsonCollapsePanel title="Retrieved Memories" value={detail.retrieved_memory} />
+          <JsonCollapsePanel title="Tool Calls" value={detail.tool_calls} />
+          <JsonCollapsePanel title="LLM Events" value={detail.events.filter((event) => event.event_type.startsWith("llm_"))} />
+          <JsonCollapsePanel title="Output Payload" value={detail.execution.output_payload} defaultExpanded />
+          <JsonCollapsePanel title="Token Usage" value={detail.token_usage} />
+          <JsonCollapsePanel title="Learning Events" value={detail.learning_events} />
+          <RuntimeEventList
+            title="All Execution Events"
+            events={detail.events}
+            agentNames={{ [detail.execution.agent_id]: detail.execution.agent_name_snapshot }}
+          />
         </div>
       ) : null}
     </>
-  );
-}
-
-function JsonSection({ title, value }: { title: string; value: unknown }) {
-  return (
-    <section className="rounded border border-line bg-white p-5">
-      <h2 className="text-base font-semibold">{title}</h2>
-      <pre className="mt-3 max-h-96 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    </section>
   );
 }

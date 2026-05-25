@@ -152,6 +152,8 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     ]) {
       expect(pageText).toContain(eventType);
     }
+    const traceContextEvent = page.locator("article").filter({ hasText: "context_assembled" }).first();
+    await traceContextEvent.getByRole("button", { name: "Expand" }).click();
     await expect(page.locator("body")).toContainText(/dashboard/i);
     await expect(page.locator("body")).toContainText(/Excel/i);
     await expect(page.locator("body")).toContainText(/date range|filters/i);
@@ -405,7 +407,17 @@ async function runWorkflowViaUi(page: Page, workflowId: number, task: string) {
     const run = await apiGet<{ status: string }>(`/runs/${runId}`);
     return run.status;
   }).toBe("completed");
-  await page.getByRole("link", { name: "View trace" }).click();
+  await expect(page.getByText("Payloads are collapsed by default.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Expand all" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Collapse all" })).toBeVisible();
+  const contextEvent = page.locator("article").filter({ hasText: "context_assembled" }).first();
+  await expect(contextEvent).toBeVisible();
+  await expect(contextEvent.getByText('"prompt"')).toHaveCount(0);
+  await contextEvent.getByRole("button", { name: "Expand" }).click();
+  await expect(contextEvent.getByText('"prompt"')).toBeVisible();
+  await contextEvent.getByRole("button", { name: "Collapse" }).click();
+  await expect(contextEvent.getByText('"prompt"')).toHaveCount(0);
+  await page.getByRole("link", { name: "Trace", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Run Trace" })).toBeVisible();
   return runId;
 }

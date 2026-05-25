@@ -1,3 +1,10 @@
+from sqlalchemy import select
+
+from app.models.agent import Agent
+from app.models.learning import AgentFeedback, ProposedMemory
+from app.models.memory import AgentMemory
+from app.models.observatory import AgentExecution, AgentExecutionEvent, LearningEvent, TokenUsage
+from app.models.run import TraceEvent
 from app.models.workflow import Workflow
 from app.runtime.workflow_runner import WorkflowRunner
 from app.services import observatory_service
@@ -155,3 +162,61 @@ def test_runs_list_and_detail(client):
     assert [item["id"] for item in list_response.json()] == [run["id"]]
     assert detail_response.status_code == 200
     assert detail_response.json()["id"] == run["id"]
+
+
+def test_delete_run_cleans_run_local_records_without_deleting_configuration(client, db_session):
+    agent = create_agent(client, "Cleanup Agent", "Keep configuration.")
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "Cleanup Workflow",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [agent["id"]]},
+        },
+    ).json()
+    run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Create cleanup records."}).json()
+    feedback = client.post(
+        f"/runs/{run['id']}/agents/{agent['id']}/feedback",
+        json={"feedback_text": "Remember cleanup evidence.", "feedback_type": "coaching"},
+    ).json()
+    proposal = client.post(
+        f"/runs/{run['id']}/agents/{agent['id']}/reflect",
+        json={"feedback_id": feedback["id"]},
+    ).json()["proposed_memory"]
+    approved = client.post(f"/agents/{agent['id']}/proposed-memories/{proposal['id']}/approve").json()
+    active_memory_id = approved["agent_memory"]["id"]
+    pending_feedback = client.post(
+        f"/runs/{run['id']}/agents/{agent['id']}/feedback",
+        json={"feedback_text": "Pending cleanup evidence.", "feedback_type": "coaching"},
+    ).json()
+    pending_proposal = client.post(
+        f"/runs/{run['id']}/agents/{agent['id']}/reflect",
+        json={"feedback_id": pending_feedback["id"]},
+    ).json()["proposed_memory"]
+
+    delete_response = client.delete(f"/runs/{run['id']}")
+
+    assert delete_response.status_code == 204
+    assert client.get(f"/runs/{run['id']}").status_code == 404
+    assert client.get(f"/workflows/{workflow['id']}").status_code == 200
+    assert client.get(f"/agents/{agent['id']}").status_code == 200
+    assert db_session.get(Agent, agent["id"]) is not None
+    assert db_session.get(Workflow, workflow["id"]) is not None
+    assert db_session.get(AgentMemory, active_memory_id) is not None
+    assert db_session.scalars(select(TraceEvent).where(TraceEvent.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(AgentExecution).where(AgentExecution.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(AgentExecutionEvent).where(AgentExecutionEvent.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(TokenUsage).where(TokenUsage.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(AgentFeedback).where(AgentFeedback.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(LearningEvent).where(LearningEvent.run_id == run["id"])).all() == []
+    approved_proposal = db_session.get(ProposedMemory, proposal["id"])
+    assert approved_proposal is not None
+    assert approved_proposal.source_feedback_id is None
+    assert approved_proposal.source_evaluation_id is None
+    assert db_session.get(ProposedMemory, pending_proposal["id"]) is None
+
+
+def test_delete_missing_run_returns_404(client):
+    response = client.delete("/runs/9999")
+
+    assert response.status_code == 404

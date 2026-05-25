@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -29,3 +29,10 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
 def get_run_trace(run_id: int, db: Session = Depends(get_db)):
     require_run(db, run_id)
     return trace_service.list_trace_events(db, run_id)
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_run(run_id: int, db: Session = Depends(get_db)):
+    run = require_run(db, run_id)
+    run_service.delete_run(db, run)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
