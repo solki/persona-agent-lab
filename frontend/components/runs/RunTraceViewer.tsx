@@ -43,6 +43,14 @@ export function RunTraceViewer({ runId }: { runId: number }) {
               </div>
             </div>
             <p className="mt-2 text-sm text-slate-600">Status: {run.status} · Workflow: {run.workflow_id}</p>
+            <h3 className="mt-4 text-sm font-semibold">Run Input</h3>
+            <pre className="mt-2 max-h-72 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">
+              {JSON.stringify(run.input, null, 2)}
+            </pre>
+            <h3 className="mt-4 text-sm font-semibold">Run Output</h3>
+            <pre className="mt-2 max-h-72 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">
+              {JSON.stringify(run.output, null, 2)}
+            </pre>
             <h3 className="mt-4 text-sm font-semibold">Config Snapshot</h3>
             <pre className="mt-2 max-h-72 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">
               {JSON.stringify(run.config_snapshot, null, 2)}
@@ -52,6 +60,7 @@ export function RunTraceViewer({ runId }: { runId: number }) {
         </>
       ) : null}
       <section className="grid gap-3">
+        <h2 className="text-base font-semibold">Trace Events</h2>
         {events.map((event) => (
           <article key={event.id} className="rounded border border-line bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">

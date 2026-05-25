@@ -259,6 +259,41 @@ npm run typecheck
 npm run build
 ```
 
+Automated end-to-end tests use Playwright and expect the backend at `http://localhost:8000` with the frontend served at `http://localhost:3000`. Use `LLM_PROVIDER=mock` for repeatable local E2E runs.
+
+Start required services first:
+
+```bash
+docker compose up -d postgres qdrant
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --reload
+```
+
+Then run E2E tests from another terminal:
+
+```bash
+cd frontend
+npm run e2e
+```
+
+Useful E2E variants:
+
+```bash
+cd frontend
+npm run e2e:headed
+npm run e2e:ui
+```
+
+If Playwright browser binaries are missing:
+
+```bash
+cd frontend
+npx playwright install
+```
+
+For a step-by-step human test of the full BI dashboard discrepancy journey, use [docs/MANUAL_E2E_TEST_GUIDE.md](docs/MANUAL_E2E_TEST_GUIDE.md).
+
 ## Current MVP Limitations
 
 - The MVP experiment module compares two or more agents on the same task and links to per-run traces.

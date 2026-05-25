@@ -154,7 +154,7 @@ function AgentToolManager({ agentId }: { agentId: number }) {
       {message ? <StatusMessage title="Saved" body={message} /> : null}
       {error ? <StatusMessage title="Error" body={error} /> : null}
       <form onSubmit={assignTool} className="mt-4 flex flex-col gap-3 md:flex-row">
-        <select className={inputClass} value={selectedToolId} onChange={(event) => setSelectedToolId(event.target.value)}>
+        <select aria-label="Available tool" className={inputClass} value={selectedToolId} onChange={(event) => setSelectedToolId(event.target.value)}>
           <option value="">Select an available tool</option>
           {availableTools.map((tool) => (
             <option key={tool.id} value={tool.id}>

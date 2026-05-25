@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after the frontend configuration completeness pass.
+Last updated after adding automated and manual end-to-end test coverage.
 
 ## Project Purpose
 
@@ -13,7 +13,7 @@ Milestone 10 status: implemented.
 ## Current Architecture
 
 - Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
-- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, complete configuration management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, and experiment comparison UI.
+- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, complete configuration management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, experiment comparison UI, and Playwright E2E coverage.
 - Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
@@ -38,8 +38,8 @@ Milestone 10 status: implemented.
 - `app/agents`: Agent list, create page, edit/detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review, and memory CRUD.
 - `app/souls`: Soul/persona list, create, edit, and delete flows.
 - `app/tools`: Tool registry page with create, edit, delete, config JSON, and active flag controls.
-- `app/workflows`: Workflow list, create/edit pages, and workflow run page.
-- `app/runs/[id]`: Run trace viewer with learning feedback and reflection panel; monitor and execution detail subpages.
+- `app/workflows`: Workflow list, create/edit pages with name-based agent sequence picker, and workflow run page.
+- `app/runs/[id]`: Run trace viewer with explicit input/output sections, learning feedback and reflection panel; monitor and execution detail subpages.
 - `app/agents/[id]/evolution`: Agent evolution timeline and performance summary.
 - `app/experiments`: Experiment list, create page, and experiment run/comparison page.
 - `components/agents`: Agent form/list/detail, assigned-tool manager, context manager, proposed-memory manager, memory manager.
@@ -168,7 +168,8 @@ Milestone 10 status: implemented.
 - Workflow CRUD, sequential run trace events, config snapshots, and context/memory isolation in runs.
 - Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
 - Experiment CRUD and experiment run isolation/comparison behavior.
-- Frontend has lint and TypeScript typecheck scripts but no frontend test suite yet.
+- Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
+- Playwright E2E covers the BI Dashboard Discrepancy journey: soul/agent setup, context/memory/tool configuration, workflow creation, run inspection, learning loop approval, re-run memory retrieval, and agent isolation assertions.
 
 ## Current Known Limitations
 
@@ -181,5 +182,5 @@ Milestone 10 status: implemented.
 - Learning updates only agent memory; soul/persona is not rewritten automatically.
 - No Alembic migrations; local startup can create tables automatically for MVP development.
 - No authentication, authorization, multi-user isolation, or production deployment setup.
-- No frontend automated tests.
+- Frontend E2E tests require a running backend and local services; they are not yet wired into a containerized one-command stack.
 - Seed data scripts are not present.

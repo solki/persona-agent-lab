@@ -31,7 +31,7 @@ export function WorkflowList() {
       {loading ? <StatusMessage title="Loading" body="Loading workflows from the backend." /> : null}
       {error ? <StatusMessage title="Backend unavailable" body={error} /> : null}
       {!loading && !error && workflows.length === 0 ? (
-        <StatusMessage title="No workflows" body="Create a sequential workflow by listing agent ids in execution order." />
+        <StatusMessage title="No workflows" body="Create a sequential workflow by selecting agents in execution order." />
       ) : null}
       <div className="grid gap-3">
         {workflows.map((workflow) => (

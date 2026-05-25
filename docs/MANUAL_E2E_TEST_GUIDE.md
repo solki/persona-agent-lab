@@ -1,0 +1,682 @@
+# Manual End-to-End Test Guide
+
+## 1. Purpose
+
+This guide verifies the core Persona Agent Lab user journey end to end from the browser and backend together. It is written for a new user opening the app for the first time.
+
+The test creates reusable souls, creates agents, assigns souls and tools, adds context and memory, builds a sequential workflow, runs a BI dashboard discrepancy task, inspects run traces and observability pages, adds feedback, approves a proposed memory, re-runs the workflow, and checks that agent-specific memory remains isolated.
+
+## 2. Prerequisites
+
+Before starting, make sure:
+
+- Docker is running.
+- PostgreSQL is running through Docker Compose.
+- Qdrant is running through Docker Compose if you want the full local stack available.
+- The backend is running at `http://localhost:8000`.
+- The frontend is running at `http://localhost:3000`.
+- The recommended provider for this manual test is `mock`.
+- Optional `openai_compatible` provider configuration may be used, but mock mode is safer for repeatable local testing.
+- LLM API keys are stored only in backend environment files or server-side secret stores.
+- No API keys are placed in `frontend/.env.local`.
+
+## 3. Environment Setup
+
+From the repository root, start PostgreSQL and Qdrant:
+
+```bash
+docker compose up -d postgres qdrant
+```
+
+Start the backend:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+Start the frontend in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Check backend health:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected result: a JSON response with status information and `llm_provider` set to `mock` for the recommended local test.
+
+Open the app:
+
+```text
+http://localhost:3000
+```
+
+## 4. Test Scenario Overview
+
+Scenario name:
+
+```text
+BI Dashboard Discrepancy Resolution
+```
+
+Business case:
+
+A customer says the April revenue number in the dashboard does not match their Excel report. The agent team should investigate internal dashboard causes before asking the customer for files.
+
+The workflow uses three agents:
+
+- Persistent Troubleshooter
+- Critical Reviewer
+- Customer Response Writer
+
+## 5. Step-by-Step Manual Test
+
+Use a unique suffix in names, such as today's date or your initials, so your test records are easy to find later.
+
+Example suffix:
+
+```text
+Manual 2026-05-26
+```
+
+### A. Create Souls
+
+1. Open `http://localhost:3000`.
+2. Select **Souls**.
+3. Select **New soul**.
+4. Create the first soul using the sample content in section 6.
+5. Select **Save soul**.
+6. Return to **Souls** and confirm the new soul appears in the list.
+7. Repeat for the Critical Reviewer soul and Customer-Centric Consultant soul.
+
+Expected result:
+
+- Each saved soul appears in the Souls list.
+- Opening a soul shows its editable persona fields.
+
+### B. Create Agents
+
+1. Select **Agents**.
+2. Select **New agent**.
+3. Create **E2E Persistent Troubleshooter** using the sample content in section 6.
+4. In **Soul / persona**, select the Persistent Problem Solver soul you created.
+5. Set **Provider** to `mock`.
+6. Set **Model** to `mock-deterministic`.
+7. Set **Temperature** to `0.2`.
+8. Set **Max tokens** to `1024`.
+9. Confirm **Agent is active** is checked.
+10. Confirm the policy JSON fields use the defaults in section 6.
+11. Select **Save agent**.
+12. Repeat for Critical Reviewer and Customer Response Writer.
+
+Expected result:
+
+- Each agent opens on its detail page after saving.
+- The Agent Summary shows the selected soul.
+- The active status badge shows **Active**.
+- The Policy Summary shows memory, context, and handoff policy JSON.
+
+### C. Assign Souls To Agents
+
+If you did not assign a soul during agent creation:
+
+1. Open the agent detail page from **Agents**.
+2. In the edit form, choose the correct **Soul / persona**.
+3. Select **Save agent**.
+
+Expected result:
+
+- The Agent Summary updates to show the selected soul name.
+
+### D. Configure Provider And Model
+
+For each agent:
+
+1. Open the agent detail page.
+2. Set **Provider** to `mock`.
+3. Set **Model** to `mock-deterministic`.
+4. Set **Temperature** to `0.2`.
+5. Set **Max tokens** to `1024`.
+6. Select **Save agent**.
+
+Expected result:
+
+- The Agent Summary shows `mock:mock-deterministic`.
+
+### E. Configure Policies
+
+For each agent, use these policy values unless you are intentionally testing a different configuration:
+
+Memory policy:
+
+```json
+{
+  "write_mode": "manual_review",
+  "retrieval_enabled": true
+}
+```
+
+Context policy:
+
+```json
+{
+  "include_active_context": true
+}
+```
+
+Handoff policy:
+
+```json
+{
+  "allow_handoff": false,
+  "allowed_agent_ids": []
+}
+```
+
+Expected result:
+
+- Invalid JSON is rejected in the browser before saving.
+- Valid JSON saves successfully.
+
+### F. Add Contexts
+
+Open each agent detail page and use **Agent Context**.
+
+For Persistent Troubleshooter:
+
+1. Add the BI Dashboard Discrepancy Troubleshooting Playbook from section 6.
+2. Confirm **Active** is checked.
+3. Select **Add context**.
+
+For Critical Reviewer:
+
+1. Add the Troubleshooting Plan Review Standards context.
+2. Select **Add context**.
+
+For Customer Response Writer:
+
+1. Add the Customer Communication Style Guide context.
+2. Select **Add context**.
+
+Expected result:
+
+- Each context appears in the agent's context list.
+- Active contexts show an **Active** badge.
+- Edit and Delete buttons are available.
+
+### G. Add Memories
+
+Open the Persistent Troubleshooter detail page and use **Agent Memory**.
+
+1. Set **Type** to `lesson`.
+2. Set **Source** to `manual_test`.
+3. Set **Importance** to `95`.
+4. Set **Status** to `active`.
+5. Paste the memory content from section 6.
+6. Select **Add memory**.
+
+Expected result:
+
+- The memory appears in the list.
+- It shows **Active**.
+- Active memory is eligible for future retrieval by this same agent.
+
+### H. Create A Tool
+
+1. Open **Tool Registry** from the app navigation.
+2. Create a tool with the sample content in section 6.
+3. Confirm **Active** is checked.
+4. Select **Register tool**.
+
+Expected result:
+
+- The tool appears in the list.
+- It shows **Active**.
+- Edit and Delete buttons are available.
+
+### I. Assign Tool To Agent
+
+1. Open the Persistent Troubleshooter agent detail page.
+2. Find **Assigned Tools**.
+3. Select the tool you created from **Available tool**.
+4. Select **Assign**.
+
+Expected result:
+
+- The tool appears in the assigned tools list for this agent.
+- Other agents do not automatically receive the tool.
+
+### J. Create Workflow Using Agent Picker
+
+1. Open **Workflows**.
+2. Select **New workflow**.
+3. Enter the workflow name from section 6.
+4. Set **Workflow type** to `sequential`.
+5. In **Available agent**, select Persistent Troubleshooter and select **Add**.
+6. Select Critical Reviewer and select **Add**.
+7. Select Customer Response Writer and select **Add**.
+8. Confirm the **Agent sequence** displays the three agent names in that order.
+9. Select **Save workflow**.
+
+Expected result:
+
+- The workflow saves successfully.
+- The workflow edit page opens.
+- The workflow sequence is selected by agent name, not by typing backend IDs.
+
+### K. Run Workflow
+
+1. Open **Workflows**.
+2. Find your workflow.
+3. Select **Run**.
+4. Paste the workflow task input from section 6.
+5. Select **Run workflow**.
+
+Expected result:
+
+- A run is created.
+- The page shows the run status and output preview.
+- A **View trace** link appears.
+
+### L. Inspect Run Detail And Trace
+
+1. Select **View trace**.
+2. Confirm the run status is `completed`.
+3. Confirm **Run Input** contains the BI dashboard discrepancy task.
+4. Confirm **Run Output** contains a mock response with dashboard and Excel terms.
+5. Confirm **Trace Events** contains:
+   - `run_started`
+   - `workflow_loaded`
+   - `agent_selected`
+   - `context_assembled`
+   - `memory_retrieved`
+   - `llm_request_started`
+   - `llm_response_received`
+   - `agent_completed`
+   - `run_completed`
+
+Expected result:
+
+- Trace events are visible and ordered.
+- Context and memory events appear per participating agent.
+
+### M. Inspect Monitor, Executions, And Token Usage
+
+From the run trace page:
+
+1. Select **Monitor**.
+2. Confirm status is `completed`.
+3. Confirm token usage is shown.
+4. Go back to the run trace page.
+5. Select **Executions**.
+6. Open an execution detail.
+7. Confirm **Assembled Context**, **Retrieved Memories**, **Output Payload**, and **Token Usage** sections are visible.
+
+Expected result:
+
+- Monitor and execution pages are available.
+- Execution detail shows only the context and memory injected into that specific agent execution.
+
+### N. Add Feedback
+
+1. Return to the run trace page.
+2. In **Learning Feedback**, choose Persistent Troubleshooter.
+3. Set **Feedback type** to `improvement`.
+4. Set **Rating** to `3`.
+5. Paste the feedback text from section 6.
+6. Select **Save feedback**.
+
+Expected result:
+
+- The page confirms feedback was saved for the selected run and agent.
+
+### O. Generate Proposed Memory
+
+1. Select **Generate proposed memory**.
+2. Confirm a proposed memory appears.
+3. Confirm its status is `pending`.
+4. Confirm the content mentions dashboard filters, date range, metric definition, refresh timestamp, and ETL logic.
+
+Expected result:
+
+- Proposed memory starts as pending.
+- The proposed memory does not affect future runs until approved.
+
+### P. Approve Proposed Memory
+
+1. Select **Review on agent page**.
+2. Find **Proposed Memories**.
+3. In the Pending group, select **Approve**.
+
+Expected result:
+
+- The proposed memory moves to approved.
+- The app says it was written as active agent memory.
+- The approved memory appears as active memory for the same agent.
+
+### Q. Re-Run Workflow
+
+1. Open **Workflows**.
+2. Run the same workflow again with the same BI discrepancy task.
+3. Open the new run trace.
+4. Open **Executions** and inspect the Persistent Troubleshooter execution.
+
+Expected result:
+
+- The Persistent Troubleshooter execution includes the approved memory in its assembled context.
+- Critical Reviewer and Customer Response Writer do not show that feedback-derived memory as their own retrieved memory.
+- Any cross-agent information they receive should come only through explicit sequential workflow output.
+
+### R. Check Agent Evolution Page
+
+1. Open the Persistent Troubleshooter agent detail page.
+2. Select **View evolution**.
+
+Expected result:
+
+- The page shows the agent's memories, feedback, proposed memories, learning events, executions, and token usage.
+- It does not show private learning data from other agents.
+
+## 6. Exact Sample Content
+
+Use a unique suffix at the end of each name.
+
+### Souls
+
+Persistent Problem Solver name:
+
+```text
+E2E Persistent Problem Solver Manual 2026-05-26
+```
+
+Description:
+
+```text
+Persistent troubleshooting persona for business analytics investigations.
+```
+
+Principles:
+
+```text
+Start with available evidence. Prefer internal checks before requesting customer files.
+```
+
+Decision style:
+
+```text
+Systematic, evidence-first, and concise.
+```
+
+Collaboration style:
+
+```text
+Keeps reviewers and customer-facing writers informed.
+```
+
+Failure handling style:
+
+```text
+Names uncertainty and asks for the minimum missing information.
+```
+
+Escalation style:
+
+```text
+Escalate only after dashboard configuration, metric definitions, refresh timestamps, and ETL logic are checked.
+```
+
+Critical Reviewer name:
+
+```text
+E2E Critical Reviewer Manual 2026-05-26
+```
+
+Customer-Centric Consultant name:
+
+```text
+E2E Customer-Centric Consultant Manual 2026-05-26
+```
+
+Use similar persona text focused on review quality and customer-ready communication.
+
+### Agent Prompts
+
+Persistent Troubleshooter system prompt:
+
+```text
+Create practical troubleshooting plans for BI dashboard discrepancies. Check internal evidence before asking for customer files.
+```
+
+Critical Reviewer system prompt:
+
+```text
+Review the prior troubleshooting plan for missing evidence, weak assumptions, and customer readiness.
+```
+
+Customer Response Writer system prompt:
+
+```text
+Write short, customer-facing responses that are clear, calm, and specific about next steps.
+```
+
+### Context Entries
+
+Persistent Troubleshooter context title:
+
+```text
+BI Dashboard Discrepancy Troubleshooting Playbook
+```
+
+Persistent Troubleshooter context content:
+
+```text
+For BI dashboard discrepancy work, check date range mismatch, metric definition mismatch, dashboard filters, refresh timestamp, and ETL logic before requesting customer files.
+```
+
+Critical Reviewer context title:
+
+```text
+Troubleshooting Plan Review Standards
+```
+
+Critical Reviewer context content:
+
+```text
+Check whether the plan covers internal dashboard filters, metric definitions, refresh timestamps, ETL logic, and minimum customer asks.
+```
+
+Customer Response Writer context title:
+
+```text
+Customer Communication Style Guide
+```
+
+Customer Response Writer context content:
+
+```text
+Use plain English. Acknowledge the discrepancy. Explain internal checks first, then ask only for minimum missing information.
+```
+
+### Memory Entry
+
+Persistent Troubleshooter memory:
+
+```text
+For BI discrepancy investigations, first check filters, date range, metric definition, refresh timestamp, and ETL logic before asking for customer files.
+```
+
+### Tool
+
+Tool name:
+
+```text
+manual_dashboard_lookup
+```
+
+Tool type:
+
+```text
+internal_reference
+```
+
+Tool config JSON:
+
+```json
+{
+  "mode": "mock",
+  "purpose": "manual_e2e"
+}
+```
+
+### Workflow Task Input
+
+```text
+A customer says the April revenue number in the dashboard does not match their Excel report.
+
+Dashboard revenue: $1.28M.
+Excel revenue: $1.34M.
+
+The customer has not provided the Excel file or raw source data yet.
+
+Please produce:
+1. A practical troubleshooting plan.
+2. Likely causes.
+3. Internal checks first.
+4. Minimum information needed from the customer.
+5. A short customer-facing response.
+```
+
+### Feedback Text
+
+```text
+This agent should first check dashboard filters, date range, metric definition, refresh timestamp, and ETL logic internally before asking the customer for files.
+```
+
+## 7. Expected Results
+
+- After creating a soul, it appears in the Souls list.
+- After creating an agent, the agent detail page shows the selected soul.
+- Agent provider/model shows `mock:mock-deterministic`.
+- Policy JSON saves when valid and shows in Policy Summary.
+- Context entries appear under the same agent only.
+- Active memory appears under the same agent only.
+- Tools can be created and assigned to one agent.
+- Workflow sequence displays selected agents by name and in order.
+- Running the workflow creates a completed run.
+- Run detail shows status, input, output, config snapshot, and trace events.
+- Trace shows context assembly, memory retrieval, LLM request/response, agent completion, and run completion.
+- Monitor and execution pages show token usage and execution detail.
+- Proposed memory starts as pending.
+- Approved proposed memory becomes active memory.
+- Re-running the workflow includes approved memory for the same agent only.
+
+## 8. Troubleshooting
+
+Backend not running:
+
+- Symptom: frontend pages show backend unavailable or E2E tests fail health checks.
+- Fix: start the backend with `uvicorn app.main:app --reload`.
+
+Frontend cannot reach backend:
+
+- Symptom: lists do not load or save actions fail.
+- Fix: confirm `NEXT_PUBLIC_API_BASE_URL` is unset or set to `http://localhost:8000`.
+
+CORS error:
+
+- Symptom: browser console shows CORS blocked requests.
+- Fix: confirm backend `CORS_ORIGINS` includes `http://localhost:3000`.
+
+Database not running:
+
+- Symptom: backend startup or API requests fail with database connection errors.
+- Fix: run `docker compose up -d postgres`.
+
+Workflow run button does nothing:
+
+- Symptom: no run appears after selecting **Run workflow**.
+- Fix: check the browser page for an error message and confirm the backend is running.
+
+Invalid workflow configuration:
+
+- Symptom: workflow save or run fails.
+- Fix: make sure at least one active agent appears in the Agent sequence.
+
+No run id returned:
+
+- Symptom: no **View trace** link appears after running.
+- Fix: inspect the backend terminal logs and confirm the workflow has active agents.
+
+Provider configuration error:
+
+- Symptom: run fails during model generation.
+- Fix: use `LLM_PROVIDER=mock` for this test, or verify backend-only provider keys for `openai_compatible`.
+
+Tavily API key missing:
+
+- Symptom: a Tavily tool call fails.
+- Fix: this manual test does not require Tavily. For Tavily-specific tests, set `TAVILY_API_KEY` in backend env only.
+
+Qdrant unavailable:
+
+- Symptom: vector search is disabled or unavailable.
+- Fix: run `docker compose up -d qdrant`. The current memory flow can still use relational active memory.
+
+Memory does not appear in a run:
+
+- Symptom: execution context shows no memory.
+- Fix: confirm the memory status is `active`, the memory belongs to the same agent, and the agent's memory policy has retrieval enabled.
+
+Agent sequence empty:
+
+- Symptom: workflow cannot save or run.
+- Fix: use the Available agent picker and select **Add** for each agent.
+
+Inactive agent selected:
+
+- Symptom: workflow run fails because an agent is missing or inactive.
+- Fix: open the agent detail page, check **Agent is active**, and save.
+
+## 9. Pass/Fail Checklist
+
+- [ ] Backend health check succeeds.
+- [ ] Frontend dashboard opens.
+- [ ] Three souls are created and visible.
+- [ ] Three agents are created and active.
+- [ ] Each agent has the correct soul selected.
+- [ ] Provider/model settings are saved.
+- [ ] Policy JSON is valid and saved.
+- [ ] Agent contexts are created and active.
+- [ ] Persistent Troubleshooter active memory is created.
+- [ ] Tool is created and assigned only to Persistent Troubleshooter.
+- [ ] Sequential workflow is created with agent picker.
+- [ ] Workflow run completes.
+- [ ] Run detail shows input and output.
+- [ ] Trace events are visible.
+- [ ] Monitor and execution pages are visible.
+- [ ] Feedback is saved for Persistent Troubleshooter.
+- [ ] Proposed memory is generated with pending status.
+- [ ] Proposed memory is approved.
+- [ ] Approved memory appears as active memory.
+- [ ] Re-run includes approved memory for Persistent Troubleshooter.
+- [ ] Re-run does not retrieve that memory for other agents.
+- [ ] Agent evolution page shows the agent-specific timeline.
+
+## 10. Current Limitations
+
+- Sequential workflow is the primary supported runtime. Supervisor and handoff swarm workflow types are placeholders.
+- Mock provider output is deterministic and simplified; it proves wiring and context injection rather than production-quality reasoning.
+- Qdrant vector search is an adapter-level capability and semantic embedding retrieval may not be configured locally.
+- Learning updates agent memory only. Soul/persona rewriting is not automatic.
+- The before/after comparison flow is manual through run traces, execution details, and repeated workflow runs.
+- Runtime monitoring uses polling rather than WebSockets.
+- Authentication and multi-user authorization are not implemented in the MVP.

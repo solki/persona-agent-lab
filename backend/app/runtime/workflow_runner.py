@@ -101,6 +101,13 @@ class WorkflowRunner:
                 "llm_request_started",
                 {"provider": self.settings.llm_provider, "model": agent.model, "temperature": agent.temperature},
             )
+            create_trace_event(
+                self.db,
+                run.id,
+                "llm_request_started",
+                {"provider": self.settings.llm_provider, "model": agent.model, "temperature": agent.temperature},
+                agent.id,
+            )
             try:
                 provider_response = self.provider.generate(
                     assembled.prompt,
@@ -120,6 +127,13 @@ class WorkflowRunner:
                 execution,
                 "llm_response_received",
                 {"metadata": provider_response.metadata, "content_preview": provider_response.content[:500]},
+            )
+            create_trace_event(
+                self.db,
+                run.id,
+                "llm_response_received",
+                {"metadata": provider_response.metadata, "content_preview": provider_response.content[:500]},
+                agent.id,
             )
             observatory_service.record_token_usage(
                 self.db,
@@ -150,6 +164,13 @@ class WorkflowRunner:
                 {"write_mode": agent.memory_policy.get("write_mode", "manual_review"), "proposed": False},
             )
             observatory_service.complete_execution(self.db, execution, agent_output)
+            create_trace_event(
+                self.db,
+                run.id,
+                "agent_completed",
+                {"agent_id": agent.id, "agent_name": agent.name},
+                agent.id,
+            )
             current_task = provider_response.content
 
         run.status = "completed"

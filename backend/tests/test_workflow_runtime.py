@@ -89,7 +89,10 @@ def test_sequential_workflow_run_creates_trace_events_and_snapshot(client):
     assert event_types.count("agent_selected") == 2
     assert event_types.count("context_assembled") == 2
     assert event_types.count("memory_retrieved") == 2
+    assert event_types.count("llm_request_started") == 2
+    assert event_types.count("llm_response_received") == 2
     assert event_types.count("agent_output") == 2
+    assert event_types.count("agent_completed") == 2
     assert "run_completed" in event_types
 
     first_context_event = next(

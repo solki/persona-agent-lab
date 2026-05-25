@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Lightbulb, Send } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { AgentFeedback, ProposedMemory, Run } from "@/lib/types";
@@ -85,7 +86,7 @@ export function RunLearningPanel({ run }: RunLearningPanelProps) {
             <select className={inputClass} value={agentId} onChange={(event) => setAgentId(event.target.value)}>
               {agents.map((agent) => (
                 <option key={agent.id} value={agent.id}>
-                  {agent.name} ({agent.id})
+                  {agent.name}
                 </option>
               ))}
             </select>
@@ -127,6 +128,9 @@ export function RunLearningPanel({ run }: RunLearningPanelProps) {
           </div>
           <p className="mt-2 text-slate-700">{proposedMemory.content}</p>
           <p className="mt-2 text-xs text-slate-500">Importance: {proposedMemory.importance}</p>
+          <Link className="focus-ring mt-3 inline-flex rounded border border-line bg-white px-3 py-1 text-xs font-medium" href={`/agents/${proposedMemory.agent_id}`}>
+            Review on agent page
+          </Link>
         </div>
       ) : null}
     </section>
