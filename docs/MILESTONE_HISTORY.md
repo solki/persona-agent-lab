@@ -1,8 +1,8 @@
 # Milestone History
 
-This file summarizes repository state through Milestones 0-8 and the follow-up infrastructure/provider hardening work. It is intended to help a fresh Codex session continue without relying on long conversation history.
+This file summarizes repository state through Milestones 0-9 and the follow-up infrastructure/provider hardening work. It is intended to help a fresh Codex session continue without relying on long conversation history.
 
-## Completed Milestones 0-8
+## Completed Milestones 0-9
 
 ### Milestone 0: Project Scaffold And Planning
 
@@ -78,6 +78,18 @@ This file summarizes repository state through Milestones 0-8 and the follow-up i
 - Added Tool Gateway trace events for allowed and denied calls.
 - Updated documentation for review status and runtime behavior.
 
+### Milestone 9: Agent Learning Loop
+
+- Added agent-scoped feedback, evaluation, and proposed-memory persistence.
+- Added feedback and evaluation APIs linked to a specific `run_id` and participating `agent_id`.
+- Added reflection API and deterministic mock reflection service for local learning proposals.
+- Added proposed-memory approve/reject APIs.
+- Approval creates active `AgentMemory` for the same agent; rejection creates no active memory.
+- Added run trace learning events for feedback, evaluation, reflection, proposal, approval, and rejection.
+- Added run trace frontend feedback/reflection UI.
+- Added agent detail proposed-memory review UI.
+- Added tests for feedback scoping, evaluation score validation, reflection, proposal defaults, approval writeback, rejection behavior, and cross-agent memory isolation.
+
 ## Follow-Up Work Completed After Milestone 8
 
 - Added a generic OpenAI-compatible LLM provider using the OpenAI Python SDK.
@@ -90,31 +102,30 @@ This file summarizes repository state through Milestones 0-8 and the follow-up i
 
 ## What Remains Incomplete
 
-- Agent Learning Loop is not implemented.
 - Vector embedding search and Qdrant upsert are not fully implemented.
 - Real standard OpenAI, Anthropic, and Ollama providers are placeholders.
 - Supervisor workflow runtime is not implemented.
 - Handoff swarm runtime is not implemented.
 - Handoff policy is not integrated into a full workflow execution path.
-- Memory writeback proposal and review loop is not automated.
+- Before/after learning comparison is manual through run traces and repeated workflow runs.
+- Learning updates only agent memory; soul/persona is not rewritten automatically.
 - Frontend has no automated tests.
 - Database migrations are not set up.
 - Authentication and production deployment are not implemented.
 - Seed data scripts are not present.
 
-## Milestone 9 Planned Objective
+## Milestone 9 Completed Objective
 
-Milestone 9 should implement the Agent Learning Loop only.
+Milestone 9 implements the Agent Learning Loop only.
 
-Expected focus:
+Implemented focus:
 
-- Propose memory writebacks from run outputs or runtime observations.
-- Respect each agent's `memory_policy.write_mode`.
+- Propose memory writebacks from run-specific human feedback or optional evaluations.
 - Default to manual review for proposed memories.
 - Persist pending memory proposals under the current `agent_id`.
 - Prevent cross-agent memory writeback.
 - Add trace events for learning proposals and review outcomes where runtime behavior changes.
-- Add tests for off/manual_review/auto modes, agent scoping, and no private memory leakage.
+- Add tests for agent scoping, score validation, approval/rejection, and no private memory leakage.
 - Update documentation after implementation.
 
 Do not implement Milestone 10 as part of Milestone 9.
@@ -122,4 +133,3 @@ Do not implement Milestone 10 as part of Milestone 9.
 ## Milestone 10 Planned Objective
 
 Milestone 10 is not implemented and the repository does not yet define a concrete objective for it. Treat it as a future milestone to be planned after Milestone 9 is complete and reviewed.
-

@@ -62,10 +62,10 @@ export default function DashboardPage() {
         <div className="rounded border border-line bg-white p-5">
           <div className="flex items-center gap-2">
             <Layers size={20} className="text-accent" />
-            <h2 className="text-base font-semibold">Next Runtime Work</h2>
+            <h2 className="text-base font-semibold">Runtime Workflows</h2>
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-600">
-            Workflow builder, run launcher, trace viewer, and experiment comparison pages are planned for the next frontend milestones.
+            Run workflows, inspect traces, add feedback, generate proposed memories, and approve learning updates per agent.
           </p>
         </div>
       </section>

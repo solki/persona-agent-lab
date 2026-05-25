@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { Run, TraceEvent } from "@/lib/types";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { RunLearningPanel } from "@/components/runs/RunLearningPanel";
 
 export function RunTraceViewer({ runId }: { runId: number }) {
   const [run, setRun] = useState<Run | null>(null);
@@ -28,14 +29,17 @@ export function RunTraceViewer({ runId }: { runId: number }) {
       />
       {error ? <StatusMessage title="Error" body={error} /> : null}
       {run ? (
-        <section className="mb-5 rounded border border-line bg-white p-5">
-          <h2 className="text-base font-semibold">Run {run.id}</h2>
-          <p className="mt-2 text-sm text-slate-600">Status: {run.status} · Workflow: {run.workflow_id}</p>
-          <h3 className="mt-4 text-sm font-semibold">Config Snapshot</h3>
-          <pre className="mt-2 max-h-72 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">
-            {JSON.stringify(run.config_snapshot, null, 2)}
-          </pre>
-        </section>
+        <>
+          <section className="mb-5 rounded border border-line bg-white p-5">
+            <h2 className="text-base font-semibold">Run {run.id}</h2>
+            <p className="mt-2 text-sm text-slate-600">Status: {run.status} · Workflow: {run.workflow_id}</p>
+            <h3 className="mt-4 text-sm font-semibold">Config Snapshot</h3>
+            <pre className="mt-2 max-h-72 overflow-auto rounded bg-panel p-3 text-xs text-slate-700">
+              {JSON.stringify(run.config_snapshot, null, 2)}
+            </pre>
+          </section>
+          <RunLearningPanel run={run} />
+        </>
       ) : null}
       <section className="grid gap-3">
         {events.map((event) => (

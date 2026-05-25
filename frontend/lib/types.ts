@@ -72,6 +72,60 @@ export interface AgentMemory {
   status: MemoryStatus;
 }
 
+export interface AgentFeedback {
+  id: number;
+  run_id: number;
+  agent_id: number;
+  trace_event_id?: number | null;
+  rating?: number | null;
+  feedback_text: string;
+  feedback_type: string;
+  created_at: string;
+}
+
+export interface AgentEvaluation {
+  id: number;
+  run_id: number;
+  agent_id: number;
+  evaluator_type: string;
+  scores: Record<string, number>;
+  issues: Record<string, unknown>;
+  recommendations: Record<string, unknown>;
+  created_at: string;
+}
+
+export type ProposedMemoryStatus = "pending" | "approved" | "rejected";
+
+export interface ProposedMemory {
+  id: number;
+  agent_id: number;
+  source_feedback_id?: number | null;
+  source_evaluation_id?: number | null;
+  memory_type: string;
+  content: string;
+  importance: number;
+  status: ProposedMemoryStatus;
+  created_at: string;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+}
+
+export interface ProposedMemoryApproval {
+  proposed_memory: ProposedMemory;
+  agent_memory: AgentMemory;
+}
+
+export interface ProposedMemoryRejection {
+  proposed_memory: ProposedMemory;
+}
+
+export interface ReflectionResponse {
+  run_id: number;
+  agent_id: number;
+  reflection: string;
+  proposed_memory: ProposedMemory;
+}
+
 export type WorkflowType = "sequential" | "supervisor" | "handoff_swarm";
 export type RunStatus = "pending" | "running" | "completed" | "failed";
 

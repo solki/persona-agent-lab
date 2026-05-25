@@ -29,3 +29,26 @@ Each experiment should define:
 - Trace and snapshot requirements
 
 Output quality is not sufficient. Experiments should also detect unauthorized tool use, cross-agent memory leakage, cross-agent context leakage, and implicit handoff data leakage.
+
+## Learning Loop Experiments
+
+Milestone 9 supports manual before/after learning experiments:
+
+1. Run a workflow task and capture the original run output.
+2. Open the run trace and submit human feedback for one participating agent.
+3. Optionally submit a rubric evaluation for that same run and agent.
+4. Generate a proposed memory through reflection.
+5. Approve the proposed memory on the agent detail page.
+6. Re-run the same workflow task.
+7. Compare old and new outputs, trace events, and retrieved memory IDs.
+
+The experiment should assert:
+
+- Feedback is linked to the original `run_id` and `agent_id`.
+- The proposed memory belongs to the same `agent_id`.
+- Approval creates active memory only for that agent.
+- Rejected proposed memories are not retrieved.
+- Other agents do not receive the feedback-derived memory.
+- Soul/persona fields are unchanged.
+
+This is intentionally manual in Milestone 9. A dedicated before/after comparison UI can be added later without changing the isolation model.

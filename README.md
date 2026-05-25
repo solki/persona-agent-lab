@@ -6,6 +6,8 @@ The MVP starts with mock LLM mode so the full workflow can run locally without A
 
 Local development is self-contained. Docker Compose starts the required PostgreSQL and Qdrant services, so a new developer does not need a pre-existing local vector database.
 
+Milestone 9 adds an agent learning loop. Users can attach feedback and optional evaluations to a run output, reflect that feedback into a pending proposed memory, manually approve or reject it, and let approved memories affect future runs through the normal agent-scoped memory retrieval path.
+
 ## Core Architecture Rules
 
 - Agents are isolated by default.
@@ -20,6 +22,9 @@ Local development is self-contained. Docker Compose starts the required PostgreS
 - Every run should save config snapshots for reproducibility.
 - Workflow definitions are separate from agent definitions.
 - Soul/persona is separate from system prompt.
+- Learning happens through agent-specific memory updates only.
+- Proposed memories require manual approval before they become active memory.
+- Soul/persona is not rewritten automatically.
 
 ## Project Structure
 
@@ -168,9 +173,33 @@ The local Qdrant dashboard is available at [http://localhost:6333/dashboard](htt
 
 Tavily search will be implemented as a Tool Gateway tool. A missing `TAVILY_API_KEY` must return a clear configuration error from the tool wrapper and must not crash the app.
 
+## Agent Learning Loop
+
+The learning loop is:
+
+```text
+Run output -> human feedback -> optional evaluation -> reflection -> proposed memory -> manual approval -> active memory -> future run behavior change
+```
+
+Relevant endpoints:
+
+- `POST /runs/{run_id}/agents/{agent_id}/feedback`
+- `GET /agents/{agent_id}/feedback`
+- `POST /runs/{run_id}/agents/{agent_id}/evaluate`
+- `GET /runs/{run_id}/evaluations`
+- `POST /runs/{run_id}/agents/{agent_id}/reflect`
+- `POST /agents/{agent_id}/proposed-memories`
+- `GET /agents/{agent_id}/proposed-memories`
+- `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`
+- `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
+
+Approved proposed memories create active `AgentMemory` records for the same `agent_id`. Rejected proposed memories do not create active memory and are not retrieved in future context assembly.
+
+See [docs/agent-learning-loop.md](docs/agent-learning-loop.md) for the full flow and before/after experiment process.
+
 ## Review Status
 
-Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls.
+Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval.
 
 ## Running Tests
 
@@ -192,7 +221,7 @@ npm run build
 
 ## Current MVP Limitations
 
-- Milestone 0 contains scaffolding and documentation only.
-- Backend API implementation starts in Milestone 1.
 - The MVP experiment module compares two or more agents on the same task and links to per-run traces.
+- Learning updates only agent memory; it does not rewrite soul/persona automatically.
+- The before/after learning comparison flow is manual through run traces and repeated workflow runs.
 - `openai_compatible` can call compatible chat completions APIs. Standard OpenAI, Anthropic, and Ollama providers remain placeholders.

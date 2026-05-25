@@ -1,19 +1,19 @@
 # Project State
 
-Last updated after Milestones 0-8 and the local Qdrant Compose update.
+Last updated after Milestone 9 Agent Learning Loop.
 
 ## Project Purpose
 
 Agent Swarm Lab is a configurable platform for creating, editing, deleting, configuring, and composing independent AI agents. Each agent owns its model settings, soul/persona, system prompt, context entries, memory records, tool permissions, and handoff policy. Agents are isolated by default and must not share context, memory, tools, prompts, settings, or hidden runtime state unless explicit workflow output or a permission-checked handoff payload allows it.
 
-Milestone 9 status: not implemented.
+Milestone 9 status: implemented.
 
 Milestone 10 status: not implemented.
 
 ## Current Architecture
 
-- Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, and experiment runner.
-- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, management pages, workflow run pages, trace viewer, and experiment comparison UI.
+- Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, and feedback-driven learning loop.
+- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, and experiment comparison UI.
 - Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
@@ -23,10 +23,10 @@ Milestone 10 status: not implemented.
 - `app/main.py`: FastAPI app factory, CORS, router registration, startup table initialization when `CREATE_TABLES_ON_STARTUP=true`.
 - `app/config.py`: Pydantic settings for database, CORS, Qdrant, Tavily, and LLM providers.
 - `app/database.py`: SQLAlchemy base, engine/session setup, local table initialization, and `postgresql://` to `postgresql+psycopg://` normalization.
-- `app/api/`: Routers for health, agents, souls, tools, contexts, memories, workflows, runs, and experiments.
-- `app/models/`: SQLAlchemy models for agents, souls, tools, contexts, memories, workflows, runs, trace events, experiments, and experiment runs.
+- `app/api/`: Routers for health, agents, souls, tools, contexts, memories, workflows, runs, experiments, and learning.
+- `app/models/`: SQLAlchemy models for agents, souls, tools, contexts, memories, learning feedback/evaluations/proposed memories, workflows, runs, trace events, experiments, and experiment runs.
 - `app/schemas/`: Pydantic request/response schemas and policy schemas.
-- `app/services/`: Persistence and scoped access services for agents, souls, tools, contexts, memories, workflows, runs, trace events, and experiments.
+- `app/services/`: Persistence and scoped access services for agents, souls, tools, contexts, memories, learning, workflows, runs, trace events, and experiments.
 - `app/runtime/`: Context assembler, workflow runner, handoff policy evaluator, mock provider, OpenAI-compatible provider, provider placeholders, provider factory, and provider interface.
 - `app/memory/`: Vector store schemas, disabled vector store, and Qdrant adapter shell.
 - `app/tools/`: Tool Gateway, local tool registry, and Tavily search wrapper.
@@ -35,17 +35,17 @@ Milestone 10 status: not implemented.
 ## Current Frontend Modules
 
 - `app/page.tsx`: Dashboard with navigation cards and isolation summary.
-- `app/agents`: Agent list, create page, edit/detail page with context and memory managers.
+- `app/agents`: Agent list, create page, edit/detail page with context, proposed-memory, and memory managers.
 - `app/souls`: Soul/persona list, create, and edit pages.
 - `app/tools`: Tool registry page.
 - `app/workflows`: Workflow list, create/edit pages, and workflow run page.
-- `app/runs/[id]`: Run trace viewer.
+- `app/runs/[id]`: Run trace viewer with learning feedback and reflection panel.
 - `app/experiments`: Experiment list, create page, and experiment run/comparison page.
-- `components/agents`: Agent form/list/detail, context manager, memory manager.
+- `components/agents`: Agent form/list/detail, context manager, proposed-memory manager, memory manager.
 - `components/souls`: Soul list and form.
 - `components/tools`: Tool registry form/list.
 - `components/workflows`: Workflow list/form/run panel.
-- `components/runs`: Run trace viewer.
+- `components/runs`: Run trace viewer and learning feedback panel.
 - `components/experiments`: Experiment list/form/runner.
 - `components/shared`: App shell, field wrapper, page header, and status message.
 - `lib/api.ts`: Typed backend API wrapper using `NEXT_PUBLIC_API_BASE_URL`.
@@ -59,6 +59,9 @@ Milestone 10 status: not implemented.
 - `AgentTool`: many-to-many assignment table between agents and tools.
 - `AgentContext`: agent-scoped title, type, content, priority, active flag, timestamps.
 - `AgentMemory`: agent-scoped type, content, source, importance, status, timestamps, last accessed timestamp.
+- `AgentFeedback`: run id, agent id, optional trace event id, optional rating, feedback text, feedback type, creation timestamp.
+- `AgentEvaluation`: run id, agent id, evaluator type, rubric scores, issues, recommendations, creation timestamp.
+- `ProposedMemory`: agent id, optional source feedback/evaluation ids, type, content, importance, status, creation timestamp, approval/rejection timestamps.
 - `Workflow`: name, description, type, graph config, active flag, timestamps.
 - `Run`: workflow id, input, output, status, config snapshot, started/ended timestamps, creation timestamp.
 - `TraceEvent`: run id, event type, optional agent id, payload, timestamp.
@@ -74,6 +77,10 @@ Milestone 10 status: not implemented.
 - Tools: `GET /tools`, `POST /tools`, `GET /tools/{tool_id}`, `PUT /tools/{tool_id}`, `DELETE /tools/{tool_id}`
 - Contexts: `GET /agents/{agent_id}/contexts`, `POST /agents/{agent_id}/contexts`, `PUT /agents/{agent_id}/contexts/{context_id}`, `DELETE /agents/{agent_id}/contexts/{context_id}`
 - Memories: `GET /agents/{agent_id}/memories`, `POST /agents/{agent_id}/memories`, `PUT /agents/{agent_id}/memories/{memory_id}`, `DELETE /agents/{agent_id}/memories/{memory_id}`, `POST /agents/{agent_id}/memories/{memory_id}/approve`, `POST /agents/{agent_id}/memories/{memory_id}/reject`
+- Learning feedback: `POST /runs/{run_id}/agents/{agent_id}/feedback`, `GET /agents/{agent_id}/feedback`
+- Learning evaluations: `POST /runs/{run_id}/agents/{agent_id}/evaluate`, `GET /runs/{run_id}/evaluations`
+- Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
+- Reflection: `POST /runs/{run_id}/agents/{agent_id}/reflect`
 - Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`
 - Runs: `GET /runs`, `GET /runs/{run_id}`, `GET /runs/{run_id}/trace`
 - Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
@@ -85,7 +92,7 @@ Milestone 10 status: not implemented.
 3. The runner loads active agents from `workflow.graph_config.agent_sequence`.
 4. A `Run` is created with status `running`, input task, and a config snapshot of the workflow and participating agents.
 5. Trace events record run start and workflow load.
-6. For each agent, the runner selects the agent, assembles deterministic context, records context and memory trace events, calls the configured provider, records output, records a memory proposal event, and passes the output as the next sequential task.
+6. For each agent, the runner selects the agent, assembles deterministic context, records context and memory trace events, calls the configured provider, records output, records a memory proposal placeholder event, and passes the output as the next sequential task.
 7. The run is marked `completed`, output is persisted, and a `run_completed` trace event is written.
 
 ## Current Provider Configuration
@@ -104,8 +111,14 @@ Milestone 10 status: not implemented.
 - Memory entries are stored under `/agents/{agent_id}/memories` and service queries always filter by `agent_id`.
 - Memory updates, deletes, approve, and reject operations through the wrong agent route return `404`.
 - Memory statuses are `active`, `pending`, `rejected`, and `archived`; default created memory is `pending`.
+- Proposed memory statuses are `pending`, `approved`, and `rejected`; proposed memories always start as `pending`.
+- Feedback and evaluations are linked to a specific `run_id` and participating `agent_id`.
+- Reflection converts feedback or evaluation into an agent-scoped proposed memory.
+- Approving a proposed memory creates an active `AgentMemory` for the same `agent_id`.
+- Rejecting a proposed memory does not create `AgentMemory`.
 - Agent memory policy defaults to `{"write_mode": "manual_review", "retrieval_enabled": true}`.
 - Context assembly includes active context for the current agent and active memory for the current agent only.
+- Approved feedback-derived memory uses the same active-memory retrieval path as manual memory.
 - Context assembly is deterministic and traceable through section order and metadata.
 - Qdrant access is behind `QdrantVectorStore`. Search and upsert require `agent_id`.
 - Vector search and vector upsert are not fully implemented yet because embeddings are not configured.
@@ -119,6 +132,7 @@ Milestone 10 status: not implemented.
 - Experiments require two or more agent ids.
 - Experiment runs create a single-agent sequential workflow per selected agent, run the same task for each selected agent, and persist an `ExperimentRun` with run ids, trace links, outputs, task prompt, and evaluation config.
 - Experiments preserve isolation by running each selected agent in its own workflow run.
+- Before/after learning experiments are supported manually by comparing a baseline run with a later run after proposed-memory approval.
 
 ## Current Test Coverage Summary
 
@@ -127,6 +141,7 @@ Milestone 10 status: not implemented.
 - Agent, soul, tool CRUD and agent-tool assignment.
 - Agent context CRUD scoped by `agent_id`.
 - Agent memory CRUD scoped by `agent_id`, including approve/reject review flow.
+- Agent feedback, evaluation, reflection, proposed-memory approval/rejection, and cross-agent learning-memory isolation.
 - Context assembler agent-scoped context and memory injection.
 - Tool Gateway allowed, denied, unknown tool, trace persistence, and Tavily missing API key behavior.
 - Qdrant config loading, empty API key acceptance, collection prefix naming, and `agent_id` requirement.
@@ -137,15 +152,14 @@ Milestone 10 status: not implemented.
 
 ## Current Known Limitations
 
-- Milestone 9 Agent Learning Loop is not implemented.
 - Milestone 10 is not implemented and its objective is not yet specified in the repository.
 - Vector embedding search and Qdrant upsert are adapter shells, not semantic retrieval.
 - Real standard OpenAI, Anthropic, and Ollama providers remain placeholders.
 - Supervisor and handoff swarm workflows are placeholders.
 - Handoff policy is modeled and has an evaluator, but full handoff runtime integration is not implemented.
-- Memory writeback events are recorded as not proposed; no learning loop proposes durable memories yet.
+- The before/after learning comparison flow is manual; there is no dedicated comparison dashboard yet.
+- Learning updates only agent memory; soul/persona is not rewritten automatically.
 - No Alembic migrations; local startup can create tables automatically for MVP development.
 - No authentication, authorization, multi-user isolation, or production deployment setup.
 - No frontend automated tests.
 - Seed data scripts are not present.
-

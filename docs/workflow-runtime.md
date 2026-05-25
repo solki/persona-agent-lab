@@ -25,6 +25,10 @@ Every run should record:
 - Handoff allowed or denied
 - Agent output
 - Memory proposed
+- Learning feedback received
+- Learning evaluation recorded
+- Learning reflection created
+- Proposed memory approved or rejected
 - Run completed
 - Run failed
 
@@ -57,3 +61,5 @@ OPENAI_COMPATIBLE_MODEL=deepseek-v4-flash
 ## Frontend Runtime UI
 
 Milestone 6 adds workflow list, workflow editor, workflow run, and run trace pages. The UI keeps workflow composition separate from agent configuration by editing only workflow metadata and `graph_config.agent_sequence`. Run details expose the saved config snapshot and ordered trace events for inspection.
+
+Milestone 9 extends the run trace page with feedback capture and reflection into proposed memory. Proposed memory approval remains on the agent detail page. Once approved, the memory is retrieved by the same context assembly path used by any other active agent memory.

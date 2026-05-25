@@ -1,9 +1,15 @@
 import type {
   Agent,
   AgentContext,
+  AgentFeedback,
   AgentMemory,
+  AgentEvaluation,
   Experiment,
   ExperimentRun,
+  ProposedMemory,
+  ProposedMemoryApproval,
+  ProposedMemoryRejection,
+  ReflectionResponse,
   Run,
   Soul,
   Tool,
@@ -82,6 +88,21 @@ export const api = {
     request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}/approve`, { method: "POST" }),
   rejectMemory: (agentId: number, memoryId: number) =>
     request<AgentMemory>(`/agents/${agentId}/memories/${memoryId}/reject`, { method: "POST" }),
+  listAgentFeedback: (agentId: number) => request<AgentFeedback[]>(`/agents/${agentId}/feedback`),
+  createRunFeedback: (runId: number, agentId: number, body: JsonBody) =>
+    request<AgentFeedback>(`/runs/${runId}/agents/${agentId}/feedback`, jsonOptions("POST", body)),
+  createRunEvaluation: (runId: number, agentId: number, body: JsonBody) =>
+    request<AgentEvaluation>(`/runs/${runId}/agents/${agentId}/evaluate`, jsonOptions("POST", body)),
+  listRunEvaluations: (runId: number) => request<AgentEvaluation[]>(`/runs/${runId}/evaluations`),
+  reflectOnRunFeedback: (runId: number, agentId: number, body: JsonBody) =>
+    request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, jsonOptions("POST", body)),
+  listProposedMemories: (agentId: number) => request<ProposedMemory[]>(`/agents/${agentId}/proposed-memories`),
+  createProposedMemory: (agentId: number, body: JsonBody) =>
+    request<ProposedMemory>(`/agents/${agentId}/proposed-memories`, jsonOptions("POST", body)),
+  approveProposedMemory: (agentId: number, memoryId: number) =>
+    request<ProposedMemoryApproval>(`/agents/${agentId}/proposed-memories/${memoryId}/approve`, { method: "POST" }),
+  rejectProposedMemory: (agentId: number, memoryId: number) =>
+    request<ProposedMemoryRejection>(`/agents/${agentId}/proposed-memories/${memoryId}/reject`, { method: "POST" }),
 
   listWorkflows: () => request<Workflow[]>("/workflows"),
   getWorkflow: (id: number) => request<Workflow>(`/workflows/${id}`),

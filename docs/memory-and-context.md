@@ -31,6 +31,28 @@ The default write mode is `manual_review`. Pending memory must be visible and ca
 
 The memory API is scoped under `/agents/{agent_id}/memories`. A memory record cannot be updated, deleted, approved, or rejected through another agent's route.
 
+## Proposed Memory Review
+
+Milestone 9 adds proposed memories as the review layer between feedback and active memory.
+
+Proposed memories are scoped under:
+
+```text
+/agents/{agent_id}/proposed-memories
+```
+
+A proposed memory always starts as `pending`. Approving it creates a normal active `AgentMemory` for the same `agent_id`. Rejecting it marks the proposal as `rejected` and does not create an `AgentMemory`.
+
+Only active `AgentMemory` rows are retrieved by context assembly. Pending, rejected, and archived memories are not injected into future runs.
+
+Feedback-derived memory therefore follows this path:
+
+```text
+run feedback -> reflection -> pending proposed memory -> approval -> active AgentMemory -> future context assembly
+```
+
+This milestone does not rewrite soul/persona fields automatically. Any persona update should be handled as a separate explicit user action in a later milestone.
+
 ## Vector Store
 
 Qdrant is accessed through a vector store abstraction. Agents must not directly access the Qdrant client.
