@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { Run, RunStatus, Workflow } from "@/lib/types";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 type StatusFilter = "all" | RunStatus;
 type SortOrder = "newest" | "oldest";
@@ -23,6 +24,8 @@ export function RunList() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [pendingDeleteRun, setPendingDeleteRun] = useState<Run | null>(null);
+  const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState(false);
 
   useEffect(() => {
     void loadRuns();
@@ -63,10 +66,11 @@ export function RunList() {
       .sort((first, second) => (sortOrder === "newest" ? second.id - first.id : first.id - second.id));
   }, [runs, search, sortOrder, statusFilter, workflowFilter, workflowNames]);
 
-  async function deleteRun(runId: number) {
-    if (!window.confirm(`Delete run ${runId}? This removes run-local trace, execution, token, feedback, and learning records.`)) {
+  async function deleteRun() {
+    if (!pendingDeleteRun) {
       return;
     }
+    const runId = pendingDeleteRun.id;
     setDeleting(true);
     setError("");
     setMessage("");
@@ -83,15 +87,13 @@ export function RunList() {
       setError(errorMessage(deleteError));
     } finally {
       setDeleting(false);
+      setPendingDeleteRun(null);
     }
   }
 
   async function deleteSelectedRuns() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) {
-      return;
-    }
-    if (!window.confirm(`Delete ${ids.length} selected run${ids.length === 1 ? "" : "s"}? Agent and workflow configuration will be kept.`)) {
       return;
     }
     setDeleting(true);
@@ -186,7 +188,7 @@ export function RunList() {
             type="button"
             className="focus-ring inline-flex items-center gap-2 rounded border border-warning bg-white px-3 py-2 text-sm font-medium text-warning disabled:opacity-50"
             disabled={selectedIds.size === 0 || deleting}
-            onClick={deleteSelectedRuns}
+            onClick={() => setConfirmBulkDeleteOpen(true)}
           >
             <Trash2 size={16} />
             Delete selected
@@ -238,7 +240,7 @@ export function RunList() {
                 type="button"
                 className="focus-ring rounded border border-warning bg-white px-3 py-1 text-sm font-medium text-warning disabled:opacity-50"
                 disabled={deleting}
-                onClick={() => deleteRun(run.id)}
+                onClick={() => setPendingDeleteRun(run)}
               >
                 Delete
               </button>
@@ -246,6 +248,27 @@ export function RunList() {
           </article>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteRun)}
+        title="Delete run?"
+        description={`Delete run ${pendingDeleteRun?.id ?? ""}? This removes run-local trace, execution, token, feedback, and learning records, but keeps agents, workflows, souls, tools, contexts, and active memories.`}
+        confirmLabel="Delete run"
+        loading={deleting}
+        onCancel={() => setPendingDeleteRun(null)}
+        onConfirm={deleteRun}
+      />
+      <ConfirmDialog
+        open={confirmBulkDeleteOpen}
+        title="Delete selected runs?"
+        description={`Delete ${selectedIds.size} selected run${selectedIds.size === 1 ? "" : "s"}? Agent and workflow configuration will be kept.`}
+        confirmLabel="Delete selected"
+        loading={deleting}
+        onCancel={() => setConfirmBulkDeleteOpen(false)}
+        onConfirm={() => {
+          setConfirmBulkDeleteOpen(false);
+          void deleteSelectedRuns();
+        }}
+      />
     </>
   );
 }

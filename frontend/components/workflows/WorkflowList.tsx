@@ -6,11 +6,15 @@ import { api } from "@/lib/api";
 import type { Workflow } from "@/lib/types";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function WorkflowList() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Workflow | null>(null);
 
   useEffect(() => {
     api
@@ -19,6 +23,26 @@ export function WorkflowList() {
       .catch(() => setError("Unable to reach the backend API. Start FastAPI to load workflows."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function deleteWorkflow() {
+    if (!pendingDelete) {
+      return;
+    }
+    const workflow = pendingDelete;
+    setDeletingId(workflow.id);
+    setError("");
+    setMessage("");
+    try {
+      await api.deleteWorkflow(workflow.id);
+      setWorkflows((current) => current.filter((item) => item.id !== workflow.id));
+      setMessage("Workflow deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete workflow.");
+    } finally {
+      setDeletingId(null);
+      setPendingDelete(null);
+    }
+  }
 
   return (
     <>
@@ -29,7 +53,8 @@ export function WorkflowList() {
         actionLabel="New workflow"
       />
       {loading ? <StatusMessage title="Loading" body="Loading workflows from the backend." /> : null}
-      {error ? <StatusMessage title="Backend unavailable" body={error} /> : null}
+      {message ? <StatusMessage title="Saved" body={message} /> : null}
+      {error ? <StatusMessage title="Error" body={error} /> : null}
       {!loading && !error && workflows.length === 0 ? (
         <StatusMessage title="No workflows" body="Create a sequential workflow by selecting agents in execution order." />
       ) : null}
@@ -50,10 +75,27 @@ export function WorkflowList() {
               <Link className="focus-ring rounded bg-accent px-3 py-1 text-sm font-medium text-white" href={`/workflows/${workflow.id}/run`}>
                 Run
               </Link>
+              <button
+                className="focus-ring rounded border border-line bg-white px-3 py-1 text-sm font-medium text-red-700 disabled:opacity-60"
+                disabled={deletingId === workflow.id}
+                onClick={() => setPendingDelete(workflow)}
+                type="button"
+              >
+                {deletingId === workflow.id ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete workflow?"
+        description={`Delete "${pendingDelete?.name ?? "this workflow"}"? Existing runs must be deleted first, otherwise the backend will block the delete.`}
+        confirmLabel="Delete workflow"
+        loading={deletingId !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={deleteWorkflow}
+      />
     </>
   );
 }

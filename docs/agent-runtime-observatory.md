@@ -21,7 +21,7 @@ The observatory records and displays:
 - learning events
 - execution errors
 
-Run management is available from the frontend and through the API. Users can list runs, open monitor, trace, executions, and token usage pages, and delete old run-local results after confirmation.
+Run management is available from the frontend and through the API. Users can list runs, open monitor, trace, executions, and token usage pages, and delete old run-local results after an in-app confirmation dialog.
 
 ## Execution Records
 
@@ -134,9 +134,9 @@ Frontend routes:
 - `/runs/[id]/token-usage`
 - `/agents/[id]/evolution`
 
-The monitor page polls the backend every second. Event rows are collapsed by default and show event type, agent, time, and step metadata. Use **Expand** to inspect formatted JSON payloads, or **Expand all** and **Collapse all** for bulk inspection. Filters support agent, event category, and text search.
+The monitor page polls the backend every second. Event rows are collapsed by default and show event type, agent, time, and step metadata. Use **Expand** to inspect formatted JSON payloads, or **Expand all** and **Collapse all** for bulk inspection. Filters support agent, event category, and text search. Long payloads are wrapped inside scrollable code blocks so monitor and trace pages stay readable on laptop screens.
 
-The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and delete actions. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
+The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and delete actions. Delete actions require confirmation, show loading state, surface backend errors, and refresh the list after success. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
 
 ## Run Cleanup
 
@@ -152,6 +152,8 @@ The Runs page is the observability entry point. It shows run status, workflow, i
 - the run record
 
 Cleanup does not delete agents, workflows, souls, tools, contexts, active `AgentMemory` records, or approved `ProposedMemory` records that back active memories. Approved proposed memories are detached from the deleted run-local feedback/evaluation source so the active memory does not point at a missing proposal.
+
+Workflow deletion is separate from run cleanup. A workflow that still has run records is blocked with a clear error; delete the related runs first if you intentionally want to remove the workflow definition.
 
 ## Privacy And Isolation
 

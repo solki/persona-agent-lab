@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { AgentMemory, MemoryStatus } from "@/lib/types";
 import { Field, inputClass } from "@/components/shared/Field";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 const memoryStatuses: MemoryStatus[] = ["pending", "active", "rejected", "archived"];
 
@@ -16,6 +17,7 @@ export function AgentMemoryManager({ agentId }: { agentId: number }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<AgentMemory | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,10 +77,11 @@ export function AgentMemoryManager({ agentId }: { agentId: number }) {
     }
   }
 
-  async function deleteMemory(item: AgentMemory) {
-    if (!window.confirm(`Delete ${item.memory_type} memory?`)) {
+  async function deleteMemory() {
+    if (!pendingDelete) {
       return;
     }
+    const item = pendingDelete;
     setLoading(true);
     setError("");
     setMessage("");
@@ -90,6 +93,7 @@ export function AgentMemoryManager({ agentId }: { agentId: number }) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete memory.");
     } finally {
       setLoading(false);
+      setPendingDelete(null);
     }
   }
 
@@ -197,7 +201,12 @@ export function AgentMemoryManager({ agentId }: { agentId: number }) {
                     <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" onClick={() => startEdit(item)} type="button">
                       Edit
                     </button>
-                    <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700" onClick={() => deleteMemory(item)} type="button">
+                    <button
+                      className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700 disabled:opacity-60"
+                      disabled={loading}
+                      onClick={() => setPendingDelete(item)}
+                      type="button"
+                    >
                       Delete
                     </button>
                   </div>
@@ -222,6 +231,15 @@ export function AgentMemoryManager({ agentId }: { agentId: number }) {
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete memory?"
+        description={`Delete this ${pendingDelete?.memory_type ?? "agent"} memory? Future runs for this agent will no longer retrieve it.`}
+        confirmLabel="Delete memory"
+        loading={loading}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={deleteMemory}
+      />
     </section>
   );
 }

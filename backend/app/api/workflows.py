@@ -41,7 +41,10 @@ def update_workflow(workflow_id: int, payload: WorkflowUpdate, db: Session = Dep
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
     workflow = require_workflow(db, workflow_id)
-    workflow_service.delete_workflow(db, workflow)
+    try:
+        workflow_service.delete_workflow(db, workflow)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

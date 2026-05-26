@@ -1,9 +1,14 @@
 from typing import Any, Optional
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, exists, insert, select
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
+from app.models.context import AgentContext
+from app.models.learning import AgentEvaluation, AgentFeedback, ProposedMemory
+from app.models.memory import AgentMemory
+from app.models.observatory import AgentExecution, AgentExecutionEvent, LearningEvent, TokenUsage
+from app.models.run import TraceEvent
 from app.models.tool import AgentTool, Tool
 from app.schemas.agents import AgentCreate, AgentUpdate
 
@@ -40,7 +45,27 @@ def update_agent(db: Session, agent: Agent, payload: AgentUpdate) -> Agent:
     return agent
 
 
+def _has_agent_runtime_history(db: Session, agent_id: int) -> bool:
+    runtime_models = (
+        TraceEvent,
+        AgentExecution,
+        AgentExecutionEvent,
+        TokenUsage,
+        AgentFeedback,
+        AgentEvaluation,
+        LearningEvent,
+    )
+    return any(db.scalar(select(exists().where(model.agent_id == agent_id))) for model in runtime_models)
+
+
 def delete_agent(db: Session, agent: Agent) -> None:
+    if _has_agent_runtime_history(db, agent.id):
+        raise ValueError("Delete related runs and learning records before deleting this agent, or deactivate it instead.")
+
+    db.execute(delete(AgentTool).where(AgentTool.c.agent_id == agent.id))
+    db.execute(delete(AgentContext).where(AgentContext.agent_id == agent.id))
+    db.execute(delete(AgentMemory).where(AgentMemory.agent_id == agent.id))
+    db.execute(delete(ProposedMemory).where(ProposedMemory.agent_id == agent.id))
     db.delete(agent)
     db.commit()
 

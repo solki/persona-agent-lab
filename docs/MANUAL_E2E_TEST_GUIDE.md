@@ -401,13 +401,37 @@ Expected result:
 6. Return to **Runs**.
 7. Select one old test run with its checkbox.
 8. Select **Delete selected**.
-9. Confirm the browser prompt.
+9. Confirm the in-app dialog.
 
 Expected result:
 
 - The selected run disappears from the Runs list.
 - Agents, workflows, souls, tools, contexts, and active approved memories remain available.
 - If deletion fails, the page shows the backend error message.
+
+### T. Manually Check Destructive Actions
+
+Use unique test-only records for these checks.
+
+1. Open **Souls** and create a disposable soul.
+2. Return to **Souls**, select **Delete**, and confirm the in-app dialog appears.
+3. Select **Cancel** and confirm the soul remains visible.
+4. Select **Delete** again, confirm deletion, and verify the success message appears and the soul disappears.
+5. Create another soul, assign it to a test agent, then try deleting the soul from **Souls**.
+6. Confirm the delete is blocked with a readable error telling you to reassign or delete agents first.
+7. Open an agent detail page and add a context entry. Edit it, then delete it through the confirmation dialog.
+8. Add a memory entry. Edit it, then delete it through the confirmation dialog.
+9. Open **Tools**, create a disposable tool, delete it, and verify the tool disappears from the list.
+10. Open **Workflows**, create a disposable workflow without runs, delete it, and verify the workflow disappears.
+11. Try deleting a workflow that has run history. The app should show a readable error until the related runs are deleted.
+
+Expected result:
+
+- Every destructive action has a visible confirmation dialog.
+- Cancel keeps the record.
+- Confirm shows loading state and then a success message or readable error.
+- Lists refresh after successful delete or removal.
+- Relationship removal uses **Unassign** or **Remove**, not **Delete**.
 
 ## 6. Exact Sample Content
 
@@ -646,6 +670,11 @@ Run delete fails:
 
 - Symptom: the Runs page shows an error after selecting **Delete** or **Delete selected**.
 - Fix: refresh the Runs page and check backend logs. Confirm the backend is running and the run still exists.
+
+Soul or workflow delete is blocked:
+
+- Symptom: a delete confirmation closes and the page shows a message such as "Reassign or delete agents" or "Delete this workflow's runs".
+- Fix: this is expected safety behavior. Reassign/delete dependent agents, or delete related runs first, then retry.
 
 Provider configuration error:
 

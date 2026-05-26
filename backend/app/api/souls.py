@@ -39,5 +39,8 @@ def update_soul(soul_id: int, payload: SoulUpdate, db: Session = Depends(get_db)
 @router.delete("/{soul_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_soul(soul_id: int, db: Session = Depends(get_db)):
     soul = require_soul(db, soul_id)
-    soul_service.delete_soul(db, soul)
+    try:
+        soul_service.delete_soul(db, soul)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { AgentContext } from "@/lib/types";
 import { Field, inputClass } from "@/components/shared/Field";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function AgentContextManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<AgentContext[]>([]);
@@ -14,6 +15,7 @@ export function AgentContextManager({ agentId }: { agentId: number }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<AgentContext | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -73,10 +75,11 @@ export function AgentContextManager({ agentId }: { agentId: number }) {
     }
   }
 
-  async function deleteContext(item: AgentContext) {
-    if (!window.confirm(`Delete context "${item.title}"?`)) {
+  async function deleteContext() {
+    if (!pendingDelete) {
       return;
     }
+    const item = pendingDelete;
     setLoading(true);
     setError("");
     setMessage("");
@@ -88,6 +91,7 @@ export function AgentContextManager({ agentId }: { agentId: number }) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete context.");
     } finally {
       setLoading(false);
+      setPendingDelete(null);
     }
   }
 
@@ -166,7 +170,12 @@ export function AgentContextManager({ agentId }: { agentId: number }) {
                     <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" onClick={() => startEdit(item)} type="button">
                       Edit
                     </button>
-                    <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700" onClick={() => deleteContext(item)} type="button">
+                    <button
+                      className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700 disabled:opacity-60"
+                      disabled={loading}
+                      onClick={() => setPendingDelete(item)}
+                      type="button"
+                    >
                       Delete
                     </button>
                   </div>
@@ -178,6 +187,15 @@ export function AgentContextManager({ agentId }: { agentId: number }) {
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete context?"
+        description={`Delete "${pendingDelete?.title ?? "this context"}"? Future runs for this agent will no longer retrieve it.`}
+        confirmLabel="Delete context"
+        loading={loading}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={deleteContext}
+      />
     </section>
   );
 }

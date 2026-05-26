@@ -6,12 +6,15 @@ import { api } from "@/lib/api";
 import type { Soul } from "@/lib/types";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function SoulList() {
   const [souls, setSouls] = useState<Soul[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Soul | null>(null);
 
   useEffect(() => {
     api
@@ -21,10 +24,12 @@ export function SoulList() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function deleteSoul(soul: Soul) {
-    if (!window.confirm(`Delete soul "${soul.name}"?`)) {
+  async function deleteSoul() {
+    if (!pendingDelete) {
       return;
     }
+    const soul = pendingDelete;
+    setDeletingId(soul.id);
     setError("");
     setMessage("");
     try {
@@ -33,6 +38,9 @@ export function SoulList() {
       setMessage("Soul deleted.");
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete soul.");
+    } finally {
+      setDeletingId(null);
+      setPendingDelete(null);
     }
   }
 
@@ -46,7 +54,7 @@ export function SoulList() {
       />
       {loading ? <StatusMessage title="Loading" body="Loading souls from the backend." /> : null}
       {message ? <StatusMessage title="Saved" body={message} /> : null}
-      {error ? <StatusMessage title="Backend unavailable" body={error} /> : null}
+      {error ? <StatusMessage title="Error" body={error} /> : null}
       {!loading && !error && souls.length === 0 ? <StatusMessage title="No souls" body="Create reusable agent persona profiles here." /> : null}
       <div className="grid gap-3">
         {souls.map((soul) => (
@@ -59,8 +67,13 @@ export function SoulList() {
                 <Link href={`/souls/${soul.id}`} className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium">
                   Edit
                 </Link>
-                <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700" onClick={() => deleteSoul(soul)} type="button">
-                  Delete
+                <button
+                  className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700 disabled:opacity-60"
+                  disabled={deletingId === soul.id}
+                  onClick={() => setPendingDelete(soul)}
+                  type="button"
+                >
+                  {deletingId === soul.id ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>
@@ -68,6 +81,15 @@ export function SoulList() {
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete soul?"
+        description={`Delete "${pendingDelete?.name ?? "this soul"}"? If agents still use it, the backend will block this and explain what to change first.`}
+        confirmLabel="Delete soul"
+        loading={deletingId !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={deleteSoul}
+      />
     </>
   );
 }

@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Field, inputClass } from "@/components/shared/Field";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface SoulFormProps {
   mode: "create" | "edit";
@@ -28,6 +29,7 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     if (mode === "edit" && soulId) {
@@ -67,7 +69,7 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
   }
 
   async function deleteSoul() {
-    if (!soulId || !window.confirm("Delete this soul? Agents using it will need a different soul selected later.")) {
+    if (!soulId) {
       return;
     }
     setLoading(true);
@@ -80,6 +82,7 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete the soul.");
     } finally {
       setLoading(false);
+      setConfirmDeleteOpen(false);
     }
   }
 
@@ -112,12 +115,26 @@ export function SoulForm({ mode, soulId }: SoulFormProps) {
             {loading ? "Saving..." : "Save soul"}
           </button>
           {mode === "edit" ? (
-            <button className="focus-ring w-fit rounded border border-line bg-white px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60" disabled={loading} onClick={deleteSoul} type="button">
-              Delete
+            <button
+              className="focus-ring w-fit rounded border border-line bg-white px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
+              disabled={loading}
+              onClick={() => setConfirmDeleteOpen(true)}
+              type="button"
+            >
+              {loading ? "Working..." : "Delete"}
             </button>
           ) : null}
         </div>
       </form>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete soul?"
+        description="Delete this soul? Agents using it must be reassigned or deleted first, otherwise the backend will block the delete."
+        confirmLabel="Delete soul"
+        loading={loading}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={deleteSoul}
+      />
     </>
   );
 }

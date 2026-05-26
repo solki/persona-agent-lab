@@ -47,6 +47,116 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     await backend.dispose();
   });
 
+  test("confirms soul deletion, preserves canceled deletes, and shows blocked delete errors", async ({ page }) => {
+    const suffix = `${scenario.suffix}-delete-soul`;
+    const blockedSoul = await apiPost<{ id: number; name: string }>("/souls", { name: `E2E Blocked Soul ${suffix}` });
+    const blockedAgent = await apiPost<{ id: number }>("/agents", {
+      name: `E2E Soul Reference Agent ${suffix}`,
+      role: "reference holder",
+      system_prompt: "Hold a soul reference so delete can be blocked visibly.",
+      soul_id: blockedSoul.id,
+      llm_provider: "mock",
+      model: "mock-deterministic",
+      temperature: 0.2,
+      max_tokens: 1024,
+      memory_policy: { write_mode: "manual_review", retrieval_enabled: true },
+      context_policy: { include_active_context: true },
+      handoff_policy: { allow_handoff: false, allowed_agent_ids: [] },
+      is_active: true
+    });
+
+    await page.goto("/souls");
+    const blockedCard = cardWithHeading(page, blockedSoul.name);
+    await blockedCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete soul?" })).toBeVisible();
+    await screenshotEvidence(page, "delete-confirmation-dialog");
+    await page.getByRole("button", { name: "Delete soul" }).click();
+    await expect(page.getByText("Reassign or delete agents that use this soul before deleting it.")).toBeVisible();
+    await screenshotEvidence(page, "blocked-delete-error");
+
+    const freeSoulName = `E2E Disposable Soul ${suffix}`;
+    await createSoulViaUi(page, freeSoulName, {
+      description: "Disposable soul for delete confirmation testing.",
+      principles: "Keep delete flows visible and safe.",
+      decisionStyle: "Decisive",
+      collaborationStyle: "Clear",
+      failureHandlingStyle: "Report errors",
+      escalationStyle: "Escalate blocked deletes"
+    });
+    await page.goto("/souls");
+    const freeCard = cardWithHeading(page, freeSoulName);
+    await freeCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete soul?" })).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(cardWithHeading(page, freeSoulName)).toBeVisible();
+    await cardWithHeading(page, freeSoulName).getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Delete soul" }).click();
+    await expect(page.getByText("Soul deleted.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: freeSoulName })).toHaveCount(0);
+    await screenshotEvidence(page, "item-removed-after-confirm");
+
+    await apiDelete(`/agents/${blockedAgent.id}`);
+    await apiDelete(`/souls/${blockedSoul.id}`);
+  });
+
+  test("edits and deletes agent context and memory from the agent detail page", async ({ page }) => {
+    const suffix = `${scenario.suffix}-nested`;
+    const agent = await createAgentApi(`E2E Nested CRUD Agent ${suffix}`, "Nested CRUD Agent");
+
+    await page.goto(`/agents/${agent.id}`);
+    await addContextViaUi(page, {
+      title: `E2E Editable Context ${suffix}`,
+      type: "note",
+      priority: "5",
+      content: `Initial context content ${suffix}`
+    });
+    const contextSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Agent Context" }) });
+    await contextSection.getByRole("button", { name: "Edit" }).first().click();
+    await contextSection.locator("textarea").nth(1).fill(`Updated context content ${suffix}`);
+    await contextSection.getByRole("button", { name: "Save" }).click();
+    await expect(contextSection).toContainText(`Updated context content ${suffix}`);
+    await contextSection.getByRole("button", { name: "Delete" }).first().click();
+    await expect(page.getByRole("dialog", { name: "Delete context?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete context" }).click();
+    await expect(contextSection).toContainText("Context deleted.");
+    await expect(contextSection.getByText(`Updated context content ${suffix}`)).toHaveCount(0);
+
+    await addMemoryViaUi(page, {
+      type: "lesson",
+      source: "e2e_nested_crud",
+      importance: "60",
+      status: "pending",
+      content: `Initial memory content ${suffix}`
+    });
+    const memorySection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Agent Memory" }) });
+    await memorySection.getByRole("button", { name: "Edit" }).first().click();
+    await memorySection.locator("textarea").nth(1).fill(`Updated memory content ${suffix}`);
+    await memorySection.getByRole("button", { name: "Save" }).click();
+    await expect(memorySection).toContainText(`Updated memory content ${suffix}`);
+    await memorySection.getByRole("button", { name: "Delete" }).first().click();
+    await expect(page.getByRole("dialog", { name: "Delete memory?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete memory" }).click();
+    await expect(memorySection).toContainText("Memory deleted.");
+    await expect(memorySection.getByText(`Updated memory content ${suffix}`)).toHaveCount(0);
+
+    await page.locator("form").filter({ has: page.getByRole("button", { name: "Save agent" }) }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete agent?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete agent" }).click();
+    await page.waitForURL(/\/agents$/);
+    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+  });
+
+  test("deletes a tool from the registry with confirmation and a refreshed list", async ({ page }) => {
+    const toolName = `e2e_disposable_tool_${scenario.suffix}`;
+    await createToolViaUi(page, toolName);
+    const toolCard = cardWithHeading(page, toolName);
+    await toolCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete tool?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete tool" }).click();
+    await expect(page.getByText("Tool deleted.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: toolName })).toHaveCount(0);
+  });
+
   test("creates agents, configures a sequential workflow, runs it, and views run output", async ({ page }) => {
     const names = namesForScenario(scenario.suffix);
 
@@ -261,6 +371,32 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     expect(detailB).not.toContain(`PRIVATE_CONTEXT_AGENT_A_ONLY_${suffix}`);
     expect(detailB).not.toContain(`PRIVATE_MEMORY_AGENT_A_ONLY_${suffix}`);
   });
+
+  test("runs a workflow, inspects collapsed monitor events, and deletes the run", async ({ page }) => {
+    const suffix = `${scenario.suffix}-cleanup`;
+    const agent = await createAgentApi(`E2E Cleanup Agent ${suffix}`, "Cleanup Agent");
+    const workflowId = await createWorkflowViaUi(page, `E2E Cleanup Workflow ${suffix}`, [`E2E Cleanup Agent ${suffix}`]);
+    const runId = await runWorkflowViaUi(page, workflowId, "Summarize this cleanup verification task.");
+
+    await page.goto("/runs");
+    await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+    await screenshotEvidence(page, "runs-page-cleanup-action");
+    const runCard = cardWithHeading(page, `Run ${runId}`);
+    await runCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete run?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete run" }).click();
+    await expect(page.getByText(`Deleted run ${runId}.`)).toBeVisible();
+    await expect(cardWithHeading(page, `Run ${runId}`)).toHaveCount(0);
+
+    await page.goto("/workflows");
+    const workflowCard = cardWithHeading(page, `E2E Cleanup Workflow ${suffix}`);
+    await workflowCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete workflow?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete workflow" }).click();
+    await expect(page.getByText("Workflow deleted.")).toBeVisible();
+    await expect(cardWithHeading(page, `E2E Cleanup Workflow ${suffix}`)).toHaveCount(0);
+    await apiDelete(`/agents/${agent.id}`);
+  });
 });
 
 function namesForScenario(suffix: string) {
@@ -413,8 +549,10 @@ async function runWorkflowViaUi(page: Page, workflowId: number, task: string) {
   const contextEvent = page.locator("article").filter({ hasText: "context_assembled" }).first();
   await expect(contextEvent).toBeVisible();
   await expect(contextEvent.getByText('"prompt"')).toHaveCount(0);
+  await screenshotEvidence(page, "monitor-collapsed-events");
   await contextEvent.getByRole("button", { name: "Expand" }).click();
   await expect(contextEvent.getByText('"prompt"')).toBeVisible();
+  await screenshotEvidence(page, "monitor-expanded-json-payload");
   await contextEvent.getByRole("button", { name: "Collapse" }).click();
   await expect(contextEvent.getByText('"prompt"')).toHaveCount(0);
   await page.getByRole("link", { name: "Trace", exact: true }).click();
@@ -457,6 +595,21 @@ async function apiPost<T>(path: string, body: Record<string, unknown>): Promise<
   const response = await backend.post(path, { data: body });
   expect(response.ok(), `${path} should return success`).toBeTruthy();
   return (await response.json()) as T;
+}
+
+async function apiDelete(path: string): Promise<void> {
+  const response = await backend.delete(path);
+  expect(response.ok(), `${path} should delete successfully`).toBeTruthy();
+}
+
+function cardWithHeading(page: Page, heading: string) {
+  return page
+    .getByRole("heading", { name: heading })
+    .locator("xpath=ancestor::*[(self::div or self::article) and contains(concat(' ', normalize-space(@class), ' '), ' rounded ')][1]");
+}
+
+async function screenshotEvidence(page: Page, name: string) {
+  await page.screenshot({ path: `../docs/evidence/${scenario.suffix}-${name}.png`, fullPage: true });
 }
 
 function idFromUrl(url: string) {

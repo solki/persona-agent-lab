@@ -242,6 +242,9 @@ The frontend exposes the main backend-supported configuration records:
 - Tools can be created, edited, deleted, activated or deactivated, and assigned or unassigned per agent from the agent detail page.
 - Agent contexts can be created, edited, deleted, prioritized, and activated or deactivated from the agent detail page.
 - Agent memories can be created, edited, deleted, approved, rejected, archived, or activated from the agent detail page.
+- Workflows can be deleted when they do not have run history. Delete related runs first if the backend reports that a workflow is still referenced.
+
+Destructive actions use an in-app confirmation dialog, show loading and success/error states, and refresh or redirect after success. If a delete is blocked, the frontend shows the FastAPI error message, such as a soul still being assigned to an agent or a workflow still having runs.
 
 Policy and tool config editors validate JSON in the browser before sending requests. LLM API keys must still remain backend-only; the frontend uses only `NEXT_PUBLIC_API_BASE_URL` to reach the FastAPI API.
 
@@ -284,6 +287,8 @@ Then run E2E tests from another terminal:
 cd frontend
 npm run e2e
 ```
+
+The E2E suite covers destructive-action confirmations, blocked delete errors, agent nested context/memory CRUD, tool deletion, workflow runs, collapsed monitor events, expanded JSON payloads, run cleanup, the learning loop, and agent context/memory isolation. It writes screenshot evidence to `docs/evidence/`.
 
 Useful E2E variants:
 

@@ -38,6 +38,25 @@ def test_soul_crud(client):
     assert client.get(f"/souls/{soul['id']}").status_code == 404
 
 
+def test_soul_delete_is_blocked_while_agent_uses_it(client):
+    soul = client.post("/souls", json={"name": "Referenced Soul"}).json()
+    client.post(
+        "/agents",
+        json={
+            "name": "Soul Bound Agent",
+            "role": "operator",
+            "system_prompt": "Use the selected soul.",
+            "soul_id": soul["id"],
+        },
+    )
+
+    delete_response = client.delete(f"/souls/{soul['id']}")
+
+    assert delete_response.status_code == 409
+    assert "Reassign or delete agents" in delete_response.json()["detail"]
+    assert client.get(f"/souls/{soul['id']}").status_code == 200
+
+
 def test_agent_crud_preserves_isolated_defaults(client):
     create_response = client.post(
         "/agents",
@@ -80,6 +99,40 @@ def test_agent_crud_preserves_isolated_defaults(client):
     assert client.get(f"/agents/{agent['id']}").status_code == 404
 
 
+def test_agent_delete_removes_agent_owned_configuration(client):
+    agent = client.post(
+        "/agents",
+        json={
+            "name": "Disposable Configured Agent",
+            "role": "operator",
+            "system_prompt": "This agent can be deleted before it has run history.",
+        },
+    ).json()
+    tool = client.post(
+        "/tools",
+        json={"name": "delete_agent_tool", "tool_type": "custom", "config": {}},
+    ).json()
+    client.post(f"/agents/{agent['id']}/tools/{tool['id']}")
+    context = client.post(
+        f"/agents/{agent['id']}/contexts",
+        json={"title": "Disposable Context", "context_type": "note", "content": "Remove with agent."},
+    ).json()
+    memory = client.post(
+        f"/agents/{agent['id']}/memories",
+        json={"memory_type": "lesson", "content": "Remove with agent.", "status": "active"},
+    ).json()
+
+    delete_response = client.delete(f"/agents/{agent['id']}")
+
+    assert delete_response.status_code == 204
+    assert client.get(f"/agents/{agent['id']}").status_code == 404
+    assert context["id"]
+    assert memory["id"]
+    assert client.get(f"/agents/{agent['id']}/contexts").status_code == 404
+    assert client.get(f"/agents/{agent['id']}/memories").status_code == 404
+    assert client.get(f"/tools/{tool['id']}").status_code == 200
+
+
 def test_tool_crud_and_agent_assignment(client):
     agent = client.post(
         "/agents",
@@ -120,3 +173,26 @@ def test_tool_crud_and_agent_assignment(client):
     delete_response = client.delete(f"/tools/{tool['id']}")
     assert delete_response.status_code == 204
     assert client.get(f"/tools/{tool['id']}").status_code == 404
+
+
+def test_tool_delete_removes_agent_assignments_without_deleting_agent(client):
+    agent = client.post(
+        "/agents",
+        json={
+            "name": "Tool Assignment Owner",
+            "role": "operator",
+            "system_prompt": "Use assigned tools.",
+        },
+    ).json()
+    tool = client.post(
+        "/tools",
+        json={"name": "temporary_assignment_tool", "tool_type": "custom", "config": {}},
+    ).json()
+    client.post(f"/agents/{agent['id']}/tools/{tool['id']}")
+
+    delete_response = client.delete(f"/tools/{tool['id']}")
+
+    assert delete_response.status_code == 204
+    assert client.get(f"/tools/{tool['id']}").status_code == 404
+    assert client.get(f"/agents/{agent['id']}").status_code == 200
+    assert client.get(f"/agents/{agent['id']}/tools").json() == []

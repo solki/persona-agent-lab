@@ -7,6 +7,7 @@ import type { Agent, Soul } from "@/lib/types";
 import { Field, inputClass } from "@/components/shared/Field";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface AgentFormProps {
   mode: "create" | "edit";
@@ -52,6 +53,7 @@ export function AgentForm({ mode, agentId, onSaved }: AgentFormProps) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     api.listSouls().then(setSouls).catch(() => setError("Unable to load souls for the selector."));
@@ -120,6 +122,24 @@ export function AgentForm({ mode, agentId, onSaved }: AgentFormProps) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the agent. Check that the backend is running and the fields are valid.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteAgent() {
+    if (!agentId) {
+      return;
+    }
+    setError("");
+    setMessage("");
+    setSaving(true);
+    try {
+      await api.deleteAgent(agentId);
+      router.push("/agents");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete this agent.");
+    } finally {
+      setSaving(false);
+      setConfirmDeleteOpen(false);
     }
   }
 
@@ -196,10 +216,31 @@ export function AgentForm({ mode, agentId, onSaved }: AgentFormProps) {
             <textarea className={`${inputClass} font-mono`} rows={6} value={form.handoff_policy} onChange={(event) => setForm({ ...form, handoff_policy: event.target.value })} />
           </Field>
         </div>
-        <button className="focus-ring w-fit rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={saving} type="submit">
-          {saving ? "Saving..." : "Save agent"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="focus-ring w-fit rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={saving} type="submit">
+            {saving ? "Saving..." : "Save agent"}
+          </button>
+          {mode === "edit" ? (
+            <button
+              className="focus-ring w-fit rounded border border-line bg-white px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
+              disabled={saving}
+              onClick={() => setConfirmDeleteOpen(true)}
+              type="button"
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
       </form>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete agent?"
+        description="Delete this agent and its own contexts, memories, proposed memories, and tool assignments. Runs and learning history must be deleted first, otherwise the backend will block the delete."
+        confirmLabel="Delete agent"
+        loading={saving}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={deleteAgent}
+      />
     </>
   );
 }

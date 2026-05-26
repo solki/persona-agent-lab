@@ -220,3 +220,23 @@ def test_delete_missing_run_returns_404(client):
     response = client.delete("/runs/9999")
 
     assert response.status_code == 404
+
+
+def test_workflow_delete_is_blocked_while_runs_exist(client):
+    agent = create_agent(client, "Workflow Delete Agent", "Create workflow history.")
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "Workflow With History",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [agent["id"]]},
+        },
+    ).json()
+    run_response = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Create history."})
+    assert run_response.status_code == 201
+
+    delete_response = client.delete(f"/workflows/{workflow['id']}")
+
+    assert delete_response.status_code == 409
+    assert "Delete this workflow's runs" in delete_response.json()["detail"]
+    assert client.get(f"/workflows/{workflow['id']}").status_code == 200

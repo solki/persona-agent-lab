@@ -1,8 +1,9 @@
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
+from app.models.agent import Agent
 from app.models.soul import Soul
 from app.schemas.souls import SoulCreate, SoulUpdate
 
@@ -32,5 +33,7 @@ def update_soul(db: Session, soul: Soul, payload: SoulUpdate) -> Soul:
 
 
 def delete_soul(db: Session, soul: Soul) -> None:
+    if db.scalar(select(exists().where(Agent.soul_id == soul.id))):
+        raise ValueError("Reassign or delete agents that use this soul before deleting it.")
     db.delete(soul)
     db.commit()

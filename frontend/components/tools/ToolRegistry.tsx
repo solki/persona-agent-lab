@@ -6,6 +6,7 @@ import type { Tool } from "@/lib/types";
 import { Field, inputClass } from "@/components/shared/Field";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function ToolRegistry() {
   const [tools, setTools] = useState<Tool[]>([]);
@@ -15,6 +16,7 @@ export function ToolRegistry() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Tool | null>(null);
 
   async function load() {
     try {
@@ -94,10 +96,11 @@ export function ToolRegistry() {
     }
   }
 
-  async function deleteTool(tool: Tool) {
-    if (!window.confirm(`Delete tool "${tool.name}"?`)) {
+  async function deleteTool() {
+    if (!pendingDelete) {
       return;
     }
+    const tool = pendingDelete;
     setLoading(true);
     setError("");
     setMessage("");
@@ -109,6 +112,7 @@ export function ToolRegistry() {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete tool.");
     } finally {
       setLoading(false);
+      setPendingDelete(null);
     }
   }
 
@@ -185,7 +189,12 @@ export function ToolRegistry() {
                     <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" onClick={() => startEdit(tool)} type="button">
                       Edit
                     </button>
-                    <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700" onClick={() => deleteTool(tool)} type="button">
+                    <button
+                      className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium text-red-700 disabled:opacity-60"
+                      disabled={loading}
+                      onClick={() => setPendingDelete(tool)}
+                      type="button"
+                    >
                       Delete
                     </button>
                   </div>
@@ -197,6 +206,15 @@ export function ToolRegistry() {
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete tool?"
+        description={`Delete "${pendingDelete?.name ?? "this tool"}"? Agent assignments for this tool will be removed, but agents themselves will be kept.`}
+        confirmLabel="Delete tool"
+        loading={loading}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={deleteTool}
+      />
     </>
   );
 }

@@ -40,7 +40,10 @@ def update_agent(agent_id: int, payload: AgentUpdate, db: Session = Depends(get_
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_agent(agent_id: int, db: Session = Depends(get_db)):
     agent = require_agent(db, agent_id)
-    agent_service.delete_agent(db, agent)
+    try:
+        agent_service.delete_agent(db, agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

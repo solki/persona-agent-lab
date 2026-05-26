@@ -7,6 +7,7 @@ import type { Agent } from "@/lib/types";
 import { Field, inputClass } from "@/components/shared/Field";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface WorkflowFormProps {
   mode: "create" | "edit";
@@ -27,6 +28,9 @@ export function WorkflowForm({ mode, workflowId }: WorkflowFormProps) {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => setError("Unable to load agents for the workflow picker."));
@@ -64,6 +68,7 @@ export function WorkflowForm({ mode, workflowId }: WorkflowFormProps) {
 
   function removeAgent(index: number) {
     setAgentSequence((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setPendingRemoveIndex(null);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -81,6 +86,7 @@ export function WorkflowForm({ mode, workflowId }: WorkflowFormProps) {
       graph_config: { agent_sequence: agentSequence }
     };
     try {
+      setSaving(true);
       const saved = mode === "create" ? await api.createWorkflow(payload) : await api.updateWorkflow(workflowId as number, payload);
       setMessage("Workflow saved.");
       if (mode === "create") {
@@ -88,6 +94,26 @@ export function WorkflowForm({ mode, workflowId }: WorkflowFormProps) {
       }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the workflow. Check that selected agents are valid before running.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteWorkflow() {
+    if (!workflowId) {
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.deleteWorkflow(workflowId);
+      router.push("/workflows");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete this workflow.");
+    } finally {
+      setSaving(false);
+      setConfirmDeleteOpen(false);
     }
   }
 
@@ -141,17 +167,48 @@ export function WorkflowForm({ mode, workflowId }: WorkflowFormProps) {
                 <span>
                   {index + 1}. {agent.name}
                 </span>
-                <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" onClick={() => removeAgent(index)} type="button">
+                <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" onClick={() => setPendingRemoveIndex(index)} type="button">
                   Remove
                 </button>
               </li>
             ))}
           </ol>
         </section>
-        <button className="focus-ring w-fit rounded bg-accent px-4 py-2 text-sm font-medium text-white" type="submit">
-          Save workflow
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="focus-ring w-fit rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60" disabled={saving} type="submit">
+            {saving ? "Saving..." : "Save workflow"}
+          </button>
+          {mode === "edit" ? (
+            <button
+              className="focus-ring w-fit rounded border border-line bg-white px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
+              disabled={saving}
+              onClick={() => setConfirmDeleteOpen(true)}
+              type="button"
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
       </form>
+      <ConfirmDialog
+        open={pendingRemoveIndex !== null}
+        title="Remove agent from sequence?"
+        description="Remove this agent from the local workflow sequence? Save the workflow to persist the updated sequence."
+        confirmLabel="Remove"
+        loading={false}
+        variant="warning"
+        onCancel={() => setPendingRemoveIndex(null)}
+        onConfirm={() => pendingRemoveIndex !== null && removeAgent(pendingRemoveIndex)}
+      />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete workflow?"
+        description="Delete this workflow? Existing runs must be deleted first, otherwise the backend will block the delete."
+        confirmLabel="Delete workflow"
+        loading={saving}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={deleteWorkflow}
+      />
     </>
   );
 }

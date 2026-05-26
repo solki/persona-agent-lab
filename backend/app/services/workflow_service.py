@@ -1,8 +1,9 @@
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
+from app.models.run import Run
 from app.models.workflow import Workflow
 from app.schemas.workflows import WorkflowCreate, WorkflowUpdate
 
@@ -32,5 +33,7 @@ def update_workflow(db: Session, workflow: Workflow, payload: WorkflowUpdate) ->
 
 
 def delete_workflow(db: Session, workflow: Workflow) -> None:
+    if db.scalar(select(exists().where(Run.workflow_id == workflow.id))):
+        raise ValueError("Delete this workflow's runs before deleting the workflow.")
     db.delete(workflow)
     db.commit()

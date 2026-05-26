@@ -1,9 +1,9 @@
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models.tool import Tool
+from app.models.tool import AgentTool, Tool
 from app.schemas.tools import ToolCreate, ToolUpdate
 
 
@@ -32,5 +32,6 @@ def update_tool(db: Session, tool: Tool, payload: ToolUpdate) -> Tool:
 
 
 def delete_tool(db: Session, tool: Tool) -> None:
+    db.execute(delete(AgentTool).where(AgentTool.c.tool_id == tool.id))
     db.delete(tool)
     db.commit()

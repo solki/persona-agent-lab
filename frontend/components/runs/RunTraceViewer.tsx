@@ -9,6 +9,7 @@ import { RuntimeEventList } from "@/components/runs/RuntimeEventList";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
 import { RunLearningPanel } from "@/components/runs/RunLearningPanel";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function RunTraceViewer({ runId }: { runId: number }) {
   const router = useRouter();
@@ -16,6 +17,7 @@ export function RunTraceViewer({ runId }: { runId: number }) {
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([api.getRun(runId), api.getRunTrace(runId)])
@@ -27,9 +29,6 @@ export function RunTraceViewer({ runId }: { runId: number }) {
   }, [runId]);
 
   async function deleteRun() {
-    if (!window.confirm(`Delete run ${runId}? This removes run-local records but keeps agents, workflows, tools, souls, contexts, and active memories.`)) {
-      return;
-    }
     setDeleting(true);
     setError("");
     try {
@@ -38,6 +37,7 @@ export function RunTraceViewer({ runId }: { runId: number }) {
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete this run.");
       setDeleting(false);
+      setConfirmDeleteOpen(false);
     }
   }
 
@@ -70,9 +70,9 @@ export function RunTraceViewer({ runId }: { runId: number }) {
                   type="button"
                   className="focus-ring rounded border border-warning bg-white px-3 py-1 text-sm font-medium text-warning disabled:opacity-50"
                   disabled={deleting}
-                  onClick={deleteRun}
+                  onClick={() => setConfirmDeleteOpen(true)}
                 >
-                  Delete
+                  {deleting ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>
@@ -87,6 +87,15 @@ export function RunTraceViewer({ runId }: { runId: number }) {
         </>
       ) : null}
       <RuntimeEventList title="Trace Events" events={events} />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete run?"
+        description={`Delete run ${runId}? This removes run-local records but keeps agents, workflows, tools, souls, contexts, and active memories.`}
+        confirmLabel="Delete run"
+        loading={deleting}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={deleteRun}
+      />
     </>
   );
 }

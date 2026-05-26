@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after adding automated and manual end-to-end test coverage.
+Last updated after repairing frontend destructive-action UX and expanding Playwright coverage.
 
 ## Project Purpose
 
@@ -44,9 +44,9 @@ Milestone 10 status: implemented.
 - `app/agents/[id]/evolution`: Agent evolution timeline and performance summary.
 - `app/experiments`: Experiment list, create page, and experiment run/comparison page.
 - `components/agents`: Agent form/list/detail, assigned-tool manager, context manager, proposed-memory manager, memory manager.
-- `components/souls`: Soul list and form with delete support.
-- `components/tools`: Tool registry form/list with edit/delete support.
-- `components/workflows`: Workflow list/form/run panel.
+- `components/souls`: Soul list and form with confirmed delete support and blocked-delete error display.
+- `components/tools`: Tool registry form/list with edit/delete support and confirmed deletion.
+- `components/workflows`: Workflow list/form/run panel with confirmed workflow deletion and confirmed sequence removal.
 - `components/runs`: Run list, run trace viewer, learning feedback panel, monitor, token usage, execution list, execution detail, and reusable collapsed JSON/event viewers.
 - `components/experiments`: Experiment list/form/runner.
 - `components/shared`: App shell, field wrapper, page header, and status message.
@@ -152,13 +152,15 @@ Milestone 10 status: implemented.
 - Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
+- Agents, souls, tools, contexts, memories, workflows, assigned tools, and runs use in-app confirmation dialogs for destructive actions. Deletes show loading states, success/error messages, and refresh or redirect after success.
+- Soul deletion is blocked while agents still reference the soul. Workflow deletion is blocked while runs still reference the workflow. Agent deletion removes only that agent's owned configuration when no runtime history exists.
 - Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
 
 ## Current Test Coverage Summary
 
 - Health endpoint and startup/CORS/table initialization.
 - SQLAlchemy model registration and agent default isolation policies.
-- Agent, soul, tool CRUD and agent-tool assignment.
+- Agent, soul, tool CRUD and agent-tool assignment, including blocked soul deletion and tool assignment cleanup on delete.
 - Agent context CRUD scoped by `agent_id`.
 - Agent memory CRUD scoped by `agent_id`, including approve/reject review flow.
 - Agent feedback, evaluation, reflection, proposed-memory approval/rejection, and cross-agent learning-memory isolation.
@@ -166,12 +168,12 @@ Milestone 10 status: implemented.
 - Tool Gateway allowed, denied, unknown tool, trace persistence, and Tavily missing API key behavior.
 - Qdrant config loading, empty API key acceptance, collection prefix naming, and `agent_id` requirement.
 - Provider factory selection and OpenAI-compatible validation with mocked SDK calls.
-- Workflow CRUD, sequential run trace events, config snapshots, and context/memory isolation in runs.
+- Workflow CRUD, blocked workflow deletion while runs exist, sequential run trace events, config snapshots, and context/memory isolation in runs.
 - Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
 - Run cleanup deletes run-local records without deleting agents, workflows, tools, souls, contexts, active agent memories, or approved proposed-memory records that back active memories.
 - Experiment CRUD and experiment run isolation/comparison behavior.
 - Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
-- Playwright E2E covers the BI Dashboard Discrepancy journey: soul/agent setup, context/memory/tool configuration, workflow creation, run inspection, learning loop approval, re-run memory retrieval, and agent isolation assertions.
+- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, workflow run cleanup, monitor collapsed/expanded payloads, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
 
 ## Current Known Limitations
 

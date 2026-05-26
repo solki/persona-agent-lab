@@ -10,6 +10,7 @@ import { AgentMemoryManager } from "@/components/agents/AgentMemoryManager";
 import { AgentProposedMemoryManager } from "@/components/agents/AgentProposedMemoryManager";
 import { inputClass } from "@/components/shared/Field";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 function badge(label: string, active = true) {
   return (
@@ -87,6 +88,7 @@ function AgentToolManager({ agentId }: { agentId: number }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingUnassign, setPendingUnassign] = useState<Tool | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -129,10 +131,11 @@ function AgentToolManager({ agentId }: { agentId: number }) {
     }
   }
 
-  async function unassignTool(tool: Tool) {
-    if (!window.confirm(`Unassign ${tool.name} from this agent?`)) {
+  async function unassignTool() {
+    if (!pendingUnassign) {
       return;
     }
+    const tool = pendingUnassign;
     setLoading(true);
     setError("");
     setMessage("");
@@ -144,6 +147,7 @@ function AgentToolManager({ agentId }: { agentId: number }) {
       setError(removeError instanceof Error ? removeError.message : "Unable to unassign tool.");
     } finally {
       setLoading(false);
+      setPendingUnassign(null);
     }
   }
 
@@ -177,12 +181,22 @@ function AgentToolManager({ agentId }: { agentId: number }) {
               </div>
               <p className="mt-1 text-slate-600">{tool.description || tool.tool_type}</p>
             </div>
-            <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" disabled={loading} onClick={() => unassignTool(tool)} type="button">
+            <button className="focus-ring rounded border border-line bg-white px-3 py-1 text-xs font-medium" disabled={loading} onClick={() => setPendingUnassign(tool)} type="button">
               Unassign
             </button>
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingUnassign)}
+        title="Unassign tool?"
+        description={`Unassign "${pendingUnassign?.name ?? "this tool"}" from this agent? The tool will remain in the registry.`}
+        confirmLabel="Unassign tool"
+        loading={loading}
+        variant="warning"
+        onCancel={() => setPendingUnassign(null)}
+        onConfirm={unassignTool}
+      />
     </section>
   );
 }

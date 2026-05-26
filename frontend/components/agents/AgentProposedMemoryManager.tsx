@@ -5,11 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { ProposedMemory, ProposedMemoryStatus } from "@/lib/types";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<ProposedMemory[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [pendingReject, setPendingReject] = useState<ProposedMemory | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -35,6 +38,7 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
   async function review(memoryId: number, action: "approve" | "reject") {
     setError("");
     setMessage("");
+    setLoadingId(memoryId);
     try {
       if (action === "approve") {
         await api.approveProposedMemory(agentId, memoryId);
@@ -44,8 +48,11 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
         setMessage("Proposed memory rejected. It will not be retrieved in future runs.");
       }
       await load();
-    } catch {
-      setError("Unable to review this proposed memory.");
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : "Unable to review this proposed memory.");
+    } finally {
+      setLoadingId(null);
+      setPendingReject(null);
     }
   }
 
@@ -58,9 +65,25 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
       <p className="mt-1 text-sm text-slate-600">After approving a proposed memory, re-run the same task to compare behaviour.</p>
       {message ? <StatusMessage title="Reviewed" body={message} /> : null}
       {error ? <StatusMessage title="Error" body={error} /> : null}
-      <MemoryGroup title="Pending" status="pending" items={grouped.pending} onReview={review} />
-      <MemoryGroup title="Approved" status="approved" items={grouped.approved} onReview={review} />
-      <MemoryGroup title="Rejected" status="rejected" items={grouped.rejected} onReview={review} />
+      <MemoryGroup
+        title="Pending"
+        status="pending"
+        items={grouped.pending}
+        loadingId={loadingId}
+        onApprove={(memoryId) => review(memoryId, "approve")}
+        onReject={setPendingReject}
+      />
+      <MemoryGroup title="Approved" status="approved" items={grouped.approved} loadingId={loadingId} onApprove={() => undefined} onReject={() => undefined} />
+      <MemoryGroup title="Rejected" status="rejected" items={grouped.rejected} loadingId={loadingId} onApprove={() => undefined} onReject={() => undefined} />
+      <ConfirmDialog
+        open={Boolean(pendingReject)}
+        title="Reject proposed memory?"
+        description="Rejecting this proposed memory keeps it out of future retrieval. No active AgentMemory will be created."
+        confirmLabel="Reject memory"
+        loading={loadingId !== null}
+        onCancel={() => setPendingReject(null)}
+        onConfirm={() => pendingReject && review(pendingReject.id, "reject")}
+      />
     </section>
   );
 }
@@ -69,12 +92,16 @@ function MemoryGroup({
   title,
   status,
   items,
-  onReview
+  loadingId,
+  onApprove,
+  onReject
 }: {
   title: string;
   status: ProposedMemoryStatus;
   items: ProposedMemory[];
-  onReview: (memoryId: number, action: "approve" | "reject") => void;
+  loadingId: number | null;
+  onApprove: (memoryId: number) => void;
+  onReject: (memory: ProposedMemory) => void;
 }) {
   return (
     <div className="mt-4">
@@ -97,15 +124,17 @@ function MemoryGroup({
               <div className="mt-3 flex gap-2">
                 <button
                   className="focus-ring inline-flex items-center gap-1 rounded bg-success px-3 py-1 text-xs font-medium text-white"
-                  onClick={() => onReview(item.id, "approve")}
+                  disabled={loadingId === item.id}
+                  onClick={() => onApprove(item.id)}
                   type="button"
                 >
                   <Check size={14} />
-                  Approve
+                  {loadingId === item.id ? "Working..." : "Approve"}
                 </button>
                 <button
-                  className="focus-ring inline-flex items-center gap-1 rounded border border-line bg-white px-3 py-1 text-xs font-medium"
-                  onClick={() => onReview(item.id, "reject")}
+                  className="focus-ring inline-flex items-center gap-1 rounded border border-line bg-white px-3 py-1 text-xs font-medium disabled:opacity-60"
+                  disabled={loadingId === item.id}
+                  onClick={() => onReject(item)}
                   type="button"
                 >
                   <X size={14} />
