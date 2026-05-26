@@ -172,5 +172,6 @@ export const api = {
   listExperiments: () => request<Experiment[]>("/experiments"),
   getExperiment: (id: number) => request<Experiment>(`/experiments/${id}`),
   createExperiment: (body: JsonBody) => request<Experiment>("/experiments", jsonOptions("POST", body)),
+  deleteExperiment: (id: number) => request<void>(`/experiments/${id}`, { method: "DELETE" }),
   runExperiment: (id: number) => request<ExperimentRun>(`/experiments/${id}/run`, { method: "POST" })
 };

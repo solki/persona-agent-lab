@@ -157,6 +157,74 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     await expect(page.getByRole("heading", { name: toolName })).toHaveCount(0);
   });
 
+  test("deletes an experiment without runs after confirmation, and shows blocked delete error for experiments with runs", async ({ page }) => {
+    const suffix = `${scenario.suffix}-exp-del`;
+
+    const agentA = await createAgentApi(`E2E Exp Del Agent A ${suffix}`, "Experiment Delete Agent A");
+    const agentB = await createAgentApi(`E2E Exp Del Agent B ${suffix}`, "Experiment Delete Agent B");
+
+    const cleanExperiment = await apiPost<{ id: number; name: string }>("/experiments", {
+      name: `E2E Clean Experiment ${suffix}`,
+      description: "Experiment without runs, safe to delete.",
+      task_prompt: "This experiment has no runs.",
+      agent_ids: [agentA.id, agentB.id],
+      evaluation_config: {}
+    });
+
+    await page.goto("/experiments");
+    const cleanCard = cardWithHeading(page, cleanExperiment.name);
+    await expect(cleanCard).toBeVisible();
+    await cleanCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete experiment?" })).toBeVisible();
+    await screenshotEvidence(page, "experiment-delete-confirmation");
+    await page.getByRole("button", { name: "Delete experiment" }).click();
+    await expect(page.getByRole("heading", { name: cleanExperiment.name })).toHaveCount(0);
+    await screenshotEvidence(page, "experiment-deleted-from-list");
+    const notFoundCheck = await backend.get(`/experiments/${cleanExperiment.id}`);
+    expect(notFoundCheck.status()).toBe(404);
+
+    const blockedExperiment = await apiPost<{ id: number; name: string }>("/experiments", {
+      name: `E2E Blocked Experiment ${suffix}`,
+      description: "Experiment with runs, delete should be blocked.",
+      task_prompt: "This experiment has been run.",
+      agent_ids: [agentA.id, agentB.id],
+      evaluation_config: {}
+    });
+    await backend.post(`/experiments/${blockedExperiment.id}/run`);
+
+    await page.goto("/experiments");
+    const blockedCard = cardWithHeading(page, blockedExperiment.name);
+    await expect(blockedCard).toBeVisible();
+    await blockedCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete experiment?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete experiment" }).click();
+    await expect(page.getByText("Delete blocked by dependencies")).toBeVisible();
+    await expect(page.getByRole("heading", { name: blockedExperiment.name })).toBeVisible();
+    await screenshotEvidence(page, "experiment-delete-blocked-409");
+    await page.getByRole("button", { name: "Dismiss" }).click();
+    await expect(page.getByText("Delete blocked by dependencies")).toHaveCount(0);
+
+    const detailPageBlocked = await apiPost<{ id: number; name: string }>("/experiments", {
+      name: `E2E Detail Blocked Experiment ${suffix}`,
+      description: "Detail page blocked delete.",
+      task_prompt: "Block from detail page.",
+      agent_ids: [agentA.id, agentB.id],
+      evaluation_config: {}
+    });
+    await backend.post(`/experiments/${detailPageBlocked.id}/run`);
+
+    await page.goto(`/experiments/${detailPageBlocked.id}`);
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete experiment?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete experiment" }).click();
+    await expect(page.getByText("Delete blocked by dependencies")).toBeVisible();
+    await expect(page.getByRole("heading", { name: detailPageBlocked.name })).toBeVisible();
+    await screenshotEvidence(page, "experiment-detail-delete-blocked-409");
+
+    await backend.delete(`/experiments/${blockedExperiment.id}?force=true`);
+    await backend.delete(`/experiments/${detailPageBlocked.id}?force=true`);
+  });
+
   test("creates agents, configures a sequential workflow, runs it, and views run output", async ({ page }) => {
     const names = namesForScenario(scenario.suffix);
 

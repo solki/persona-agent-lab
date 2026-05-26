@@ -437,6 +437,8 @@ Use unique test-only records for these checks.
 9. Open **Tools**, create a disposable tool, delete it, and verify the tool disappears from the list.
 10. Open **Workflows**, create a disposable workflow without runs, delete it, and verify the workflow disappears.
 11. Try deleting a workflow that has run history. The app should show a readable error until the related runs are deleted.
+	12. Open **Experiments**, create a disposable experiment without running it, delete it from the list, and verify the confirmation dialog appears and the experiment disappears after confirming.
+	13. Create another experiment, run it, then try deleting it from both the list and the detail page. Confirm the delete is blocked with a readable error explaining that experiment runs must be deleted first.
 
 Expected result:
 
@@ -759,6 +761,9 @@ Inactive agent selected:
 - [ ] **Activate Selected** restores selected archived runs to Active runs.
 - [ ] Permanent delete safety failures open a warning dialog.
 - [ ] Archiving a test run does not delete trace, feedback, proposed memories, learning events, agents, workflows, tools, souls, contexts, or active memories.
+	- [ ] Experiment deletion shows confirmation dialog; cancel keeps the experiment.
+	- [ ] Experiment without runs is deleted successfully after confirmation.
+	- [ ] Experiment with runs is blocked from deletion with a readable error.
 
 ## 10. Current Limitations
 
