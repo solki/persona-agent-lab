@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.runs import RunArchiveResponse, RunRead, TraceEventRead
+from app.schemas.runs import RunActivateResponse, RunArchiveResponse, RunDeleteResponse, RunRead, TraceEventRead
 from app.services import run_service, trace_service
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -22,6 +22,24 @@ def archive_response(run) -> dict:
         "archived": True,
         "archived_at": run.archived_at,
         "message": "Run archived successfully. Learning records were preserved.",
+    }
+
+
+def activate_response(run) -> dict:
+    return {
+        "id": run.id,
+        "status": run.status,
+        "archived": False,
+        "archived_at": run.archived_at,
+        "message": "Run activated successfully. Learning records were preserved.",
+    }
+
+
+def delete_response(run_id: int) -> dict:
+    return {
+        "id": run_id,
+        "deleted": True,
+        "message": "Archived run deleted permanently.",
     }
 
 
@@ -46,6 +64,23 @@ def archive_run(run_id: int, db: Session = Depends(get_db)):
     run = require_run(db, run_id)
     archived_run = run_service.archive_run(db, run)
     return archive_response(archived_run)
+
+
+@router.post("/{run_id}/activate", response_model=RunActivateResponse)
+def activate_run(run_id: int, db: Session = Depends(get_db)):
+    run = require_run(db, run_id)
+    activated_run = run_service.activate_run(db, run)
+    return activate_response(activated_run)
+
+
+@router.delete("/{run_id}/hard-delete", response_model=RunDeleteResponse)
+def hard_delete_run(run_id: int, db: Session = Depends(get_db)):
+    run = require_run(db, run_id)
+    try:
+        run_service.hard_delete_archived_run(db, run)
+    except run_service.RunHardDeleteBlocked as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return delete_response(run_id)
 
 
 @router.delete("/{run_id}", response_model=RunArchiveResponse)

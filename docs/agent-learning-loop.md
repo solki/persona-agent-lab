@@ -84,11 +84,11 @@ Rejected proposed memories are not retrieved in future runs because context asse
 
 ## Run Archiving And Learning History
 
-Runs are archived, not hard deleted, from the default frontend cleanup flow. Archiving hides a run from the default Runs list while preserving feedback, evaluations, proposed memories, learning events, trace events, execution records, token usage, and active memories.
+Runs are archived, not hard deleted, from the default frontend cleanup flow. Archiving hides a run from the default Runs list while preserving feedback, evaluations, proposed memories, learning events, trace events, execution records, token usage, and active memories. Archived runs can be activated back into the Active runs list without changing learning records.
 
 Hard deleting a run that has learning records is unsafe because `ProposedMemory.source_feedback_id` and `ProposedMemory.source_evaluation_id` preserve the lineage from human feedback or evaluation to proposed memory. Approved proposed memories can also be represented as active `AgentMemory` records whose `source` points back to the proposed memory. Archiving keeps that history inspectable.
 
-Use the Runs page archive filter to view archived runs.
+Use the Runs page archive filter to view archived runs. Permanent delete is limited to already archived runs that pass backend safety checks; runs with learning records stay archived and the frontend shows a warning dialog.
 
 ## Reflection
 

@@ -36,6 +36,20 @@ class RunArchiveResponse(BaseModel):
     message: str
 
 
+class RunActivateResponse(BaseModel):
+    id: int
+    status: Literal["pending", "running", "completed", "failed"]
+    archived: bool = False
+    archived_at: None = None
+    message: str
+
+
+class RunDeleteResponse(BaseModel):
+    id: int
+    deleted: bool = True
+    message: str
+
+
 class TraceEventRead(BaseModel):
     id: int
     run_id: int

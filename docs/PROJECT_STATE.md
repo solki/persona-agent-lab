@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after replacing run hard delete with safe run archiving.
+Last updated after adding run activation for archived runs and guarded permanent delete.
 
 ## Project Purpose
 
@@ -39,7 +39,7 @@ Milestone 10 status: implemented.
 - `app/souls`: Soul/persona list, create, edit, and delete flows.
 - `app/tools`: Tool registry page with create, edit, delete, config JSON, and active flag controls.
 - `app/workflows`: Workflow list, create/edit pages with name-based agent sequence picker, and workflow run page.
-- `app/runs`: Run list and management page with active/archived/status/workflow/search filters, links to monitor/trace/executions/token usage, selected-run archiving, and confirmed archive actions.
+- `app/runs`: Run list and management page with active/archived/status/workflow/search filters, links to monitor/trace/executions/token usage, selected-run archiving, archived-run activation, guarded permanent delete for safe archived runs, and confirmed lifecycle actions.
 - `app/runs/[id]`: Run trace viewer with collapsible input/output/config sections, learning feedback and reflection panel; monitor, token usage, and execution detail subpages.
 - `app/agents/[id]/evolution`: Agent evolution timeline and performance summary.
 - `app/experiments`: Experiment list, create page, and experiment run/comparison page.
@@ -88,7 +88,7 @@ Milestone 10 status: implemented.
 - Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
 - Reflection: `POST /runs/{run_id}/agents/{agent_id}/reflect`
 - Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
-- Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
+- Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `POST /runs/{run_id}/activate`, `DELETE /runs/{run_id}/hard-delete`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
 - Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
 - Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
 
@@ -152,7 +152,7 @@ Milestone 10 status: implemented.
 - Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
-- Agents, souls, tools, contexts, memories, workflows, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive actions so learning history is preserved. Mutations show loading states, success/error messages, and refresh or redirect after success.
+- Agents, souls, tools, contexts, memories, workflows, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Mutations show loading states, success/error messages, and refresh or redirect after success.
 - Soul deletion is blocked while agents still reference the soul. Workflow deletion is blocked while runs still reference the workflow. Agent deletion removes only that agent's owned configuration when no runtime history exists.
 - Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
 
@@ -170,10 +170,10 @@ Milestone 10 status: implemented.
 - Provider factory selection and OpenAI-compatible validation with mocked SDK calls.
 - Workflow CRUD, blocked workflow deletion while runs exist, sequential run trace events, config snapshots, and context/memory isolation in runs.
 - Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
-- Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records.
+- Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records. Run activation restores archived runs to the active list without changing those records. Permanent delete is guarded by backend safety checks.
 - Experiment CRUD and experiment run isolation/comparison behavior.
 - Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
-- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving with learning records, monitor collapsed/expanded payloads, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
+- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving and activation with learning records, guarded run-delete warnings, monitor collapsed/expanded payloads, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
 
 ## Current Known Limitations
 

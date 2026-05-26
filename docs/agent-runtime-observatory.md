@@ -21,7 +21,7 @@ The observatory records and displays:
 - learning events
 - execution errors
 
-Run management is available from the frontend and through the API. Users can list active or archived runs, open monitor, trace, executions, and token usage pages, and archive old runs after an in-app confirmation dialog.
+Run management is available from the frontend and through the API. Users can list active or archived runs, open monitor, trace, executions, and token usage pages, archive old runs, activate archived runs, and attempt guarded permanent delete after in-app confirmation.
 
 ## Execution Records
 
@@ -98,6 +98,8 @@ Runtime monitor:
 GET /runs
 GET /runs/{run_id}
 POST /runs/{run_id}/archive
+POST /runs/{run_id}/activate
+DELETE /runs/{run_id}/hard-delete
 DELETE /runs/{run_id}
 GET /runs/{run_id}/monitor
 ```
@@ -137,11 +139,11 @@ Frontend routes:
 
 The monitor page polls the backend every second. Event rows are collapsed by default and show event type, agent, time, and step metadata. Use **Expand** to inspect formatted JSON payloads, or **Expand all** and **Collapse all** for bulk inspection. Filters support agent, event category, and text search. Long payloads are wrapped inside scrollable code blocks so monitor and trace pages stay readable on laptop screens.
 
-The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and archive actions. Archive actions require confirmation, show loading state, surface backend errors, and refresh the list after success. Active runs are shown by default; use the archive filter to view archived or all runs. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
+The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and archive or activate actions. Archive and activate actions require confirmation, show loading state, surface backend errors, and refresh the list after success. Active runs are shown by default; use the archive filter to view archived or all runs. Archived rows show **Activate** and, when appropriate, **Delete**. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
 
 ## Run Archive
 
-Run cleanup uses soft archive by default. `POST /runs/{run_id}/archive` marks the run as archived and sets `archived_at`. `DELETE /runs/{run_id}` is retained for compatibility but performs the same archive operation.
+Run cleanup uses soft archive by default. `POST /runs/{run_id}/archive` marks the run as archived and sets `archived_at`. `POST /runs/{run_id}/activate` restores an archived run to the default Active runs list and clears `archived_at`. `DELETE /runs/{run_id}` is retained for compatibility but performs the same archive operation.
 
 Archive preserves:
 
@@ -156,6 +158,8 @@ Archive preserves:
 - the run record
 
 Archive does not delete agents, workflows, souls, tools, contexts, active `AgentMemory` records, or `ProposedMemory` records. Hard delete is unsafe when feedback and proposed memories exist because `ProposedMemory.source_feedback_id` and `source_evaluation_id` preserve learning-loop lineage.
+
+Permanent delete is intentionally limited. `DELETE /runs/{run_id}/hard-delete` only deletes already archived runs that do not have feedback, evaluations, learning events, or experiment result references. If the backend safety check fails, the API returns `409` and the frontend opens a warning dialog telling the user to keep the run archived.
 
 Workflow deletion is separate from run archive. A workflow that still has run records is blocked with a clear error.
 

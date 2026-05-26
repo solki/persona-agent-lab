@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Run, TraceEvent } from "@/lib/types";
@@ -11,12 +12,16 @@ import { RunLearningPanel } from "@/components/runs/RunLearningPanel";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 export function RunTraceViewer({ runId }: { runId: number }) {
+  const router = useRouter();
   const [run, setRun] = useState<Run | null>(null);
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
+  const [blockedDeleteWarning, setBlockedDeleteWarning] = useState("");
   const [message, setMessage] = useState("");
-  const [archiving, setArchiving] = useState(false);
-  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
+  const [mutating, setMutating] = useState(false);
+  const [confirmLifecycleOpen, setConfirmLifecycleOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([api.getRun(runId), api.getRunTrace(runId)])
@@ -27,19 +32,44 @@ export function RunTraceViewer({ runId }: { runId: number }) {
       .catch(() => setError("Unable to load this run and trace."));
   }, [runId]);
 
-  async function archiveRun() {
-    setArchiving(true);
+  async function runLifecycleAction() {
+    if (!run) {
+      return;
+    }
+    const activating = run.status === "archived";
+    setMutating(true);
     setError("");
+    setWarning("");
     setMessage("");
     try {
-      const response = await api.archiveRun(runId);
-      setRun((current) => (current ? { ...current, status: "archived", archived_at: response.archived_at } : current));
+      const response = activating ? await api.activateRun(runId) : await api.archiveRun(runId);
+      setRun((current) =>
+        current ? { ...current, status: activating ? "completed" : "archived", archived_at: response.archived_at ?? null } : current
+      );
       setMessage(response.message);
-    } catch (archiveError) {
-      setError(archiveError instanceof Error ? archiveError.message : "Unable to archive this run.");
+    } catch (mutationError) {
+      setError(mutationError instanceof Error ? mutationError.message : `Unable to ${activating ? "activate" : "archive"} this run.`);
     } finally {
-      setArchiving(false);
-      setConfirmArchiveOpen(false);
+      setMutating(false);
+      setConfirmLifecycleOpen(false);
+    }
+  }
+
+  async function hardDeleteRun() {
+    setMutating(true);
+    setError("");
+    setWarning("");
+    setMessage("");
+    try {
+      await api.hardDeleteRun(runId);
+      router.push("/runs");
+    } catch (deleteError) {
+      const warningMessage = deleteError instanceof Error ? deleteError.message : "This run cannot be permanently deleted. Keep it archived to preserve history.";
+      setWarning(warningMessage);
+      setBlockedDeleteWarning(warningMessage);
+    } finally {
+      setMutating(false);
+      setConfirmDeleteOpen(false);
     }
   }
 
@@ -50,7 +80,8 @@ export function RunTraceViewer({ runId }: { runId: number }) {
         description="Inspect the ordered runtime events, assembled context payloads, model outputs, and config snapshot for reproducibility."
       />
       {error ? <StatusMessage title="Error" body={error} /> : null}
-      {message ? <StatusMessage title="Archived" body={message} /> : null}
+      {warning ? <StatusMessage title="Warning" body={warning} /> : null}
+      {message ? <StatusMessage title="Success" body={message} /> : null}
       {run ? (
         <>
           <section className="mb-5 rounded border border-line bg-white p-5">
@@ -71,12 +102,24 @@ export function RunTraceViewer({ runId }: { runId: number }) {
                 </a>
                 <button
                   type="button"
-                  className="focus-ring rounded border border-warning bg-white px-3 py-1 text-sm font-medium text-warning disabled:opacity-50"
-                  disabled={archiving || run.status === "archived"}
-                  onClick={() => setConfirmArchiveOpen(true)}
+                  className={`focus-ring rounded border bg-white px-3 py-1 text-sm font-medium disabled:opacity-50 ${
+                    run.status === "archived" ? "border-accent text-accent" : "border-warning text-warning"
+                  }`}
+                  disabled={mutating}
+                  onClick={() => setConfirmLifecycleOpen(true)}
                 >
-                  {run.status === "archived" ? "Archived" : archiving ? "Archiving..." : "Archive"}
+                  {run.status === "archived" ? "Activate" : mutating ? "Working..." : "Archive"}
                 </button>
+                {run.status === "archived" ? (
+                  <button
+                    type="button"
+                    className="focus-ring rounded border border-warning bg-white px-3 py-1 text-sm font-medium text-warning disabled:opacity-50"
+                    disabled={mutating}
+                    onClick={() => setConfirmDeleteOpen(true)}
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </div>
             </div>
             <p className="mt-2 text-sm text-slate-600">
@@ -94,13 +137,36 @@ export function RunTraceViewer({ runId }: { runId: number }) {
       ) : null}
       <RuntimeEventList title="Trace Events" events={events} />
       <ConfirmDialog
-        open={confirmArchiveOpen}
-        title="Archive run?"
-        description="This will hide the run from the default Runs list but preserve trace, feedback, proposed memories, and learning history. Agent definitions and approved memories will not be deleted."
-        confirmLabel="Archive run"
-        loading={archiving}
-        onCancel={() => setConfirmArchiveOpen(false)}
-        onConfirm={archiveRun}
+        open={confirmLifecycleOpen}
+        title={run?.status === "archived" ? "Activate run?" : "Archive run?"}
+        description={
+          run?.status === "archived"
+            ? "This will return the run to the default Active runs list. Trace, feedback, proposed memories, approved memories, and learning history will be preserved."
+            : "This will hide the run from the default Runs list but preserve trace, feedback, proposed memories, and learning history. Agent definitions and approved memories will not be deleted."
+        }
+        confirmLabel={run?.status === "archived" ? "Activate run" : "Archive run"}
+        loading={mutating}
+        onCancel={() => setConfirmLifecycleOpen(false)}
+        onConfirm={runLifecycleAction}
+      />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete archived run permanently?"
+        description="This permanently deletes the archived run only if the backend confirms it has no learning or experiment history. If the safety check fails, the run will remain archived and a warning will be shown."
+        confirmLabel="Delete permanently"
+        loading={mutating}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={hardDeleteRun}
+      />
+      <ConfirmDialog
+        open={Boolean(blockedDeleteWarning)}
+        title="Delete blocked by safety check"
+        description={blockedDeleteWarning}
+        confirmLabel="Keep archived"
+        cancelLabel="Close"
+        variant="warning"
+        onCancel={() => setBlockedDeleteWarning("")}
+        onConfirm={() => setBlockedDeleteWarning("")}
       />
     </>
   );

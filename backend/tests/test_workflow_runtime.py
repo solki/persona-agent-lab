@@ -189,8 +189,20 @@ def test_archive_run_without_learning_records_hides_from_default_list(client):
     assert archived_detail["status"] == "archived"
     assert archived_detail["archived_at"] is not None
 
+    activate_response = client.post(f"/runs/{run['id']}/activate")
 
-def test_archive_run_preserves_learning_records_and_configuration(client, db_session):
+    assert activate_response.status_code == 200
+    assert activate_response.json()["status"] == "completed"
+    assert activate_response.json()["archived"] is False
+    assert activate_response.json()["archived_at"] is None
+    assert "Learning records were preserved" in activate_response.json()["message"]
+    assert [item["id"] for item in client.get("/runs").json()] == [run["id"]]
+    activated_detail = client.get(f"/runs/{run['id']}").json()
+    assert activated_detail["status"] == "completed"
+    assert activated_detail["archived_at"] is None
+
+
+def test_archive_then_activate_preserves_learning_records_and_configuration(client, db_session):
     agent = create_agent(client, "Cleanup Agent", "Keep configuration.")
     workflow = client.post(
         "/workflows",
@@ -245,12 +257,65 @@ def test_archive_run_preserves_learning_records_and_configuration(client, db_ses
     assert pending is not None
     assert pending.source_feedback_id == pending_feedback["id"]
 
+    activate_response = client.post(f"/runs/{run['id']}/activate")
+
+    assert activate_response.status_code == 200
+    assert activate_response.json()["status"] == "completed"
+    assert client.get(f"/runs/{run['id']}").json()["status"] == "completed"
+    assert [item["id"] for item in client.get("/runs").json()] == [run["id"]]
+    assert db_session.get(Agent, agent["id"]) is not None
+    assert db_session.get(Workflow, workflow["id"]) is not None
+    assert db_session.get(AgentMemory, active_memory_id) is not None
+    assert db_session.scalars(select(TraceEvent).where(TraceEvent.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(AgentExecution).where(AgentExecution.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(AgentExecutionEvent).where(AgentExecutionEvent.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(TokenUsage).where(TokenUsage.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(AgentFeedback).where(AgentFeedback.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(LearningEvent).where(LearningEvent.run_id == run["id"])).all() != []
+    assert db_session.get(ProposedMemory, proposal["id"]).source_feedback_id == feedback["id"]
+    assert db_session.get(ProposedMemory, pending_proposal["id"]).source_feedback_id == pending_feedback["id"]
+
+    archive_again_response = client.post(f"/runs/{run['id']}/archive")
+    assert archive_again_response.status_code == 200
+    blocked_delete = client.delete(f"/runs/{run['id']}/hard-delete")
+    assert blocked_delete.status_code == 409
+    assert "learning history" in blocked_delete.json()["detail"]
+    assert client.get(f"/runs/{run['id']}").status_code == 200
+
 
 def test_archive_missing_run_returns_404(client):
     response = client.post("/runs/9999/archive")
 
     assert response.status_code == 404
+    assert client.post("/runs/9999/activate").status_code == 404
+    assert client.delete("/runs/9999/hard-delete").status_code == 404
     assert client.delete("/runs/9999").status_code == 404
+
+
+def test_hard_delete_archived_run_without_learning_removes_run_local_records(client, db_session):
+    agent = create_agent(client, "Permanent Delete Agent", "Disposable run.")
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "Permanent Delete Workflow",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [agent["id"]]},
+        },
+    ).json()
+    run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Disposable run."}).json()
+    assert client.post(f"/runs/{run['id']}/archive").status_code == 200
+
+    delete_response = client.delete(f"/runs/{run['id']}/hard-delete")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    assert client.get(f"/runs/{run['id']}").status_code == 404
+    assert client.get(f"/workflows/{workflow['id']}").status_code == 200
+    assert client.get(f"/agents/{agent['id']}").status_code == 200
+    assert db_session.scalars(select(TraceEvent).where(TraceEvent.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(AgentExecution).where(AgentExecution.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(AgentExecutionEvent).where(AgentExecutionEvent.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(TokenUsage).where(TokenUsage.run_id == run["id"])).all() == []
 
 
 def test_workflow_delete_is_blocked_while_runs_exist(client):

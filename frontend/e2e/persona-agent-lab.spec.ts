@@ -407,7 +407,48 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     await page.getByLabel("Archive filter").selectOption("archived");
     await expect(cardWithHeading(page, `Run ${runId}`)).toBeVisible();
     await expect(cardWithHeading(page, `Run ${runId}`)).toContainText("Archived");
-    await screenshotEvidence(page, "archived-run-visible-filter");
+    await expect(cardWithHeading(page, `Run ${runId}`).getByRole("button", { name: "Activate" })).toBeVisible();
+    await screenshotEvidence(page, "archived-filter-activate-buttons");
+
+    await cardWithHeading(page, `Run ${runId}`).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete archived run permanently?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete permanently" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete blocked by safety check" })).toBeVisible();
+    await screenshotEvidence(page, "delete-blocked-safety-popup");
+    await page.getByRole("button", { name: "Keep archived" }).click();
+
+    await cardWithHeading(page, `Run ${runId}`).getByRole("button", { name: "Activate" }).click();
+    await expect(page.getByRole("dialog", { name: "Activate run?" })).toBeVisible();
+    await screenshotEvidence(page, "activate-confirmation-dialog");
+    await page.getByRole("button", { name: "Activate run" }).click();
+    await expect(page.getByText("Run activated successfully. Learning records were preserved.")).toBeVisible();
+    await expect(cardWithHeading(page, `Run ${runId}`)).toHaveCount(0);
+
+    await page.getByLabel("Archive filter").selectOption("active");
+    await expect(cardWithHeading(page, `Run ${runId}`)).toBeVisible();
+    await expect(cardWithHeading(page, `Run ${runId}`).getByRole("button", { name: "Archive" })).toBeVisible();
+    await screenshotEvidence(page, "run-restored-active-filter");
+
+    const bulkRunA = await apiPost<{ id: number }>(`/workflows/${workflowId}/run`, { task: "Bulk activate archived run A." });
+    const bulkRunB = await apiPost<{ id: number }>(`/workflows/${workflowId}/run`, { task: "Bulk activate archived run B." });
+    await apiPost(`/runs/${bulkRunA.id}/archive`, {});
+    await apiPost(`/runs/${bulkRunB.id}/archive`, {});
+
+    await page.goto("/runs");
+    await page.getByLabel("Archive filter").selectOption("archived");
+    await expect(cardWithHeading(page, `Run ${bulkRunA.id}`)).toBeVisible();
+    await expect(cardWithHeading(page, `Run ${bulkRunB.id}`)).toBeVisible();
+    await page.getByLabel(`Select run ${bulkRunA.id}`).check();
+    await page.getByLabel(`Select run ${bulkRunB.id}`).check();
+    await expect(page.getByRole("button", { name: "Activate Selected" })).toBeVisible();
+    await screenshotEvidence(page, "activate-selected-button");
+    await page.getByRole("button", { name: "Activate Selected" }).click();
+    const activateSelectedDialog = page.getByRole("dialog", { name: "Activate selected runs?" });
+    await expect(activateSelectedDialog).toBeVisible();
+    await activateSelectedDialog.getByRole("button", { name: "Activate Selected" }).click();
+    await expect(page.getByText("Activated 2 selected runs. Learning records were preserved.")).toBeVisible();
+    await expect(cardWithHeading(page, `Run ${bulkRunA.id}`)).toHaveCount(0);
+    await expect(cardWithHeading(page, `Run ${bulkRunB.id}`)).toHaveCount(0);
 
     await page.goto(`/agents/${agent.id}`);
     const proposedSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Proposed Memories" }) });

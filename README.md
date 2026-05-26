@@ -209,6 +209,8 @@ Relevant endpoints:
 - `GET /runs`
 - `GET /runs/{run_id}`
 - `POST /runs/{run_id}/archive`
+- `POST /runs/{run_id}/activate`
+- `DELETE /runs/{run_id}/hard-delete`
 - `DELETE /runs/{run_id}`
 - `GET /runs/{run_id}/monitor`
 - `GET /runs/{run_id}/executions`
@@ -228,9 +230,9 @@ Frontend pages:
 - `/runs/[id]/token-usage`
 - `/agents/[id]/evolution`
 
-The Runs page is the main run management entry point. It lists active runs by default, filters by active/archived/all status and workflow, links to monitor, trace, executions, and token usage pages, and supports confirmed single or selected run archiving. Archiving a run hides it from the default Runs list but preserves trace, execution, token usage, feedback, evaluation, proposed memory, and learning event records. It does not delete agents, workflows, tools, souls, contexts, active approved agent memories, or proposed-memory records.
+The Runs page is the main run management entry point. It lists active runs by default, filters by active/archived/all status and workflow, links to monitor, trace, executions, and token usage pages, and supports confirmed single or selected run archiving. Archived runs show **Activate** actions so they can be restored to the Active runs list. Archiving and activation preserve trace, execution, token usage, feedback, evaluation, proposed memory, and learning event records. They do not delete agents, workflows, tools, souls, contexts, active approved agent memories, or proposed-memory records.
 
-`DELETE /runs/{run_id}` is retained for compatibility but now archives the run instead of hard deleting it. Hard delete is unsafe when feedback and proposed memories are linked because it can break learning-loop history.
+`DELETE /runs/{run_id}` is retained for compatibility but archives the run instead of hard deleting it. `DELETE /runs/{run_id}/hard-delete` is available only for already archived runs that pass backend safety checks. If a run has feedback, evaluations, learning events, or experiment references, permanent delete returns a clear `409` and the frontend shows a warning dialog. Hard delete is unsafe when feedback and proposed memories are linked because it can break learning-loop history.
 
 The MVP monitor uses polling rather than WebSockets. Event payloads are collapsed by default; expand an event row to inspect formatted JSON. Mock provider token usage is estimated from text length and marked as estimated.
 

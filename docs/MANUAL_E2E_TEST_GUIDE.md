@@ -400,15 +400,22 @@ Expected result:
 5. Open a run with **Monitor**, **Trace**, **Executions**, and **Token Usage**.
 6. Return to **Runs**.
 7. Select one old test run with its checkbox.
-8. Select **Archive selected**.
+8. Select **Archive Selected**.
 9. Confirm the in-app dialog.
+10. Switch the archive filter to **Archived runs**.
+11. Confirm archived rows show **Activate**.
+12. Select one archived run and choose **Activate Selected**.
+13. Confirm the in-app dialog.
+14. Switch back to **Active runs**.
 
 Expected result:
 
 - The selected run disappears from the default Active runs list.
 - Switching the archive filter to **Archived runs** shows the archived run with an Archived badge.
+- Activating the run removes it from the Archived runs view and restores it to Active runs.
 - Trace, feedback, proposed memories, learning events, agents, workflows, souls, tools, contexts, and active approved memories remain available.
 - If archiving fails, the page shows the backend error message.
+- If permanent delete is blocked by backend safety checks, the page opens a warning dialog and keeps the run archived.
 
 ### T. Manually Check Destructive Actions
 
@@ -669,8 +676,13 @@ No monitor opens after running:
 
 Run archive fails:
 
-- Symptom: the Runs page shows an error after selecting **Archive** or **Archive selected**.
+- Symptom: the Runs page shows an error after selecting **Archive**, **Archive Selected**, **Activate**, or **Activate Selected**.
 - Fix: refresh the Runs page and check backend logs. Confirm the backend is running and the run still exists.
+
+Permanent run delete is blocked:
+
+- Symptom: the Runs page opens a warning dialog after selecting **Delete permanently**.
+- Fix: keep the run archived. Runs with feedback, evaluations, learning events, or experiment result references are protected so learning history is not broken.
 
 Soul or workflow delete is blocked:
 
@@ -736,6 +748,9 @@ Inactive agent selected:
 - [ ] Agent evolution page shows the agent-specific timeline.
 - [ ] Runs page lists active run history by default.
 - [ ] Archiving a test run hides it from Active runs and shows it under Archived runs.
+- [ ] Archived runs show **Activate**.
+- [ ] **Activate Selected** restores selected archived runs to Active runs.
+- [ ] Permanent delete safety failures open a warning dialog.
 - [ ] Archiving a test run does not delete trace, feedback, proposed memories, learning events, agents, workflows, tools, souls, contexts, or active memories.
 
 ## 10. Current Limitations
@@ -746,5 +761,5 @@ Inactive agent selected:
 - Learning updates agent memory only. Soul/persona rewriting is not automatic.
 - The before/after comparison flow is manual through run traces, execution details, and repeated workflow runs.
 - Runtime monitoring uses polling rather than WebSockets.
-- Run cleanup uses archive by default. Archived runs are hidden from the default Runs list and can be viewed with the Archived runs filter.
+- Run cleanup uses archive by default. Archived runs are hidden from the default Runs list, can be viewed with the Archived runs filter, and can be activated back into Active runs. Permanent delete is limited to archived runs that pass backend safety checks.
 - Authentication and multi-user authorization are not implemented in the MVP.

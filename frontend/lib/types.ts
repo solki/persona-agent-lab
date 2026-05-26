@@ -286,6 +286,20 @@ export interface RunArchiveResponse {
   message: string;
 }
 
+export interface RunActivateResponse {
+  id: number;
+  status: Exclude<RunStatus, "archived">;
+  archived: boolean;
+  archived_at: null;
+  message: string;
+}
+
+export interface RunDeleteResponse {
+  id: number;
+  deleted: boolean;
+  message: string;
+}
+
 export interface TraceEvent {
   id: number;
   run_id: number;
