@@ -35,6 +35,7 @@ reports/
 artifacts/
 *.sqlite
 *.db
+MISC/
 
 # System and editor files
 .DS_Store
