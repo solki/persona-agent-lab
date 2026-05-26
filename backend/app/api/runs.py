@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.runs import RunRead, TraceEventRead
+from app.schemas.runs import RunArchiveResponse, RunRead, TraceEventRead
 from app.services import run_service, trace_service
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -15,9 +15,19 @@ def require_run(db: Session, run_id: int):
     return run
 
 
+def archive_response(run) -> dict:
+    return {
+        "id": run.id,
+        "status": run.status,
+        "archived": True,
+        "archived_at": run.archived_at,
+        "message": "Run archived successfully. Learning records were preserved.",
+    }
+
+
 @router.get("", response_model=list[RunRead])
-def list_runs(db: Session = Depends(get_db)):
-    return run_service.list_runs(db)
+def list_runs(include_archived: bool = Query(False), db: Session = Depends(get_db)):
+    return run_service.list_runs(db, include_archived=include_archived)
 
 
 @router.get("/{run_id}", response_model=RunRead)
@@ -31,8 +41,15 @@ def get_run_trace(run_id: int, db: Session = Depends(get_db)):
     return trace_service.list_trace_events(db, run_id)
 
 
-@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/archive", response_model=RunArchiveResponse)
+def archive_run(run_id: int, db: Session = Depends(get_db)):
+    run = require_run(db, run_id)
+    archived_run = run_service.archive_run(db, run)
+    return archive_response(archived_run)
+
+
+@router.delete("/{run_id}", response_model=RunArchiveResponse)
 def delete_run(run_id: int, db: Session = Depends(get_db)):
     run = require_run(db, run_id)
-    run_service.delete_run(db, run)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    archived_run = run_service.delete_run(db, run)
+    return archive_response(archived_run)

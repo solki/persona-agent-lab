@@ -18,13 +18,22 @@ class RunRead(BaseModel):
     workflow_id: int
     input: dict[str, Any]
     output: Optional[dict[str, Any]] = None
-    status: Literal["pending", "running", "completed", "failed"]
+    status: Literal["pending", "running", "completed", "failed", "archived"]
     config_snapshot: dict[str, Any]
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RunArchiveResponse(BaseModel):
+    id: int
+    status: Literal["archived"]
+    archived: bool = True
+    archived_at: datetime
+    message: str
 
 
 class TraceEventRead(BaseModel):

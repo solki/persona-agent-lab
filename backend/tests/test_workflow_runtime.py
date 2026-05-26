@@ -164,7 +164,33 @@ def test_runs_list_and_detail(client):
     assert detail_response.json()["id"] == run["id"]
 
 
-def test_delete_run_cleans_run_local_records_without_deleting_configuration(client, db_session):
+def test_archive_run_without_learning_records_hides_from_default_list(client):
+    agent = create_agent(client, "Archive Basic Agent", "Keep run records.")
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "Archive Basic Workflow",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [agent["id"]]},
+        },
+    ).json()
+    run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Archive this run."}).json()
+
+    archive_response = client.post(f"/runs/{run['id']}/archive")
+
+    assert archive_response.status_code == 200
+    assert archive_response.json()["status"] == "archived"
+    assert archive_response.json()["archived"] is True
+    assert "Learning records were preserved" in archive_response.json()["message"]
+    assert client.get("/runs").json() == []
+    archived_list = client.get("/runs?include_archived=true").json()
+    assert [item["id"] for item in archived_list] == [run["id"]]
+    archived_detail = client.get(f"/runs/{run['id']}").json()
+    assert archived_detail["status"] == "archived"
+    assert archived_detail["archived_at"] is not None
+
+
+def test_archive_run_preserves_learning_records_and_configuration(client, db_session):
     agent = create_agent(client, "Cleanup Agent", "Keep configuration.")
     workflow = client.post(
         "/workflows",
@@ -194,32 +220,37 @@ def test_delete_run_cleans_run_local_records_without_deleting_configuration(clie
         json={"feedback_id": pending_feedback["id"]},
     ).json()["proposed_memory"]
 
-    delete_response = client.delete(f"/runs/{run['id']}")
+    archive_response = client.delete(f"/runs/{run['id']}")
 
-    assert delete_response.status_code == 204
-    assert client.get(f"/runs/{run['id']}").status_code == 404
+    assert archive_response.status_code == 200
+    assert archive_response.json()["status"] == "archived"
+    assert client.get(f"/runs/{run['id']}").json()["status"] == "archived"
+    assert client.get("/runs").json() == []
     assert client.get(f"/workflows/{workflow['id']}").status_code == 200
     assert client.get(f"/agents/{agent['id']}").status_code == 200
     assert db_session.get(Agent, agent["id"]) is not None
     assert db_session.get(Workflow, workflow["id"]) is not None
     assert db_session.get(AgentMemory, active_memory_id) is not None
-    assert db_session.scalars(select(TraceEvent).where(TraceEvent.run_id == run["id"])).all() == []
-    assert db_session.scalars(select(AgentExecution).where(AgentExecution.run_id == run["id"])).all() == []
-    assert db_session.scalars(select(AgentExecutionEvent).where(AgentExecutionEvent.run_id == run["id"])).all() == []
-    assert db_session.scalars(select(TokenUsage).where(TokenUsage.run_id == run["id"])).all() == []
-    assert db_session.scalars(select(AgentFeedback).where(AgentFeedback.run_id == run["id"])).all() == []
-    assert db_session.scalars(select(LearningEvent).where(LearningEvent.run_id == run["id"])).all() == []
+    assert db_session.scalars(select(TraceEvent).where(TraceEvent.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(AgentExecution).where(AgentExecution.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(AgentExecutionEvent).where(AgentExecutionEvent.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(TokenUsage).where(TokenUsage.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(AgentFeedback).where(AgentFeedback.run_id == run["id"])).all() != []
+    assert db_session.scalars(select(LearningEvent).where(LearningEvent.run_id == run["id"])).all() != []
     approved_proposal = db_session.get(ProposedMemory, proposal["id"])
     assert approved_proposal is not None
-    assert approved_proposal.source_feedback_id is None
+    assert approved_proposal.source_feedback_id == feedback["id"]
     assert approved_proposal.source_evaluation_id is None
-    assert db_session.get(ProposedMemory, pending_proposal["id"]) is None
+    pending = db_session.get(ProposedMemory, pending_proposal["id"])
+    assert pending is not None
+    assert pending.source_feedback_id == pending_feedback["id"]
 
 
-def test_delete_missing_run_returns_404(client):
-    response = client.delete("/runs/9999")
+def test_archive_missing_run_returns_404(client):
+    response = client.post("/runs/9999/archive")
 
     assert response.status_code == 404
+    assert client.delete("/runs/9999").status_code == 404
 
 
 def test_workflow_delete_is_blocked_while_runs_exist(client):

@@ -21,7 +21,7 @@ The observatory records and displays:
 - learning events
 - execution errors
 
-Run management is available from the frontend and through the API. Users can list runs, open monitor, trace, executions, and token usage pages, and delete old run-local results after an in-app confirmation dialog.
+Run management is available from the frontend and through the API. Users can list active or archived runs, open monitor, trace, executions, and token usage pages, and archive old runs after an in-app confirmation dialog.
 
 ## Execution Records
 
@@ -97,6 +97,7 @@ Runtime monitor:
 ```http
 GET /runs
 GET /runs/{run_id}
+POST /runs/{run_id}/archive
 DELETE /runs/{run_id}
 GET /runs/{run_id}/monitor
 ```
@@ -136,24 +137,27 @@ Frontend routes:
 
 The monitor page polls the backend every second. Event rows are collapsed by default and show event type, agent, time, and step metadata. Use **Expand** to inspect formatted JSON payloads, or **Expand all** and **Collapse all** for bulk inspection. Filters support agent, event category, and text search. Long payloads are wrapped inside scrollable code blocks so monitor and trace pages stay readable on laptop screens.
 
-The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and delete actions. Delete actions require confirmation, show loading state, surface backend errors, and refresh the list after success. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
+The Runs page is the observability entry point. It shows run status, workflow, input preview, monitor, trace, executions, token usage, and archive actions. Archive actions require confirmation, show loading state, surface backend errors, and refresh the list after success. Active runs are shown by default; use the archive filter to view archived or all runs. The execution detail page shows input, output, context, retrieved memory IDs, LLM event summaries, token usage, tool calls, and learning events for one agent execution. The agent evolution page shows only the selected agent's memories, feedback, evaluations, proposed memories, learning events, executions, and token usage.
 
-## Run Cleanup
+## Run Archive
 
-`DELETE /runs/{run_id}` removes only run-local records:
+Run cleanup uses soft archive by default. `POST /runs/{run_id}/archive` marks the run as archived and sets `archived_at`. `DELETE /runs/{run_id}` is retained for compatibility but performs the same archive operation.
+
+Archive preserves:
 
 - trace events
 - agent executions
 - execution events
 - token usage
 - feedback and evaluations linked to the run
-- pending or rejected proposed memories sourced from that run's feedback or evaluations
+- proposed memories sourced from that run's feedback or evaluations
 - learning events linked to the run
+- active `AgentMemory` rows created from approved proposed memories
 - the run record
 
-Cleanup does not delete agents, workflows, souls, tools, contexts, active `AgentMemory` records, or approved `ProposedMemory` records that back active memories. Approved proposed memories are detached from the deleted run-local feedback/evaluation source so the active memory does not point at a missing proposal.
+Archive does not delete agents, workflows, souls, tools, contexts, active `AgentMemory` records, or `ProposedMemory` records. Hard delete is unsafe when feedback and proposed memories exist because `ProposedMemory.source_feedback_id` and `source_evaluation_id` preserve learning-loop lineage.
 
-Workflow deletion is separate from run cleanup. A workflow that still has run records is blocked with a clear error; delete the related runs first if you intentionally want to remove the workflow definition.
+Workflow deletion is separate from run archive. A workflow that still has run records is blocked with a clear error.
 
 ## Privacy And Isolation
 

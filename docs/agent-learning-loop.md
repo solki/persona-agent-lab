@@ -82,6 +82,14 @@ Rejecting a proposed memory:
 
 Rejected proposed memories are not retrieved in future runs because context assembly only reads active `AgentMemory` rows.
 
+## Run Archiving And Learning History
+
+Runs are archived, not hard deleted, from the default frontend cleanup flow. Archiving hides a run from the default Runs list while preserving feedback, evaluations, proposed memories, learning events, trace events, execution records, token usage, and active memories.
+
+Hard deleting a run that has learning records is unsafe because `ProposedMemory.source_feedback_id` and `ProposedMemory.source_evaluation_id` preserve the lineage from human feedback or evaluation to proposed memory. Approved proposed memories can also be represented as active `AgentMemory` records whose `source` points back to the proposed memory. Archiving keeps that history inspectable.
+
+Use the Runs page archive filter to view archived runs.
+
 ## Reflection
 
 `ReflectionService` converts feedback or evaluation into a proposed memory. In mock mode, reflection is deterministic so local tests and experiments do not require an LLM API key.

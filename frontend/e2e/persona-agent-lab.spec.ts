@@ -372,30 +372,48 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     expect(detailB).not.toContain(`PRIVATE_MEMORY_AGENT_A_ONLY_${suffix}`);
   });
 
-  test("runs a workflow, inspects collapsed monitor events, and deletes the run", async ({ page }) => {
-    const suffix = `${scenario.suffix}-cleanup`;
-    const agent = await createAgentApi(`E2E Cleanup Agent ${suffix}`, "Cleanup Agent");
-    const workflowId = await createWorkflowViaUi(page, `E2E Cleanup Workflow ${suffix}`, [`E2E Cleanup Agent ${suffix}`]);
-    const runId = await runWorkflowViaUi(page, workflowId, "Summarize this cleanup verification task.");
+  test("archives a run with learning records without breaking proposed memories", async ({ page }) => {
+    const suffix = `${scenario.suffix}-archive`;
+    const agent = await createAgentApi(`E2E Archive Agent ${suffix}`, "Archive Agent");
+    const workflowId = await createWorkflowViaUi(page, `E2E Archive Workflow ${suffix}`, [`E2E Archive Agent ${suffix}`]);
+    const runId = await runWorkflowViaUi(page, workflowId, "Summarize this archive verification task.");
+
+    await page.goto(`/runs/${runId}`);
+    const learningSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Learning Feedback" }) });
+    await learningSection.getByLabel("Agent").selectOption({ label: `E2E Archive Agent ${suffix}` });
+    await learningSection.getByLabel("Feedback type").fill("improvement");
+    await learningSection.getByLabel("Rating").fill("4");
+    await learningSection.getByLabel("Feedback", { exact: true }).fill(
+      "This archive test feedback should remain linked to its proposed memory after the run is archived."
+    );
+    await learningSection.getByRole("button", { name: "Save feedback" }).click();
+    await expect(learningSection).toContainText("Feedback saved for this run and agent.");
+    await learningSection.getByRole("button", { name: "Generate proposed memory" }).click();
+    await expect(learningSection).toContainText("pending");
+    await expect(learningSection).toContainText("archive test feedback");
 
     await page.goto("/runs");
     await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
-    await screenshotEvidence(page, "runs-page-cleanup-action");
+    await screenshotEvidence(page, "runs-page-archive-action");
     const runCard = cardWithHeading(page, `Run ${runId}`);
-    await runCard.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByRole("dialog", { name: "Delete run?" })).toBeVisible();
-    await page.getByRole("button", { name: "Delete run" }).click();
-    await expect(page.getByText(`Deleted run ${runId}.`)).toBeVisible();
+    await runCard.getByRole("button", { name: "Archive" }).click();
+    await expect(page.getByRole("dialog", { name: "Archive run?" })).toBeVisible();
+    await screenshotEvidence(page, "archive-confirmation-dialog");
+    await page.getByRole("button", { name: "Archive run" }).click();
+    await expect(page.getByText("Run archived successfully. Learning records were preserved.")).toBeVisible();
+    await screenshotEvidence(page, "archive-success-message");
     await expect(cardWithHeading(page, `Run ${runId}`)).toHaveCount(0);
 
-    await page.goto("/workflows");
-    const workflowCard = cardWithHeading(page, `E2E Cleanup Workflow ${suffix}`);
-    await workflowCard.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByRole("dialog", { name: "Delete workflow?" })).toBeVisible();
-    await page.getByRole("button", { name: "Delete workflow" }).click();
-    await expect(page.getByText("Workflow deleted.")).toBeVisible();
-    await expect(cardWithHeading(page, `E2E Cleanup Workflow ${suffix}`)).toHaveCount(0);
-    await apiDelete(`/agents/${agent.id}`);
+    await page.getByLabel("Archive filter").selectOption("archived");
+    await expect(cardWithHeading(page, `Run ${runId}`)).toBeVisible();
+    await expect(cardWithHeading(page, `Run ${runId}`)).toContainText("Archived");
+    await screenshotEvidence(page, "archived-run-visible-filter");
+
+    await page.goto(`/agents/${agent.id}`);
+    const proposedSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Proposed Memories" }) });
+    await expect(proposedSection).toContainText("archive test feedback");
+    await expect(proposedSection).toContainText("pending");
+    await screenshotEvidence(page, "proposed-memory-visible-after-archive");
   });
 });
 

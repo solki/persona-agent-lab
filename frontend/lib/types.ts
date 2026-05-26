@@ -251,7 +251,7 @@ export interface AgentPerformanceSummary {
 }
 
 export type WorkflowType = "sequential" | "supervisor" | "handoff_swarm";
-export type RunStatus = "pending" | "running" | "completed" | "failed";
+export type RunStatus = "pending" | "running" | "completed" | "failed" | "archived";
 
 export interface Workflow {
   id: number;
@@ -273,8 +273,17 @@ export interface Run {
   config_snapshot: Record<string, unknown>;
   started_at?: string | null;
   ended_at?: string | null;
+  archived_at?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface RunArchiveResponse {
+  id: number;
+  status: "archived";
+  archived: boolean;
+  archived_at: string;
+  message: string;
 }
 
 export interface TraceEvent {

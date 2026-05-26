@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after repairing frontend destructive-action UX and expanding Playwright coverage.
+Last updated after replacing run hard delete with safe run archiving.
 
 ## Project Purpose
 
@@ -39,7 +39,7 @@ Milestone 10 status: implemented.
 - `app/souls`: Soul/persona list, create, edit, and delete flows.
 - `app/tools`: Tool registry page with create, edit, delete, config JSON, and active flag controls.
 - `app/workflows`: Workflow list, create/edit pages with name-based agent sequence picker, and workflow run page.
-- `app/runs`: Run list and management page with status/workflow/search filters, links to monitor/trace/executions/token usage, selected-run cleanup, and confirmed delete actions.
+- `app/runs`: Run list and management page with active/archived/status/workflow/search filters, links to monitor/trace/executions/token usage, selected-run archiving, and confirmed archive actions.
 - `app/runs/[id]`: Run trace viewer with collapsible input/output/config sections, learning feedback and reflection panel; monitor, token usage, and execution detail subpages.
 - `app/agents/[id]/evolution`: Agent evolution timeline and performance summary.
 - `app/experiments`: Experiment list, create page, and experiment run/comparison page.
@@ -69,7 +69,7 @@ Milestone 10 status: implemented.
 - `AgentExecutionEvent`: execution id, run id, agent id, event type, payload, timestamp.
 - `TokenUsage`: run id, execution id, agent id, provider, model, prompt/completion/total tokens, estimated cost, raw usage, timestamp.
 - `Workflow`: name, description, type, graph config, active flag, timestamps.
-- `Run`: workflow id, input, output, status, config snapshot, started/ended timestamps, creation timestamp.
+- `Run`: workflow id, input, output, status, config snapshot, started/ended/archive timestamps, creation timestamp.
 - `TraceEvent`: run id, event type, optional agent id, payload, timestamp.
 - `Experiment`: name, description, task prompt, selected agent ids, evaluation config, timestamps.
 - `ExperimentRun`: experiment id, run ids, comparison result, timestamp.
@@ -88,7 +88,7 @@ Milestone 10 status: implemented.
 - Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
 - Reflection: `POST /runs/{run_id}/agents/{agent_id}/reflect`
 - Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
-- Runs: `GET /runs`, `GET /runs/{run_id}`, `DELETE /runs/{run_id}`, `GET /runs/{run_id}/trace`
+- Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
 - Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
 - Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
 
@@ -143,7 +143,7 @@ Milestone 10 status: implemented.
 - Experiment runs create a single-agent sequential workflow per selected agent, run the same task for each selected agent, and persist an `ExperimentRun` with run ids, trace links, outputs, task prompt, and evaluation config.
 - Experiments preserve isolation by running each selected agent in its own workflow run.
 - Before/after learning experiments are supported manually by comparing a baseline run with a later run after proposed-memory approval.
-- Runtime observatory pages support polling-based run monitoring, collapsed event payload inspection, execution detail inspection, token usage review, run cleanup, and agent evolution timelines. The workflow run page starts monitor-first async runs and redirects to `/runs/{run_id}/monitor`.
+- Runtime observatory pages support polling-based run monitoring, collapsed event payload inspection, execution detail inspection, token usage review, run archiving, and agent evolution timelines. The workflow run page starts monitor-first async runs and redirects to `/runs/{run_id}/monitor`.
 
 ## Current Frontend Configuration Behavior
 
@@ -152,7 +152,7 @@ Milestone 10 status: implemented.
 - Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
-- Agents, souls, tools, contexts, memories, workflows, assigned tools, and runs use in-app confirmation dialogs for destructive actions. Deletes show loading states, success/error messages, and refresh or redirect after success.
+- Agents, souls, tools, contexts, memories, workflows, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive actions so learning history is preserved. Mutations show loading states, success/error messages, and refresh or redirect after success.
 - Soul deletion is blocked while agents still reference the soul. Workflow deletion is blocked while runs still reference the workflow. Agent deletion removes only that agent's owned configuration when no runtime history exists.
 - Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
 
@@ -170,10 +170,10 @@ Milestone 10 status: implemented.
 - Provider factory selection and OpenAI-compatible validation with mocked SDK calls.
 - Workflow CRUD, blocked workflow deletion while runs exist, sequential run trace events, config snapshots, and context/memory isolation in runs.
 - Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
-- Run cleanup deletes run-local records without deleting agents, workflows, tools, souls, contexts, active agent memories, or approved proposed-memory records that back active memories.
+- Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records.
 - Experiment CRUD and experiment run isolation/comparison behavior.
 - Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
-- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, workflow run cleanup, monitor collapsed/expanded payloads, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
+- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving with learning records, monitor collapsed/expanded payloads, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
 
 ## Current Known Limitations
 
@@ -183,6 +183,7 @@ Milestone 10 status: implemented.
 - Handoff policy is modeled and has an evaluator, but full handoff runtime integration is not implemented.
 - The before/after learning comparison flow is manual; there is no dedicated comparison dashboard yet.
 - Runtime monitoring is polling-based; WebSocket streaming is not implemented.
+- Run hard delete is not exposed as the default cleanup behavior because learning records can reference run feedback and evaluations.
 - Learning updates only agent memory; soul/persona is not rewritten automatically.
 - No Alembic migrations; local startup can create tables automatically for MVP development.
 - No authentication, authorization, multi-user isolation, or production deployment setup.

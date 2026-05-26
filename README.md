@@ -208,6 +208,7 @@ Relevant endpoints:
 
 - `GET /runs`
 - `GET /runs/{run_id}`
+- `POST /runs/{run_id}/archive`
 - `DELETE /runs/{run_id}`
 - `GET /runs/{run_id}/monitor`
 - `GET /runs/{run_id}/executions`
@@ -227,7 +228,9 @@ Frontend pages:
 - `/runs/[id]/token-usage`
 - `/agents/[id]/evolution`
 
-The Runs page is the main run management entry point. It lists runs, filters by status and workflow, links to monitor, trace, executions, and token usage pages, and supports confirmed single or selected run deletion. Deleting a run removes run-local trace, execution, token usage, feedback, evaluation, pending or rejected proposed memory, and learning event records. It does not delete agents, workflows, tools, souls, contexts, active approved agent memories, or the approved proposed-memory records that back those active memories.
+The Runs page is the main run management entry point. It lists active runs by default, filters by active/archived/all status and workflow, links to monitor, trace, executions, and token usage pages, and supports confirmed single or selected run archiving. Archiving a run hides it from the default Runs list but preserves trace, execution, token usage, feedback, evaluation, proposed memory, and learning event records. It does not delete agents, workflows, tools, souls, contexts, active approved agent memories, or proposed-memory records.
+
+`DELETE /runs/{run_id}` is retained for compatibility but now archives the run instead of hard deleting it. Hard delete is unsafe when feedback and proposed memories are linked because it can break learning-loop history.
 
 The MVP monitor uses polling rather than WebSockets. Event payloads are collapsed by default; expand an event row to inspect formatted JSON. Mock provider token usage is estimated from text length and marked as estimated.
 
@@ -250,7 +253,7 @@ Policy and tool config editors validate JSON in the browser before sending reque
 
 ## Review Status
 
-Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views. The current frontend configuration pass completes CRUD and major field coverage for agents, souls, tools, contexts, memories, policies, active flags, and agent-tool assignments. Run management now includes a discoverable Runs page, collapsed event payloads, token usage navigation, and safe cleanup for old run-local records.
+Milestone 8 reviewed the MVP for isolation, traceability, startup readiness, and documentation. High-priority fixes added CORS for the local frontend, local table initialization, and Tool Gateway trace events for allowed and denied tool calls. Milestone 9 adds a memory-only learning loop with explicit feedback scoping and manual memory approval. Milestone 10 adds polling-based runtime observability, execution records, event timelines, token usage, and agent evolution views. The current frontend configuration pass completes CRUD and major field coverage for agents, souls, tools, contexts, memories, policies, active flags, and agent-tool assignments. Run management now includes a discoverable Runs page, collapsed event payloads, token usage navigation, and safe archiving for old run records while preserving learning history.
 
 ## Running Tests
 
@@ -288,7 +291,7 @@ cd frontend
 npm run e2e
 ```
 
-The E2E suite covers destructive-action confirmations, blocked delete errors, agent nested context/memory CRUD, tool deletion, workflow runs, collapsed monitor events, expanded JSON payloads, run cleanup, the learning loop, and agent context/memory isolation. It writes screenshot evidence to `docs/evidence/`.
+The E2E suite covers destructive-action confirmations, blocked delete errors, agent nested context/memory CRUD, tool deletion, workflow runs, collapsed monitor events, expanded JSON payloads, run archiving, the learning loop, and agent context/memory isolation. It writes screenshot evidence to `docs/evidence/`.
 
 Useful E2E variants:
 
