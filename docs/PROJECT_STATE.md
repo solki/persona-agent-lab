@@ -90,7 +90,7 @@ Milestone 10 status: implemented.
 - Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
 - Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `POST /runs/{run_id}/activate`, `DELETE /runs/{run_id}/hard-delete`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
 - Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
-- Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
+- Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `DELETE /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
 
 ## Current Runtime Flow
 
@@ -153,7 +153,7 @@ Milestone 10 status: implemented.
 - Sidebar Agents, the Agents list, and the Agent detail Proposed Memories section show red approval badges only for pending `ProposedMemory` rows created from feedback or evaluation sources. Manual pending `AgentMemory` rows and reviewed proposed memories do not trigger these badges.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
-- Agents, souls, tools, contexts, memories, workflows, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Mutations show loading states, success/error messages, and refresh or redirect after success.
+- Agents, souls, tools, contexts, memories, workflows, experiments, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Experiment deletion is blocked (409) when the experiment has been run; use the `?force=true` query parameter only for test cleanup. Mutations show loading states, success/error messages, and refresh or redirect after success.
 - Soul deletion is blocked while agents still reference the soul. Workflow deletion is blocked while runs still reference the workflow. Agent deletion removes only that agent's owned configuration when no runtime history exists.
 - Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
 
@@ -172,7 +172,7 @@ Milestone 10 status: implemented.
 - Workflow CRUD, blocked workflow deletion while runs exist, sequential run trace events, config snapshots, and context/memory isolation in runs.
 - Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
 - Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records. Run activation restores archived runs to the active list without changing those records. Permanent delete is guarded by backend safety checks.
-- Experiment CRUD and experiment run isolation/comparison behavior.
+- Experiment CRUD including safe delete (204 for clean experiments, 409 when runs exist) and experiment run isolation/comparison behavior.
 - Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
 - Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving and activation with learning records, guarded run-delete warnings, monitor collapsed/expanded payloads, feedback-derived proposed-memory approval badges, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
 

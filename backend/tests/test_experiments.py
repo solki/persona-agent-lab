@@ -98,3 +98,83 @@ def test_experiment_run_creates_comparison_runs_and_trace_links(client):
     first_run = client.get(f"/runs/{first_run_id}").json()
     assert first_run["config_snapshot"]["workflow"]["graph_config"]["experiment_id"] == experiment["id"]
     assert first_run["config_snapshot"]["agents"][0]["id"] == first_agent["id"]
+
+
+def test_delete_succeeds_for_experiment_without_runs(client):
+    first_agent = create_agent(client, "Delete Safe Agent A", "DELETE_A")
+    second_agent = create_agent(client, "Delete Safe Agent B", "DELETE_B")
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "Deletable Experiment",
+            "task_prompt": "Safe to delete.",
+            "agent_ids": [first_agent["id"], second_agent["id"]],
+        },
+    ).json()
+
+    response = client.delete(f"/experiments/{experiment['id']}")
+    assert response.status_code == 204
+
+    list_response = client.get("/experiments")
+    assert experiment["id"] not in [e["id"] for e in list_response.json()]
+
+
+def test_delete_nonexistent_experiment_returns_404(client):
+    response = client.delete("/experiments/99999")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+def test_delete_blocked_when_experiment_has_runs_returns_409(client):
+    first_agent = create_agent(client, "Blocked Delete Agent A", "BLOCKED_A")
+    second_agent = create_agent(client, "Blocked Delete Agent B", "BLOCKED_B")
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "Blocked Experiment",
+            "task_prompt": "Cannot be deleted after running.",
+            "agent_ids": [first_agent["id"], second_agent["id"]],
+        },
+    ).json()
+
+    client.post(f"/experiments/{experiment['id']}/run")
+
+    response = client.delete(f"/experiments/{experiment['id']}")
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert experiment["name"] in detail
+    assert "force" in detail.lower()
+
+    get_response = client.get(f"/experiments/{experiment['id']}")
+    assert get_response.status_code == 200
+
+    runs_response = client.get("/runs")
+    runs_after_blocked_delete = {(run["id"], run["status"]) for run in runs_response.json()}
+    assert len(runs_after_blocked_delete) > 0
+
+
+def test_force_delete_succeeds_for_experiment_with_runs(client):
+    first_agent = create_agent(client, "Force Delete Agent A", "FORCE_A")
+    second_agent = create_agent(client, "Force Delete Agent B", "FORCE_B")
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "Force Deletable Experiment",
+            "task_prompt": "Force delete after running.",
+            "agent_ids": [first_agent["id"], second_agent["id"]],
+        },
+    ).json()
+
+    client.post(f"/experiments/{experiment['id']}/run")
+
+    response = client.delete(f"/experiments/{experiment['id']}?force=true")
+    assert response.status_code == 204
+
+    get_response = client.get(f"/experiments/{experiment['id']}")
+    assert get_response.status_code == 404
+
+    runs_response = client.get("/runs")
+    assert len(runs_response.json()) == 2

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,6 +28,15 @@ def create_experiment(payload: ExperimentCreate, db: Session = Depends(get_db)):
 @router.get("/{experiment_id}", response_model=ExperimentRead)
 def get_experiment(experiment_id: int, db: Session = Depends(get_db)):
     return require_experiment(db, experiment_id)
+
+
+@router.delete("/{experiment_id}")
+def delete_experiment(experiment_id: int, force: bool = False, db: Session = Depends(get_db)):
+    experiment = require_experiment(db, experiment_id)
+    result = experiment_service.delete_experiment(db, experiment, force=force)
+    if result["blocked"]:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["message"])
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{experiment_id}/run", response_model=ExperimentRunRead, status_code=status.HTTP_201_CREATED)

@@ -37,6 +37,14 @@ artifacts/
 *.db
 MISC/
 
+# E2E test artifacts
+docs/evidence/*.png
+frontend/playwright-report/
+frontend/test-results/
+
+# Claude Code project settings
+.claude/
+
 # System and editor files
 .DS_Store
 .idea/

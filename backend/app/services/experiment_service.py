@@ -24,6 +24,38 @@ def create_experiment(db: Session, payload: ExperimentCreate) -> Experiment:
     return experiment
 
 
+def delete_experiment(db: Session, experiment: Experiment, force: bool = False) -> dict:
+    experiment_runs = db.scalars(
+        select(ExperimentRun).where(ExperimentRun.experiment_id == experiment.id)
+    ).all()
+
+    if experiment_runs:
+        if force:
+            for er in experiment_runs:
+                db.delete(er)
+        else:
+            run_ids = sorted({rid for er in experiment_runs for rid in (er.run_ids or [])})
+            return {
+                "deleted": False,
+                "blocked": True,
+                "experiment_id": experiment.id,
+                "experiment_name": experiment.name,
+                "experiment_run_count": len(experiment_runs),
+                "run_ids": run_ids,
+                "message": (
+                    f"Cannot safely delete experiment '{experiment.name}' because it has "
+                    f"{len(experiment_runs)} experiment run(s). The underlying workflow runs "
+                    f"(ids {run_ids}) and all their traces, feedback, and learning records are preserved. "
+                    "Force-delete will remove the experiment and its run link records only — "
+                    "workflow runs and learning data will not be affected."
+                ),
+            }
+
+    db.delete(experiment)
+    db.commit()
+    return {"deleted": True, "blocked": False, "experiment_id": experiment.id}
+
+
 def run_experiment(db: Session, experiment: Experiment) -> ExperimentRun:
     runner = WorkflowRunner(db)
     run_ids: list[int] = []
