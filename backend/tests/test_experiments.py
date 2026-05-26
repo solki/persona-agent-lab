@@ -145,7 +145,7 @@ def test_delete_blocked_when_experiment_has_runs_returns_409(client):
     assert response.status_code == 409
     detail = response.json()["detail"]
     assert experiment["name"] in detail
-    assert "experiment run" in detail.lower()
+    assert "force" in detail.lower()
 
     get_response = client.get(f"/experiments/{experiment['id']}")
     assert get_response.status_code == 200
@@ -153,3 +153,28 @@ def test_delete_blocked_when_experiment_has_runs_returns_409(client):
     runs_response = client.get("/runs")
     runs_after_blocked_delete = {(run["id"], run["status"]) for run in runs_response.json()}
     assert len(runs_after_blocked_delete) > 0
+
+
+def test_force_delete_succeeds_for_experiment_with_runs(client):
+    first_agent = create_agent(client, "Force Delete Agent A", "FORCE_A")
+    second_agent = create_agent(client, "Force Delete Agent B", "FORCE_B")
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "Force Deletable Experiment",
+            "task_prompt": "Force delete after running.",
+            "agent_ids": [first_agent["id"], second_agent["id"]],
+        },
+    ).json()
+
+    client.post(f"/experiments/{experiment['id']}/run")
+
+    response = client.delete(f"/experiments/{experiment['id']}?force=true")
+    assert response.status_code == 204
+
+    get_response = client.get(f"/experiments/{experiment['id']}")
+    assert get_response.status_code == 404
+
+    runs_response = client.get("/runs")
+    assert len(runs_response.json()) == 2

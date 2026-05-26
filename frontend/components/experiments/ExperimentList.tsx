@@ -13,6 +13,7 @@ export function ExperimentList() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [forceDeleting, setForceDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Experiment | null>(null);
   const [blockedMessage, setBlockedMessage] = useState("");
 
@@ -41,10 +42,27 @@ export function ExperimentList() {
         setBlockedMessage(err.message);
       } else {
         setError(err instanceof Error ? err.message : "Failed to delete experiment.");
+        setDeleteTarget(null);
       }
-      setDeleteTarget(null);
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleForceDelete() {
+    if (!deleteTarget) return;
+    setForceDeleting(true);
+    try {
+      await api.deleteExperiment(deleteTarget.id, true);
+      setDeleteTarget(null);
+      setBlockedMessage("");
+      setExperiments((prev) => prev.filter((e) => e.id !== deleteTarget.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to force-delete experiment.");
+      setDeleteTarget(null);
+      setBlockedMessage("");
+    } finally {
+      setForceDeleting(false);
     }
   }
 
@@ -61,13 +79,23 @@ export function ExperimentList() {
         <div className="mb-4 rounded border border-warning bg-red-50 p-4">
           <h2 className="text-sm font-semibold text-warning">Delete blocked by dependencies</h2>
           <p className="mt-1 text-sm text-slate-700">{blockedMessage}</p>
-          <button
-            type="button"
-            className="focus-ring mt-3 rounded border border-line bg-white px-4 py-2 text-sm font-medium"
-            onClick={() => setBlockedMessage("")}
-          >
-            Dismiss
-          </button>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              className="focus-ring rounded border border-line bg-white px-4 py-2 text-sm font-medium"
+              onClick={() => { setBlockedMessage(""); setDeleteTarget(null); }}
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              className="focus-ring rounded bg-warning px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              disabled={forceDeleting}
+              onClick={handleForceDelete}
+            >
+              {forceDeleting ? "Force deleting..." : "Force delete"}
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -117,7 +145,7 @@ export function ExperimentList() {
         cancelLabel="Cancel"
         loading={deleting}
         variant="danger"
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => { setDeleteTarget(null); setBlockedMessage(""); }}
         onConfirm={handleDelete}
       />
     </>

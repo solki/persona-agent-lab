@@ -43,10 +43,11 @@ def delete_experiment(db: Session, experiment: Experiment, force: bool = False) 
                 "experiment_run_count": len(experiment_runs),
                 "run_ids": run_ids,
                 "message": (
-                    f"Cannot delete experiment '{experiment.name}' because it has "
-                    f"{len(experiment_runs)} experiment run(s) referencing run ids {run_ids}. "
-                    "Delete the experiment runs or the referenced workflow runs first, "
-                    "then retry experiment deletion."
+                    f"Cannot safely delete experiment '{experiment.name}' because it has "
+                    f"{len(experiment_runs)} experiment run(s). The underlying workflow runs "
+                    f"(ids {run_ids}) and all their traces, feedback, and learning records are preserved. "
+                    "Force-delete will remove the experiment and its run link records only — "
+                    "workflow runs and learning data will not be affected."
                 ),
             }
 

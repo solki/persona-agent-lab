@@ -204,6 +204,21 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     await page.getByRole("button", { name: "Dismiss" }).click();
     await expect(page.getByText("Delete blocked by dependencies")).toHaveCount(0);
 
+    await blockedCard.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete experiment?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete experiment" }).click();
+    await expect(page.getByText("Delete blocked by dependencies")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Force delete" })).toBeVisible();
+    await screenshotEvidence(page, "experiment-delete-blocked-409");
+    await page.getByRole("button", { name: "Force delete" }).click();
+    await expect(page.getByRole("heading", { name: blockedExperiment.name })).toHaveCount(0);
+    await screenshotEvidence(page, "experiment-force-deleted-from-list");
+    const blockedGone = await backend.get(`/experiments/${blockedExperiment.id}`);
+    expect(blockedGone.status()).toBe(404);
+    const runsAfterForce = await backend.get("/runs");
+    expect(runsAfterForce.status()).toBe(200);
+    expect((await runsAfterForce.json()).length).toBeGreaterThanOrEqual(2);
+
     const detailPageBlocked = await apiPost<{ id: number; name: string }>("/experiments", {
       name: `E2E Detail Blocked Experiment ${suffix}`,
       description: "Detail page blocked delete.",
@@ -219,10 +234,13 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     await page.getByRole("button", { name: "Delete experiment" }).click();
     await expect(page.getByText("Delete blocked by dependencies")).toBeVisible();
     await expect(page.getByRole("heading", { name: detailPageBlocked.name })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Force delete" })).toBeVisible();
     await screenshotEvidence(page, "experiment-detail-delete-blocked-409");
-
-    await backend.delete(`/experiments/${blockedExperiment.id}?force=true`);
-    await backend.delete(`/experiments/${detailPageBlocked.id}?force=true`);
+    await page.getByRole("button", { name: "Force delete" }).click();
+    await page.waitForURL("/experiments");
+    await expect(page.getByRole("heading", { name: detailPageBlocked.name })).toHaveCount(0);
+    const detailGone = await backend.get(`/experiments/${detailPageBlocked.id}`);
+    expect(detailGone.status()).toBe(404);
   });
 
   test("creates agents, configures a sequential workflow, runs it, and views run output", async ({ page }) => {

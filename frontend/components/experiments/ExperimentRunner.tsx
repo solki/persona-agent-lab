@@ -15,6 +15,7 @@ export function ExperimentRunner({ experimentId }: { experimentId: number }) {
   const [experimentRun, setExperimentRun] = useState<ExperimentRun | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [forceDeleting, setForceDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [blockedMessage, setBlockedMessage] = useState("");
 
@@ -50,6 +51,20 @@ export function ExperimentRunner({ experimentId }: { experimentId: number }) {
     }
   }
 
+  async function handleForceDelete() {
+    setForceDeleting(true);
+    try {
+      await api.deleteExperiment(experimentId, true);
+      setBlockedMessage("");
+      router.push("/experiments");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to force-delete experiment.");
+      setBlockedMessage("");
+    } finally {
+      setForceDeleting(false);
+    }
+  }
+
   const results = experimentRun?.comparison_result?.agent_results ?? [];
 
   return (
@@ -63,13 +78,23 @@ export function ExperimentRunner({ experimentId }: { experimentId: number }) {
         <div className="mb-4 rounded border border-warning bg-red-50 p-4">
           <h2 className="text-sm font-semibold text-warning">Delete blocked by dependencies</h2>
           <p className="mt-1 text-sm text-slate-700">{blockedMessage}</p>
-          <button
-            type="button"
-            className="focus-ring mt-3 rounded border border-line bg-white px-4 py-2 text-sm font-medium"
-            onClick={() => setBlockedMessage("")}
-          >
-            Dismiss
-          </button>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              className="focus-ring rounded border border-line bg-white px-4 py-2 text-sm font-medium"
+              onClick={() => setBlockedMessage("")}
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              className="focus-ring rounded bg-warning px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              disabled={forceDeleting}
+              onClick={handleForceDelete}
+            >
+              {forceDeleting ? "Force deleting..." : "Force delete"}
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -129,7 +154,7 @@ export function ExperimentRunner({ experimentId }: { experimentId: number }) {
         cancelLabel="Cancel"
         loading={deleting}
         variant="danger"
-        onCancel={() => setShowDeleteConfirm(false)}
+        onCancel={() => { setShowDeleteConfirm(false); setBlockedMessage(""); }}
         onConfirm={handleDelete}
       />
     </>
