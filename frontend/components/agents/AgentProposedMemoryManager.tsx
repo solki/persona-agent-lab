@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { ProposedMemory, ProposedMemoryStatus } from "@/lib/types";
 import { StatusMessage } from "@/components/shared/StatusMessage";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { NotificationBadge, notifyProposedMemoryNotificationsChanged } from "@/components/shared/NotificationBadge";
 
 export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<ProposedMemory[]>([]);
@@ -34,6 +35,7 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
     }),
     [items]
   );
+  const notificationCount = useMemo(() => items.filter(isNotificationWorthyProposedMemory).length, [items]);
 
   async function review(memoryId: number, action: "approve" | "reject") {
     setError("");
@@ -48,6 +50,7 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
         setMessage("Proposed memory rejected. It will not be retrieved in future runs.");
       }
       await load();
+      notifyProposedMemoryNotificationsChanged();
     } catch (reviewError) {
       setError(reviewError instanceof Error ? reviewError.message : "Unable to review this proposed memory.");
     } finally {
@@ -58,7 +61,10 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
 
   return (
     <section className="rounded border border-line bg-white p-5">
-      <h2 className="text-base font-semibold">Proposed Memories</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-base font-semibold">Proposed Memories</h2>
+        <NotificationBadge count={notificationCount} />
+      </div>
       <p className="mt-1 text-sm text-slate-600">
         Feedback-derived memories stay pending until approval. Approved items become normal active memory for this agent only.
       </p>
@@ -86,6 +92,10 @@ export function AgentProposedMemoryManager({ agentId }: { agentId: number }) {
       />
     </section>
   );
+}
+
+function isNotificationWorthyProposedMemory(item: ProposedMemory): boolean {
+  return item.status === "pending" && (item.source_feedback_id != null || item.source_evaluation_id != null);
 }
 
 function MemoryGroup({

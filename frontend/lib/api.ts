@@ -13,6 +13,7 @@ import type {
   ExperimentRun,
   ProposedMemory,
   ProposedMemoryApproval,
+  ProposedMemoryNotificationSummary,
   ProposedMemoryRejection,
   ReflectionResponse,
   Run,
@@ -134,6 +135,7 @@ export const api = {
   reflectOnRunFeedback: (runId: number, agentId: number, body: JsonBody) =>
     request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, jsonOptions("POST", body)),
   listProposedMemories: (agentId: number) => request<ProposedMemory[]>(`/agents/${agentId}/proposed-memories`),
+  getProposedMemoryNotifications: () => request<ProposedMemoryNotificationSummary>("/proposed-memory-notifications"),
   createProposedMemory: (agentId: number, body: JsonBody) =>
     request<ProposedMemory>(`/agents/${agentId}/proposed-memories`, jsonOptions("POST", body)),
   approveProposedMemory: (agentId: number, memoryId: number) =>

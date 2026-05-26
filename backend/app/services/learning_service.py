@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
@@ -84,6 +84,18 @@ def list_evaluations_for_run(db: Session, run_id: int) -> list[AgentEvaluation]:
 def list_proposed_memories_for_agent(db: Session, agent_id: int) -> list[ProposedMemory]:
     statement = select(ProposedMemory).where(ProposedMemory.agent_id == agent_id).order_by(ProposedMemory.id)
     return list(db.scalars(statement).all())
+
+
+def proposed_memory_notification_summary(db: Session) -> dict:
+    notification_filter = _notification_worthy_proposed_memory_filter()
+    rows = db.execute(
+        select(ProposedMemory.agent_id, func.count(ProposedMemory.id))
+        .where(notification_filter)
+        .group_by(ProposedMemory.agent_id)
+        .order_by(ProposedMemory.agent_id)
+    ).all()
+    by_agent = [{"agent_id": agent_id, "count": count} for agent_id, count in rows]
+    return {"total_count": sum(item["count"] for item in by_agent), "by_agent": by_agent}
 
 
 def get_proposed_memory_for_agent(db: Session, agent_id: int, memory_id: int) -> Optional[ProposedMemory]:
@@ -320,6 +332,13 @@ def _source_run_id(db: Session, proposed_memory: ProposedMemory) -> Optional[int
         evaluation = db.get(AgentEvaluation, proposed_memory.source_evaluation_id)
         return evaluation.run_id if evaluation else None
     return None
+
+
+def _notification_worthy_proposed_memory_filter():
+    return (
+        (ProposedMemory.status == "pending")
+        & or_(ProposedMemory.source_feedback_id.is_not(None), ProposedMemory.source_evaluation_id.is_not(None))
+    )
 
 
 def _evaluation_recommendation_text(evaluation: AgentEvaluation) -> str:

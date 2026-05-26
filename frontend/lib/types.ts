@@ -130,6 +130,16 @@ export interface ProposedMemoryRejection {
   proposed_memory: ProposedMemory;
 }
 
+export interface ProposedMemoryNotificationAgentCount {
+  agent_id: number;
+  count: number;
+}
+
+export interface ProposedMemoryNotificationSummary {
+  total_count: number;
+  by_agent: ProposedMemoryNotificationAgentCount[];
+}
+
 export interface ReflectionResponse {
   run_id: number;
   agent_id: number;

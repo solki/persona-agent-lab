@@ -152,6 +152,70 @@ def test_reflection_creates_pending_proposed_memory_from_feedback(client):
     assert "learning_reflection_created" in event_types
 
 
+def test_proposed_memory_notifications_count_only_pending_feedback_or_evaluation_sources(client):
+    feedback_agent = create_agent(client, "Feedback Notification")
+    evaluation_agent = create_agent(client, "Evaluation Notification")
+    manual_agent = create_agent(client, "Manual Memory No Notification")
+    reviewed_agent = create_agent(client, "Reviewed Notification")
+    feedback_run = create_run(client, feedback_agent)
+    evaluation_run = create_run(client, evaluation_agent)
+    reviewed_run = create_run(client, reviewed_agent)
+
+    feedback = client.post(
+        f"/runs/{feedback_run['id']}/agents/{feedback_agent['id']}/feedback",
+        json={"feedback_text": "Create a feedback-derived proposed memory.", "feedback_type": "improvement"},
+    ).json()
+    evaluation = client.post(
+        f"/runs/{evaluation_run['id']}/agents/{evaluation_agent['id']}/evaluate",
+        json={
+            "evaluator_type": "human",
+            "scores": default_scores(4),
+            "recommendations": {"next": "Create an evaluation-derived proposed memory."},
+        },
+    ).json()
+    reviewed_feedback = client.post(
+        f"/runs/{reviewed_run['id']}/agents/{reviewed_agent['id']}/feedback",
+        json={"feedback_text": "This proposed memory will be reviewed.", "feedback_type": "improvement"},
+    ).json()
+
+    feedback_proposed = client.post(
+        f"/agents/{feedback_agent['id']}/proposed-memories",
+        json={"source_feedback_id": feedback["id"], "content": "Pending feedback source.", "memory_type": "lesson"},
+    ).json()
+    evaluation_proposed = client.post(
+        f"/agents/{evaluation_agent['id']}/proposed-memories",
+        json={"source_evaluation_id": evaluation["id"], "content": "Pending evaluation source.", "memory_type": "lesson"},
+    ).json()
+    approved_proposed = client.post(
+        f"/agents/{reviewed_agent['id']}/proposed-memories",
+        json={"source_feedback_id": reviewed_feedback["id"], "content": "Approved feedback source.", "memory_type": "lesson"},
+    ).json()
+    rejected_proposed = client.post(
+        f"/agents/{reviewed_agent['id']}/proposed-memories",
+        json={"source_feedback_id": reviewed_feedback["id"], "content": "Rejected feedback source.", "memory_type": "lesson"},
+    ).json()
+
+    assert feedback_proposed["status"] == "pending"
+    assert evaluation_proposed["status"] == "pending"
+    assert client.post(f"/agents/{reviewed_agent['id']}/proposed-memories/{approved_proposed['id']}/approve").status_code == 200
+    assert client.post(f"/agents/{reviewed_agent['id']}/proposed-memories/{rejected_proposed['id']}/reject").status_code == 200
+    manual_memory_response = client.post(
+        f"/agents/{manual_agent['id']}/memories",
+        json={"memory_type": "lesson", "content": "Manual pending AgentMemory must not notify.", "status": "pending"},
+    )
+    assert manual_memory_response.status_code == 201
+
+    response = client.get("/proposed-memory-notifications")
+
+    assert response.status_code == 200
+    summary = response.json()
+    assert summary["total_count"] == 2
+    assert summary["by_agent"] == [
+        {"agent_id": feedback_agent["id"], "count": 1},
+        {"agent_id": evaluation_agent["id"], "count": 1},
+    ]
+
+
 def test_proposed_memory_approval_creates_active_agent_memory_and_future_run_retrieves_it(client, db_session):
     agent = create_agent(client, "Approver")
     run = create_run(client, agent)

@@ -11,6 +11,7 @@ from app.schemas.learning import (
     AgentFeedbackRead,
     ProposedMemoryApproveResponse,
     ProposedMemoryCreate,
+    ProposedMemoryNotificationSummary,
     ProposedMemoryRead,
     ProposedMemoryRejectResponse,
     ReflectionRequest,
@@ -65,6 +66,11 @@ def create_agent_feedback(
 def list_agent_feedback(agent_id: int, db: Session = Depends(get_db)):
     require_agent(db, agent_id)
     return learning_service.list_feedback_for_agent(db, agent_id)
+
+
+@router.get("/proposed-memory-notifications", response_model=ProposedMemoryNotificationSummary)
+def proposed_memory_notification_summary(db: Session = Depends(get_db)):
+    return learning_service.proposed_memory_notification_summary(db)
 
 
 @router.post(

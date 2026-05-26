@@ -90,6 +90,16 @@ class ProposedMemoryRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProposedMemoryNotificationAgentCount(BaseModel):
+    agent_id: int
+    count: int
+
+
+class ProposedMemoryNotificationSummary(BaseModel):
+    total_count: int
+    by_agent: list[ProposedMemoryNotificationAgentCount]
+
+
 class ProposedMemoryApproveResponse(BaseModel):
     proposed_memory: ProposedMemoryRead
     agent_memory: AgentMemoryRead

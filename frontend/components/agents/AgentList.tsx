@@ -1,24 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import type { Agent } from "@/lib/types";
+import type { Agent, ProposedMemoryNotificationSummary } from "@/lib/types";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { NotificationBadge, PROPOSED_MEMORY_NOTIFICATION_EVENT } from "@/components/shared/NotificationBadge";
 
 export function AgentList() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [notifications, setNotifications] = useState<ProposedMemoryNotificationSummary>({ total_count: 0, by_agent: [] });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api
-      .listAgents()
-      .then(setAgents)
-      .catch(() => setError("Unable to reach the backend API. Start FastAPI to load agents."))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [agentData, notificationData] = await Promise.all([api.listAgents(), api.getProposedMemoryNotifications()]);
+      setAgents(agentData);
+      setNotifications(notificationData);
+    } catch {
+      setError("Unable to reach the backend API. Start FastAPI to load agents.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+    const refresh = () => void load();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener(PROPOSED_MEMORY_NOTIFICATION_EVENT, refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(PROPOSED_MEMORY_NOTIFICATION_EVENT, refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [load]);
+
+  const notificationCounts = useMemo(
+    () => Object.fromEntries(notifications.by_agent.map((item) => [item.agent_id, item.count])),
+    [notifications]
+  );
 
   return (
     <>
@@ -35,7 +66,10 @@ export function AgentList() {
         {agents.map((agent) => (
           <Link key={agent.id} href={`/agents/${agent.id}`} className="focus-ring rounded border border-line bg-white p-4 hover:border-accent">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold text-ink">{agent.name}</h2>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="break-words text-base font-semibold text-ink">{agent.name}</h2>
+                <NotificationBadge count={notificationCounts[agent.id] ?? 0} />
+              </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <span className={`rounded px-2 py-1 text-xs ${agent.is_active ? "bg-success text-white" : "bg-panel text-slate-600"}`}>
                   {agent.is_active ? "Active" : "Inactive"}

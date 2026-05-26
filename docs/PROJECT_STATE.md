@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after adding run activation for archived runs and guarded permanent delete.
+Last updated after adding feedback-derived proposed-memory approval notifications.
 
 ## Project Purpose
 
@@ -35,7 +35,7 @@ Milestone 10 status: implemented.
 ## Current Frontend Modules
 
 - `app/page.tsx`: Dashboard with navigation cards and isolation summary.
-- `app/agents`: Agent list, create page, edit/detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review, and memory CRUD.
+- `app/agents`: Agent list, create page, edit/detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, feedback-derived proposed-memory approval badges, proposed-memory review, and memory CRUD.
 - `app/souls`: Soul/persona list, create, edit, and delete flows.
 - `app/tools`: Tool registry page with create, edit, delete, config JSON, and active flag controls.
 - `app/workflows`: Workflow list, create/edit pages with name-based agent sequence picker, and workflow run page.
@@ -85,7 +85,7 @@ Milestone 10 status: implemented.
 - Memories: `GET /agents/{agent_id}/memories`, `POST /agents/{agent_id}/memories`, `PUT /agents/{agent_id}/memories/{memory_id}`, `DELETE /agents/{agent_id}/memories/{memory_id}`, `POST /agents/{agent_id}/memories/{memory_id}/approve`, `POST /agents/{agent_id}/memories/{memory_id}/reject`
 - Learning feedback: `POST /runs/{run_id}/agents/{agent_id}/feedback`, `GET /agents/{agent_id}/feedback`
 - Learning evaluations: `POST /runs/{run_id}/agents/{agent_id}/evaluate`, `GET /runs/{run_id}/evaluations`
-- Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
+- Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `GET /proposed-memory-notifications`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
 - Reflection: `POST /runs/{run_id}/agents/{agent_id}/reflect`
 - Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
 - Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `POST /runs/{run_id}/activate`, `DELETE /runs/{run_id}/hard-delete`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
@@ -150,6 +150,7 @@ Milestone 10 status: implemented.
 - Agent create/edit exposes soul selection, active status, provider, free-text model, temperature, max tokens, system prompt, and JSON editors for memory, context, and handoff policies.
 - Policy editors validate JSON before submitting to the backend. Default templates use manual memory review, active context inclusion, and handoff disabled.
 - Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
+- Sidebar Agents, the Agents list, and the Agent detail Proposed Memories section show red approval badges only for pending `ProposedMemory` rows created from feedback or evaluation sources. Manual pending `AgentMemory` rows and reviewed proposed memories do not trigger these badges.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
 - Agents, souls, tools, contexts, memories, workflows, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Mutations show loading states, success/error messages, and refresh or redirect after success.
@@ -163,7 +164,7 @@ Milestone 10 status: implemented.
 - Agent, soul, tool CRUD and agent-tool assignment, including blocked soul deletion and tool assignment cleanup on delete.
 - Agent context CRUD scoped by `agent_id`.
 - Agent memory CRUD scoped by `agent_id`, including approve/reject review flow.
-- Agent feedback, evaluation, reflection, proposed-memory approval/rejection, and cross-agent learning-memory isolation.
+- Agent feedback, evaluation, reflection, proposed-memory approval/rejection, feedback-derived proposed-memory notification counts, and cross-agent learning-memory isolation.
 - Context assembler agent-scoped context and memory injection.
 - Tool Gateway allowed, denied, unknown tool, trace persistence, and Tavily missing API key behavior.
 - Qdrant config loading, empty API key acceptance, collection prefix naming, and `agent_id` requirement.
@@ -173,7 +174,7 @@ Milestone 10 status: implemented.
 - Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records. Run activation restores archived runs to the active list without changing those records. Permanent delete is guarded by backend safety checks.
 - Experiment CRUD and experiment run isolation/comparison behavior.
 - Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
-- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving and activation with learning records, guarded run-delete warnings, monitor collapsed/expanded payloads, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
+- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving and activation with learning records, guarded run-delete warnings, monitor collapsed/expanded payloads, feedback-derived proposed-memory approval badges, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
 
 ## Current Known Limitations
 

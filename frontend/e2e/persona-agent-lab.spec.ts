@@ -294,12 +294,26 @@ test.describe.serial("Persona Agent Lab E2E", () => {
     await learningSection.getByRole("button", { name: "Generate proposed memory" }).click();
     await expect(learningSection).toContainText("pending");
     await expect(learningSection).toContainText("dashboard filters");
-    await learningSection.getByRole("link", { name: "Review on agent page" }).click();
+    await expect(page.getByRole("link", { name: /Agents/ }).getByLabel(/Pending feedback memory approval/)).toBeVisible();
+    await screenshotEvidence(page, "sidebar-agents-feedback-memory-badge");
+
+    await page.goto("/agents");
+    await page.waitForLoadState("networkidle");
+    const troubleshooterCard = page.locator(`a[href="/agents/${scenario.agents.troubleshooter}"]`);
+    await expect(troubleshooterCard.getByRole("heading", { name: names.troubleshooterAgent })).toBeVisible();
+    await expect(troubleshooterCard.getByLabel(/Pending feedback memory approval/)).toBeVisible();
+    await screenshotEvidence(page, "agent-list-feedback-memory-badge");
+
+    await page.goto(`/agents/${scenario.agents.troubleshooter}`);
 
     await expect(page.getByRole("heading", { name: "Proposed Memories" })).toBeVisible();
     const proposedSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Proposed Memories" }) });
+    await expect(proposedSection.getByLabel(/Pending feedback memory approval/)).toBeVisible();
+    await screenshotEvidence(page, "agent-detail-proposed-memory-badge");
     await proposedSection.getByRole("button", { name: "Approve" }).first().click();
     await expect(proposedSection).toContainText("Proposed memory approved and written as active agent memory.");
+    await expect(proposedSection.getByLabel(/Pending feedback memory approval/)).toHaveCount(0);
+    await screenshotEvidence(page, "feedback-memory-badge-removed-after-approval");
 
     const memories = await apiGet<Array<{ content: string; status: string }>>(`/agents/${scenario.agents.troubleshooter}/memories`);
     const approvedMemory = memories.find(

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import type { AgentFeedback, ProposedMemory, Run } from "@/lib/types";
 import { Field, inputClass } from "@/components/shared/Field";
 import { StatusMessage } from "@/components/shared/StatusMessage";
+import { notifyProposedMemoryNotificationsChanged } from "@/components/shared/NotificationBadge";
 
 interface SnapshotAgent {
   id: number;
@@ -59,6 +60,7 @@ export function RunLearningPanel({ run }: RunLearningPanelProps) {
         importance: rating ? Number(rating) * 20 : 70
       });
       setProposedMemory(reflection.proposed_memory);
+      notifyProposedMemoryNotificationsChanged();
       setMessage("Proposed memory generated. Review it on the agent detail page before it affects future runs.");
     } catch {
       setError("Unable to generate a proposed memory from this feedback.");
