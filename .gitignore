@@ -41,6 +41,9 @@ MISC/
 docs/evidence/*.png
 frontend/playwright-report/
 frontend/test-results/
+frontend/playwright-report/
+frontend/test-results/
+frontend/dist/
 
 # Claude Code project settings
 .claude/

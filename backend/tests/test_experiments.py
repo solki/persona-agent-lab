@@ -155,6 +155,44 @@ def test_delete_blocked_when_experiment_has_runs_returns_409(client):
     assert len(runs_after_blocked_delete) > 0
 
 
+def test_archive_and_activate_experiment_with_runs_preserves_related_runs(client):
+    first_agent = create_agent(client, "Archive Experiment Agent A", "ARCHIVE_A")
+    second_agent = create_agent(client, "Archive Experiment Agent B", "ARCHIVE_B")
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "Archivable Experiment",
+            "task_prompt": "Archive after running.",
+            "agent_ids": [first_agent["id"], second_agent["id"]],
+        },
+    ).json()
+    experiment_run = client.post(f"/experiments/{experiment['id']}/run").json()
+
+    archive_response = client.post(f"/experiments/{experiment['id']}/archive")
+
+    assert archive_response.status_code == 200
+    assert archive_response.json()["archived"] is True
+    assert archive_response.json()["archived_at"] is not None
+    assert "preserved" in archive_response.json()["message"]
+
+    default_list = client.get("/experiments").json()
+    assert experiment["id"] not in [item["id"] for item in default_list]
+
+    archived_list = client.get("/experiments?include_archived=true").json()
+    archived = next(item for item in archived_list if item["id"] == experiment["id"])
+    assert archived["archived_at"] is not None
+    for run_id in experiment_run["run_ids"]:
+        assert client.get(f"/runs/{run_id}").status_code == 200
+
+    activate_response = client.post(f"/experiments/{experiment['id']}/activate")
+
+    assert activate_response.status_code == 200
+    assert activate_response.json()["archived"] is False
+    active_list = client.get("/experiments").json()
+    assert experiment["id"] in [item["id"] for item in active_list]
+
+
 def test_force_delete_succeeds_for_experiment_with_runs(client):
     first_agent = create_agent(client, "Force Delete Agent A", "FORCE_A")
     second_agent = create_agent(client, "Force Delete Agent B", "FORCE_B")
@@ -177,4 +215,4 @@ def test_force_delete_succeeds_for_experiment_with_runs(client):
     assert get_response.status_code == 404
 
     runs_response = client.get("/runs")
-    assert len(runs_response.json()) == 2
+    assert len(runs_response.json()) == 0

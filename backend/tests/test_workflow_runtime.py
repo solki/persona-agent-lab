@@ -334,5 +334,5 @@ def test_workflow_delete_is_blocked_while_runs_exist(client):
     delete_response = client.delete(f"/workflows/{workflow['id']}")
 
     assert delete_response.status_code == 409
-    assert "Delete this workflow's runs" in delete_response.json()["detail"]
+    assert "Deactivate this workflow" in delete_response.json()["detail"]
     assert client.get(f"/workflows/{workflow['id']}").status_code == 200

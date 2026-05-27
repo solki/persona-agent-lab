@@ -12,10 +12,12 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL,
-    trace: "on-first-retry"
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: "retain-on-failure"
   },
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+    command: "npm run dev",
     url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000
@@ -25,5 +27,6 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] }
     }
-  ]
+  ],
+  outputDir: "test-results"
 });

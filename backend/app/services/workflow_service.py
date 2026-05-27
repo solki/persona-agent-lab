@@ -34,6 +34,6 @@ def update_workflow(db: Session, workflow: Workflow, payload: WorkflowUpdate) ->
 
 def delete_workflow(db: Session, workflow: Workflow) -> None:
     if db.scalar(select(exists().where(Run.workflow_id == workflow.id))):
-        raise ValueError("Delete this workflow's runs before deleting the workflow.")
+        raise ValueError("Deactivate this workflow instead. It has historical runs that should remain inspectable.")
     db.delete(workflow)
     db.commit()

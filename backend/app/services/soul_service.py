@@ -34,6 +34,6 @@ def update_soul(db: Session, soul: Soul, payload: SoulUpdate) -> Soul:
 
 def delete_soul(db: Session, soul: Soul) -> None:
     if db.scalar(select(exists().where(Agent.soul_id == soul.id))):
-        raise ValueError("Reassign or delete agents that use this soul before deleting it.")
+        raise ValueError("Deactivate this soul instead. It is still referenced by one or more agents.")
     db.delete(soul)
     db.commit()

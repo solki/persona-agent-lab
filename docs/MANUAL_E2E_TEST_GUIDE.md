@@ -254,6 +254,7 @@ Expected result:
 
 - The tool appears in the assigned tools list for this agent.
 - Other agents do not automatically receive the tool.
+- Removing a tool-assignment relationship is labeled **Unassign**. It removes only the assignment and does not delete the agent or tool.
 
 ### J. Create Workflow Using Agent Picker
 
@@ -691,10 +692,10 @@ Permanent run delete is blocked:
 - Symptom: the Runs page opens a warning dialog after selecting **Delete permanently**.
 - Fix: keep the run archived. Runs with feedback, evaluations, learning events, or experiment result references are protected so learning history is not broken.
 
-Soul or workflow delete is blocked:
+Configuration delete is blocked:
 
-- Symptom: a delete confirmation closes and the page shows a message such as "Reassign or delete agents" or "Delete this workflow's runs".
-- Fix: this is expected safety behavior. Reassign/delete dependent agents, or delete related runs first, then retry.
+- Symptom: a delete confirmation closes and the page shows a warning such as "Deactivate this soul", "Unassign or deactivate this tool", or "Deactivate this workflow".
+- Fix: this is expected safety behavior. Use **Deactivate** for referenced reusable configuration, or use **Unassign** for relationship rows such as agent-tool assignments.
 
 Provider configuration error:
 
@@ -765,7 +766,18 @@ Inactive agent selected:
 	- [ ] Experiment without runs is deleted successfully after confirmation.
 	- [ ] Experiment with runs is blocked from deletion with a readable error.
 
-## 10. Current Limitations
+## 10. CRUD Cleanup Policy
+
+Use these meanings consistently when manually testing either frontend:
+
+- **Delete** permanently removes an unused record. If backend safety checks reject the delete, the UI should show the backend warning instead of failing silently.
+- **Archive** hides runtime or historical records from default lists while preserving evidence and learning history.
+- **Deactivate** keeps reusable configuration records such as agents, souls, tools, and workflows, but prevents treating them as active configuration.
+- **Unassign** removes a relationship such as an agent-tool assignment. It does not delete either side of the relationship.
+
+Experiments and runs should not create circular cleanup instructions. Archive experiments with related runs; archive runs with learning records. Related traces, feedback, proposed memories, approved memories, learning events, agents, workflows, souls, tools, and contexts should remain inspectable.
+
+## 11. Current Limitations
 
 - Sequential workflow is the primary supported runtime. Supervisor and handoff swarm workflow types are placeholders.
 - Mock provider output is deterministic and simplified; it proves wiring and context injection rather than production-quality reasoning.

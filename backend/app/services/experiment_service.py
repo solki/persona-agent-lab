@@ -1,15 +1,23 @@
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
 from app.models.experiment import Experiment, ExperimentRun
+from app.models.learning import AgentEvaluation, AgentFeedback
+from app.models.observatory import AgentExecution, AgentExecutionEvent, LearningEvent, TokenUsage
+from app.models.run import Run, TraceEvent
 from app.models.workflow import Workflow
 from app.runtime.workflow_runner import WorkflowRunner
 from app.schemas.experiments import ExperimentCreate
 
 
-def list_experiments(db: Session) -> list[Experiment]:
-    return list(db.scalars(select(Experiment).order_by(Experiment.id)).all())
+def list_experiments(db: Session, include_archived: bool = False) -> list[Experiment]:
+    statement = select(Experiment)
+    if not include_archived:
+        statement = statement.where(Experiment.archived_at.is_(None))
+    return list(db.scalars(statement.order_by(Experiment.id)).all())
 
 
 def get_experiment(db: Session, experiment_id: int) -> Experiment:
@@ -24,6 +32,21 @@ def create_experiment(db: Session, payload: ExperimentCreate) -> Experiment:
     return experiment
 
 
+def archive_experiment(db: Session, experiment: Experiment) -> Experiment:
+    if experiment.archived_at is None:
+        experiment.archived_at = datetime.utcnow()
+    db.commit()
+    db.refresh(experiment)
+    return experiment
+
+
+def activate_experiment(db: Session, experiment: Experiment) -> Experiment:
+    experiment.archived_at = None
+    db.commit()
+    db.refresh(experiment)
+    return experiment
+
+
 def delete_experiment(db: Session, experiment: Experiment, force: bool = False) -> dict:
     experiment_runs = db.scalars(
         select(ExperimentRun).where(ExperimentRun.experiment_id == experiment.id)
@@ -31,8 +54,35 @@ def delete_experiment(db: Session, experiment: Experiment, force: bool = False) 
 
     if experiment_runs:
         if force:
-            for er in experiment_runs:
-                db.delete(er)
+            all_run_ids = sorted({rid for er in experiment_runs for rid in (er.run_ids or [])})
+            db.execute(delete(ExperimentRun).where(ExperimentRun.experiment_id == experiment.id))
+            db.flush()
+
+            for run_id in all_run_ids:
+                run = db.get(Run, run_id)
+                if run is None:
+                    continue
+
+                has_feedback = db.scalar(
+                    select(AgentFeedback.id).where(AgentFeedback.run_id == run_id).limit(1)
+                ) is not None
+                has_evaluations = db.scalar(
+                    select(AgentEvaluation.id).where(AgentEvaluation.run_id == run_id).limit(1)
+                ) is not None
+                has_learning = db.scalar(
+                    select(LearningEvent.id).where(LearningEvent.run_id == run_id).limit(1)
+                ) is not None
+
+                if has_feedback or has_evaluations or has_learning:
+                    if run.status != "archived":
+                        run.status = "archived"
+                        run.archived_at = datetime.utcnow()
+                else:
+                    db.execute(delete(TokenUsage).where(TokenUsage.run_id == run_id))
+                    db.execute(delete(AgentExecutionEvent).where(AgentExecutionEvent.run_id == run_id))
+                    db.execute(delete(AgentExecution).where(AgentExecution.run_id == run_id))
+                    db.execute(delete(TraceEvent).where(TraceEvent.run_id == run_id))
+                    db.delete(run)
         else:
             run_ids = sorted({rid for er in experiment_runs for rid in (er.run_ids or [])})
             return {
@@ -44,10 +94,10 @@ def delete_experiment(db: Session, experiment: Experiment, force: bool = False) 
                 "run_ids": run_ids,
                 "message": (
                     f"Cannot safely delete experiment '{experiment.name}' because it has "
-                    f"{len(experiment_runs)} experiment run(s). The underlying workflow runs "
-                    f"(ids {run_ids}) and all their traces, feedback, and learning records are preserved. "
-                    "Force-delete will remove the experiment and its run link records only — "
-                    "workflow runs and learning data will not be affected."
+                    f"{len(experiment_runs)} experiment run(s) with underlying workflow runs "
+                    f"(ids {run_ids}). Force-delete will remove the experiment, its run links, "
+                    "and any underlying workflow runs that have no associated feedback, "
+                    "evaluations, or learning events. Runs with learning data will be archived instead."
                 ),
             }
 
