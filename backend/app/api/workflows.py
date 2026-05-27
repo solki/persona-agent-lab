@@ -55,6 +55,8 @@ def run_workflow(workflow_id: int, payload: WorkflowRunRequest, db: Session = De
         return WorkflowRunner(db).run(workflow, payload.task)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
 
 @router.post("/{workflow_id}/run-async", response_model=RunRead, status_code=status.HTTP_201_CREATED)

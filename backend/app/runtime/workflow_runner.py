@@ -21,7 +21,11 @@ class WorkflowRunner:
 
     def run(self, workflow: Workflow, task: str) -> Run:
         run = self.start(workflow, task)
-        return self.execute_run(run.id)
+        try:
+            return self.execute_run(run.id)
+        except Exception as exc:
+            self.fail_run(run.id, str(exc))
+            raise
 
     def start(self, workflow: Workflow, task: str) -> Run:
         if workflow.workflow_type != "sequential":

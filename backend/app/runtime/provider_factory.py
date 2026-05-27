@@ -26,13 +26,12 @@ def _create_openai_compatible_provider(settings: Settings) -> OpenAICompatiblePr
         raise ProviderConfigurationError("OPENAI_COMPATIBLE_API_KEY is required when LLM_PROVIDER=openai_compatible.")
     if not settings.openai_compatible_base_url:
         raise ProviderConfigurationError("OPENAI_COMPATIBLE_BASE_URL is required when LLM_PROVIDER=openai_compatible.")
-    if not settings.openai_compatible_model:
-        raise ProviderConfigurationError("OPENAI_COMPATIBLE_MODEL is required when LLM_PROVIDER=openai_compatible.")
 
     return OpenAICompatibleProvider(
         api_key=settings.openai_compatible_api_key,
         base_url=settings.openai_compatible_base_url,
-        model=settings.openai_compatible_model,
+        model=settings.openai_compatible_model or "",
         provider_name=settings.openai_compatible_provider_name,
+        timeout=float(settings.llm_timeout_seconds),
     )
 
