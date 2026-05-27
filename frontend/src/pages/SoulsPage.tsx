@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FieldHelp } from "@/components/shared/FieldHelp";
 import { FormField } from "@/components/shared/FormField";
 import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -248,19 +249,19 @@ export function SoulFormPage() {
         <FormField label="Description">
           <Textarea {...form.register("description")} />
         </FormField>
-        <FormField label="Principles">
+        <FormField label="Principles" help={<FieldHelp pattern="tooltip" content="Core behavioral rules the agent should follow. Examples: 'Always cite sources', 'Prefer conciseness', 'Ask clarifying questions before acting'. These are injected as persona guidance, not system-level constraints." />}>
           <Textarea {...form.register("principles")} />
         </FormField>
-        <FormField label="Decision style">
+        <FormField label="Decision style" help={<FieldHelp pattern="tooltip" content="How the agent approaches decisions. Examples: 'Weigh pros and cons explicitly', 'Default to the simplest option', 'Request human input when confidence is below 70%'. Affects tone of reasoning, not tool access." />}>
           <Textarea {...form.register("decision_style")} />
         </FormField>
-        <FormField label="Collaboration style">
+        <FormField label="Collaboration style" help={<FieldHelp pattern="tooltip" content="How the agent interacts with other agents during handoffs or multi-agent workflows. Examples: 'Provide full context on handoff', 'Summarize only key findings', 'Escalate when blocked for more than 2 attempts'." />}>
           <Textarea {...form.register("collaboration_style")} />
         </FormField>
-        <FormField label="Failure handling style">
+        <FormField label="Failure handling style" help={<FieldHelp pattern="tooltip" content="How the agent responds to errors or blocked tasks. Examples: 'Retry up to 3 times with different approaches', 'Log failure and escalate immediately', 'Attempt fallback tool before giving up'." />}>
           <Textarea {...form.register("failure_handling_style")} />
         </FormField>
-        <FormField label="Escalation style">
+        <FormField label="Escalation style" help={<FieldHelp pattern="tooltip" content="When and how the agent escalates to a human or supervisor agent. Examples: 'Escalate when user safety is at risk', 'Escalate after 2 consecutive tool failures', 'Never escalate - handle all errors internally'." />}>
           <Textarea {...form.register("escalation_style")} />
         </FormField>
         <label className="flex items-center gap-2 text-sm">

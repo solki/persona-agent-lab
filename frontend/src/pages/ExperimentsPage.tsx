@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FieldHelp } from "@/components/shared/FieldHelp";
 import { FormField } from "@/components/shared/FormField";
 import { JsonCollapse } from "@/components/shared/JsonCollapse";
 import { NoticeDialog } from "@/components/shared/NoticeDialog";
@@ -317,7 +318,7 @@ export function ExperimentFormPage() {
                 {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Selected: {selectedAgentIds.map((agentId) => agentById[agentId] ?? `Agent ${agentId}`).join(", ")}</p> : null}
               </div>
               <div className="lg:col-span-2"><FormField label="Task prompt" error={form.formState.errors.task_prompt?.message}><Textarea rows={7} {...form.register("task_prompt")} disabled={Boolean(experimentId)} /></FormField></div>
-              <div className="lg:col-span-2"><FormField label="Evaluation config JSON"><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId)} /></FormField></div>
+              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation rubric" content="Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5. Additional keys may be added for custom evaluators." />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId)} /></FormField></div>
               <div className="flex items-end gap-2">
                 {!experimentId ? <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : "Save experiment"}</Button> : null}
                 <Link to="/experiments"><Button type="button" variant="outline">Back to experiments</Button></Link>

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FieldHelp } from "@/components/shared/FieldHelp";
 import { FormField } from "@/components/shared/FormField";
 import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -336,13 +337,13 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
                   {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
                 </Select>
               </FormField>
-              <FormField label="Model">
+              <FormField label="Model" help={<FieldHelp pattern="tooltip" content="Model identifier for the selected provider. For mock: use mock-deterministic. For Ollama: use the model tag (e.g. llama3:8b). For OpenAI-compatible: use the API model name." />}>
                 <Input {...form.register("model")} />
               </FormField>
-              <FormField label="Temperature">
+              <FormField label="Temperature" help={<FieldHelp pattern="tooltip" content="Controls output randomness. 0 = deterministic, predictable responses. 1 = balanced creativity. 2 = maximum variability. Lower values are safer for task-execution agents." />}>
                 <Input type="number" step="0.1" {...form.register("temperature")} />
               </FormField>
-              <FormField label="Max tokens">
+              <FormField label="Max tokens" help={<FieldHelp pattern="tooltip" content="Maximum tokens the agent can generate in a single response. Higher values allow longer outputs but increase cost and latency. 1024-4096 is typical for task agents." />}>
                 <Input type="number" {...form.register("max_tokens")} />
               </FormField>
               <FormField label="System prompt">
@@ -355,13 +356,13 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
                 </label>
                 {agent ? <StatusBadge status={agent.is_active ? "active" : "inactive"} /> : null}
               </div>
-              <FormField label="Memory policy JSON">
+              <FormField label="Memory policy JSON" help={<FieldHelp pattern="popover" title="Memory policy" content={'Controls how the agent manages memory.\n\nwrite_mode:\n- "manual_review" — proposed memories need approval\n- "auto" — auto-save memories\n- "off" — memory disabled\n\nretrieval_enabled: whether the agent can recall past memories at runtime.'} />}>
                 <Textarea className="font-mono" rows={6} {...form.register("memoryPolicyJson")} />
               </FormField>
-              <FormField label="Context policy JSON">
+              <FormField label="Context policy JSON" help={<FieldHelp pattern="popover" title="Context policy" content="Controls which context entries are assembled at runtime.\n\ninclude_active_context: when true, all active context entries for this agent are included in the prompt.\n\nFuture: filter by type, priority threshold, etc." />}>
                 <Textarea className="font-mono" rows={6} {...form.register("contextPolicyJson")} />
               </FormField>
-              <FormField label="Handoff policy JSON">
+              <FormField label="Handoff policy JSON" help={<FieldHelp pattern="popover" title="Handoff policy" content="Controls whether and how this agent can hand off to other agents.\n\nallow_handoff: enable/disable handoffs.\n\nallowed_agent_ids: list of agent IDs this agent may transfer to. An empty list with allow_handoff: false means no handoffs are permitted." />}>
                 <Textarea className="font-mono" rows={6} {...form.register("handoffPolicyJson")} />
               </FormField>
               <div className="flex items-end gap-2">
@@ -455,8 +456,8 @@ function ContextManager({ agentId }: { agentId: number }) {
         {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
         <form className="grid gap-3 lg:grid-cols-2" onSubmit={form.handleSubmit(submit)}>
           <FormField label="Title"><Input {...form.register("title", { required: true })} /></FormField>
-          <FormField label="Type"><Input {...form.register("context_type", { required: true })} /></FormField>
-          <FormField label="Priority"><Input type="number" {...form.register("priority", { valueAsNumber: true })} /></FormField>
+          <FormField label="Type" help={<FieldHelp pattern="tooltip" content="Context category. Common types: note (general information), procedure (step-by-step instructions), policy (rules or constraints), reference (external documentation). Used for filtering during context assembly." />}><Input {...form.register("context_type", { required: true })} /></FormField>
+          <FormField label="Priority" help={<FieldHelp pattern="tooltip" content="Retrieval priority. Higher values = more important. When context space is limited, lower-priority entries may be omitted. Typical range: 1 (lowest) to 100 (highest). Default: 100." />}><Input type="number" {...form.register("priority", { valueAsNumber: true })} /></FormField>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...form.register("is_active")} /> Active</label>
           <div className="lg:col-span-2"><FormField label="Content"><Textarea {...form.register("content", { required: true })} /></FormField></div>
           <div className="flex gap-2"><Button type="submit">{editing ? "Save context" : "Add context"}</Button>{editing ? <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button> : null}</div>
@@ -572,9 +573,9 @@ function MemoryManager({ agentId }: { agentId: number }) {
         {message ? <Alert title="Memory" tone="success">{message}</Alert> : null}
         {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
         <form className="grid gap-3 lg:grid-cols-2" onSubmit={form.handleSubmit(submit)}>
-          <FormField label="Type"><Input {...form.register("memory_type", { required: true })} /></FormField>
+          <FormField label="Type" help={<FieldHelp pattern="tooltip" content="Memory category. Common types: lesson (learned from feedback), fact (observed information), preference (user or agent preference), procedure (how to accomplish something). Affects retrieval filtering." />}><Input {...form.register("memory_type", { required: true })} /></FormField>
           <FormField label="Source"><Input {...form.register("source")} /></FormField>
-          <FormField label="Importance"><Input type="number" {...form.register("importance", { valueAsNumber: true })} /></FormField>
+          <FormField label="Importance" help={<FieldHelp pattern="tooltip" content="Retrieval importance. 0 = least important (rarely recalled). 100 = most important (always recalled when relevant). Affects ranking in memory retrieval. Default: 50." />}><Input type="number" {...form.register("importance", { valueAsNumber: true })} /></FormField>
           <FormField label="Status"><Select {...form.register("status")}><option value="pending">pending</option><option value="active">active</option><option value="rejected">rejected</option><option value="archived">archived</option></Select></FormField>
           <div className="lg:col-span-2"><FormField label="Content"><Textarea {...form.register("content", { required: true })} /></FormField></div>
           <div className="flex gap-2"><Button type="submit">{editing ? "Save memory" : "Add memory"}</Button>{editing ? <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button> : null}</div>
