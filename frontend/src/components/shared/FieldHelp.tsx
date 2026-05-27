@@ -35,7 +35,7 @@ export function FieldHelp({ pattern, content, title }: FieldHelpProps) {
         <CircleHelp size={14} className="text-muted-foreground group-hover:text-amber-400 transition-colors cursor-help" />
         <span
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-64 rounded-md border border-border bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-50"
+          className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-64 rounded-md border border-border bg-panel px-3 py-2 text-xs leading-relaxed text-foreground shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-50"
         >
           {content}
         </span>
@@ -57,10 +57,10 @@ export function FieldHelp({ pattern, content, title }: FieldHelpProps) {
       {open ? (
         <span
           role="dialog"
-          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-72 rounded-md border border-border bg-popover px-3 py-2.5 shadow-md z-50"
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-72 rounded-md border border-border bg-panel px-3 py-2.5 shadow-md z-50"
         >
           {title ? <p className="mb-1 text-xs font-semibold text-foreground">{title}</p> : null}
-          <p className="text-xs leading-relaxed text-popover-foreground whitespace-pre-wrap">{content}</p>
+          <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">{content}</p>
         </span>
       ) : null}
     </span>
