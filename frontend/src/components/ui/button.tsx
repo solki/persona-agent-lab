@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils";
 type ButtonVariant = "default" | "secondary" | "outline" | "destructive" | "ghost";
 
 const variants: Record<ButtonVariant, string> = {
-  default: "bg-primary text-primary-foreground hover:bg-primary/90",
-  secondary: "bg-muted text-foreground hover:bg-muted/80",
-  outline: "border border-border bg-white hover:bg-muted",
-  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-  ghost: "hover:bg-muted"
+  default: "bg-primary text-primary-foreground hover:bg-primary/85 shadow-sm",
+  secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+  outline: "border border-border bg-transparent hover:bg-panel-hover text-foreground",
+  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/85 shadow-sm",
+  ghost: "text-muted-foreground hover:bg-panel-hover hover:text-foreground"
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -21,9 +21,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        "focus-ring inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50",
+        "focus-ring inline-flex items-center justify-center gap-2 rounded-sm text-sm font-medium transition disabled:pointer-events-none disabled:opacity-40",
         variants[variant],
-        size === "sm" ? "h-8 px-3" : "h-10 px-4",
+        size === "sm" ? "h-8 px-3 text-xs" : "h-10 px-4",
         className
       )}
       {...props}

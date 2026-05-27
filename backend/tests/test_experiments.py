@@ -215,4 +215,4 @@ def test_force_delete_succeeds_for_experiment_with_runs(client):
     assert get_response.status_code == 404
 
     runs_response = client.get("/runs")
-    assert len(runs_response.json()) == 2
+    assert len(runs_response.json()) == 0

@@ -10,10 +10,10 @@ export function FormField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block space-y-1">
+    <label className="block space-y-1.5">
       <Label>{label}</Label>
       {children}
-      {error ? <p className="text-xs text-rose-700">{error}</p> : null}
+      {error ? <p className="font-mono text-[11px] text-destructive">{error}</p> : null}
     </label>
   );
 }

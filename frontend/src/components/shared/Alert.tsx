@@ -5,13 +5,13 @@ export function Alert({ title, children, tone = "info" }: { title: string; child
     <div
       role={tone === "error" ? "alert" : "status"}
       className={cn(
-        "rounded-md border p-3 text-sm",
-        tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : null,
-        tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : null,
-        tone === "info" ? "border-blue-200 bg-blue-50 text-blue-800" : null
+        "rounded-sm border p-3 text-sm",
+        tone === "error" && "border-rose-500/30 bg-rose-950/30 text-rose-300",
+        tone === "success" && "border-emerald-500/30 bg-emerald-950/30 text-emerald-300",
+        tone === "info" && "border-blue-500/30 bg-blue-950/30 text-blue-300"
       )}
     >
-      <strong className="block font-semibold">{title}</strong>
+      <strong className="block font-mono text-xs font-medium uppercase tracking-wider">{title}</strong>
       <div className="mt-1">{children}</div>
     </div>
   );

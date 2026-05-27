@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Agent, Experiment } from "@/lib/types";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
@@ -47,6 +47,7 @@ export function ExperimentsPage() {
   const [message, setMessage] = useState("");
   const [pendingAction, setPendingAction] = useState<{ experiment: Experiment; action: "archive" | "activate" | "delete" } | null>(null);
   const [safetyWarning, setSafetyWarning] = useState("");
+  const [forceDeleteTarget, setForceDeleteTarget] = useState<Experiment | null>(null);
   const [working, setWorking] = useState(false);
 
   async function load() {
@@ -97,9 +98,38 @@ export function ExperimentsPage() {
       await load();
     } catch (actionError) {
       const messageText = actionError instanceof Error ? actionError.message : "Unable to update experiment.";
+      const isDeleteBlocked = actionError instanceof ApiError && actionError.status === 409 && pendingAction.action === "delete";
+      if (isDeleteBlocked) {
+        setSafetyWarning(messageText);
+        setForceDeleteTarget(pendingAction.experiment);
+        setError("");
+      } else {
+        setError(messageText);
+        setSafetyWarning(messageText);
+      }
+      setPendingAction(null);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function applyForceDelete() {
+    if (!forceDeleteTarget) {
+      return;
+    }
+    setWorking(true);
+    setError("");
+    try {
+      await api.deleteExperiment(forceDeleteTarget.id, true);
+      setMessage("Experiment and linked runs deleted.");
+      setSafetyWarning("");
+      setForceDeleteTarget(null);
+      await load();
+    } catch (actionError) {
+      const messageText = actionError instanceof Error ? actionError.message : "Unable to force-delete experiment.";
       setError(messageText);
       setSafetyWarning(messageText);
-      setPendingAction(null);
+      setForceDeleteTarget(null);
     } finally {
       setWorking(false);
     }
@@ -158,7 +188,7 @@ export function ExperimentsPage() {
             ? "This returns the experiment to the active list without changing related runs."
             : pendingAction?.action === "archive"
               ? "This hides the experiment from the active list while preserving related runs, traces, feedback, and learning records."
-              : "This permanently deletes the archived experiment only if backend safety checks allow it. Related workflow runs are preserved."
+              : "Permanently deletes the experiment. If linked runs block deletion, you will be offered a force-delete option that also removes the linked workflow runs."
         }
         confirmLabel={pendingAction?.action === "activate" ? "Activate experiment" : pendingAction?.action === "archive" ? "Archive experiment" : "Delete experiment"}
         destructive={pendingAction?.action !== "activate"}
@@ -166,7 +196,15 @@ export function ExperimentsPage() {
         onCancel={() => setPendingAction(null)}
         onConfirm={applyAction}
       />
-      <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
+      <NoticeDialog
+        open={Boolean(safetyWarning)}
+        title="Action blocked"
+        description={safetyWarning}
+        actionLabel={forceDeleteTarget ? "Force Delete" : undefined}
+        loading={working}
+        onAction={forceDeleteTarget ? () => void applyForceDelete() : undefined}
+        onClose={() => { setSafetyWarning(""); setForceDeleteTarget(null); }}
+      />
     </>
   );
 }

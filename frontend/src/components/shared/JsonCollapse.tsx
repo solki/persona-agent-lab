@@ -7,22 +7,22 @@ export function JsonCollapse({ title, value, defaultOpen = false }: { title: str
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-sm border border-border bg-panel">
       <button
         type="button"
-        className="focus-ring flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm font-medium"
+        className="focus-ring flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left font-mono text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
-          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <span className="truncate">{title}</span>
         </span>
-        <span className="text-xs text-muted-foreground">{open ? "Collapse" : "Expand"}</span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">{open ? "Collapse" : "Expand"}</span>
       </button>
       {open ? (
         <div className="border-t border-border p-3">
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-3 text-xs text-slate-100">{prettyJson(value)}</pre>
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-background p-3 font-mono text-xs text-foreground/80">{prettyJson(value)}</pre>
         </div>
       ) : null}
     </div>

@@ -75,4 +75,7 @@ def _assert_hard_delete_allowed(db: Session, run: Run) -> None:
         raise RunHardDeleteBlocked("This run has learning events and cannot be permanently deleted. Keep it archived to preserve learning history.")
     experiment_runs = db.scalars(select(ExperimentRun)).all()
     if any(run.id in (experiment_run.run_ids or []) for experiment_run in experiment_runs):
-        raise RunHardDeleteBlocked("This run belongs to an experiment result and cannot be permanently deleted.")
+        raise RunHardDeleteBlocked(
+            "This run belongs to an experiment result and cannot be permanently deleted. "
+            "Delete the parent experiment with force=true to remove this run and its experiment link."
+        )

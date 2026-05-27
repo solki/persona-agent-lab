@@ -1,4 +1,4 @@
-import { Bot, Brain, FlaskConical, Hammer, History, Home, Network, Users } from "lucide-react";
+import { Beaker, Bot, Brain, FlaskConical, Hammer, History, Home, Network, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -14,18 +14,28 @@ const nav = [
 
 export function AppLayout() {
   return (
-    <div className="min-h-screen">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-white px-4 py-5 lg:block">
-        <div className="mb-8 flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
-            <Bot size={22} />
-          </span>
-          <span>
-            <strong className="block text-base">Persona Agent Lab</strong>
-            <span className="text-xs text-muted-foreground">Agent Swarm Lab</span>
-          </span>
+    <div className="min-h-screen bg-background">
+      {/* Sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 border-r border-border bg-panel lg:block">
+        {/* Brand */}
+        <div className="border-b border-border px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-sm bg-primary text-primary-foreground">
+              <Beaker size={19} strokeWidth={2} />
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate font-mono text-sm font-medium tracking-tight text-foreground">
+                Agent Swarm Lab
+              </h1>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Observatory
+              </p>
+            </div>
+          </div>
         </div>
-        <nav className="space-y-1">
+
+        {/* Navigation */}
+        <nav className="space-y-0.5 px-3 py-4">
           {nav.map((item) => {
             const Icon = item.icon;
             return (
@@ -35,20 +45,36 @@ export function AppLayout() {
                 end={item.href === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "focus-ring flex items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-muted",
-                    isActive ? "bg-muted font-medium text-foreground" : null
+                    "group flex items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary border-l-2 border-primary -ml-[2px]"
+                      : "text-muted-foreground hover:bg-panel-hover hover:text-foreground border-l-2 border-transparent"
                   )
                 }
               >
-                <Icon size={17} />
-                {item.label}
+                <Icon size={16} strokeWidth={1.5} className={cn("shrink-0")} />
+                <span className="font-medium">{item.label}</span>
+                {item.label === "Agents" ? (
+                  <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                    <Bot size={12} className="inline" />
+                  </span>
+                ) : null}
               </NavLink>
             );
           })}
         </nav>
+
+        {/* Footer */}
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border px-5 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            v0.1.0 &middot; Swarm
+          </p>
+        </div>
       </aside>
-      <main className="lg:pl-64">
-        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+
+      {/* Main content */}
+      <main className="lg:pl-60">
+        <div className="mx-auto w-full max-w-6xl px-5 py-6 sm:px-8">
           <Outlet />
         </div>
       </main>

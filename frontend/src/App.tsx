@@ -52,9 +52,9 @@ export function App() {
 function Overview() {
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Frontend v2 PoC</h1>
+      <h1 className="font-mono text-xl font-medium tracking-tight">Agent Swarm Lab</h1>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-        A refine + shadcn/ui prototype for validating more consistent CRUD, safer destructive actions, and easier iteration for Persona Agent Lab.
+        Observatory for managing personas, agents, tools, workflows, runs, and experiments across the agent swarm.
       </p>
       <div className="mt-6 grid gap-3 md:grid-cols-2">
         {[
@@ -65,8 +65,8 @@ function Overview() {
           ["Runs", "Inspect run history, trace payloads, monitor events, and archive state."],
           ["Experiments", "Compare agents while preserving related run history."]
         ].map(([title, body]) => (
-          <div key={title} className="rounded-md border border-border bg-white p-4">
-            <h2 className="font-semibold">{title}</h2>
+          <div key={title} className="rounded-sm border border-border bg-panel p-4 hover:bg-panel-hover transition-colors">
+            <h2 className="font-mono text-sm font-medium">{title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{body}</p>
           </div>
         ))}
