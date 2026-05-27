@@ -116,7 +116,7 @@ export function AgentsPage() {
     }
   }
 
-  const soulById = useMemo(() => Object.fromEntries(souls.map((soul) => [soul.id, soul.name])), [souls]);
+  const soulById = useMemo(() => Object.fromEntries(souls.map((soul) => [soul.id, soul])), [souls]);
 
   return (
     <>
@@ -141,7 +141,12 @@ export function AgentsPage() {
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{agent.description || agent.role}</p>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {agent.llm_provider}:{agent.model} · Soul: {agent.soul_id ? soulById[agent.soul_id] ?? `#${agent.soul_id}` : "None"}
+                  {agent.llm_provider}:{agent.model} · Soul:{" "}
+                  {agent.soul_id && soulById[agent.soul_id]
+                    ? `${soulById[agent.soul_id].name}${soulById[agent.soul_id].is_active ? "" : " (inactive)"}`
+                    : agent.soul_id
+                      ? `#${agent.soul_id}`
+                      : "None"}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -295,9 +300,11 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
               <FormField label="Soul">
                 <Select {...form.register("soul_id")}>
                   <option value="">No soul</option>
-                  {souls.map((soul) => (
-                    <option key={soul.id} value={soul.id}>{soul.name}</option>
-                  ))}
+                  {souls
+                    .filter((soul) => soul.is_active || soul.id === agent?.soul_id)
+                    .map((soul) => (
+                      <option key={soul.id} value={soul.id}>{soul.name}{soul.is_active ? "" : " (inactive)"}</option>
+                    ))}
                 </Select>
               </FormField>
               <FormField label="Provider">
@@ -609,7 +616,7 @@ function ToolAssignmentManager({ agentId }: { agentId: number }) {
   }, [load]);
 
   const assignedIds = useMemo(() => new Set(assignedTools.map((tool) => tool.id)), [assignedTools]);
-  const availableTools = tools.filter((tool) => !assignedIds.has(tool.id));
+  const availableTools = tools.filter((tool) => !assignedIds.has(tool.id) && tool.is_active);
 
   async function assignTool() {
     if (!selectedToolId) {

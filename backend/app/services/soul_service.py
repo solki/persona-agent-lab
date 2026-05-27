@@ -33,7 +33,11 @@ def update_soul(db: Session, soul: Soul, payload: SoulUpdate) -> Soul:
 
 
 def delete_soul(db: Session, soul: Soul) -> None:
-    if db.scalar(select(exists().where(Agent.soul_id == soul.id))):
-        raise ValueError("Deactivate this soul instead. It is still referenced by one or more agents.")
+    if soul.is_active:
+        raise ValueError("Deactivate this soul before deleting it. Active souls cannot be directly deleted.")
+    agents = db.scalars(select(Agent).where(Agent.soul_id == soul.id)).all()
+    if agents:
+        names = ", ".join(a.name for a in agents)
+        raise ValueError(f"This soul is linked to {len(agents)} agent(s): {names}. Reassign or remove the soul from those agents before deleting.")
     db.delete(soul)
     db.commit()

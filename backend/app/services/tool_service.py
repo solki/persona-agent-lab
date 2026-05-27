@@ -31,8 +31,13 @@ def update_tool(db: Session, tool: Tool, payload: ToolUpdate) -> Tool:
     return tool
 
 
-def delete_tool(db: Session, tool: Tool) -> None:
-    if db.scalar(select(exists().where(AgentTool.c.tool_id == tool.id))):
-        raise ValueError("Unassign or deactivate this tool instead. It is still assigned to one or more agents.")
+def delete_tool(db: Session, tool: Tool, force: bool = False) -> None:
+    if tool.is_active:
+        raise ValueError("Deactivate this tool before deleting it. Active tools cannot be directly deleted.")
+    assigned = db.scalar(select(exists().where(AgentTool.c.tool_id == tool.id)))
+    if assigned:
+        if not force:
+            raise ValueError("This tool is still assigned to one or more agents. Use force delete to remove assignments and delete.")
+        db.execute(AgentTool.delete().where(AgentTool.c.tool_id == tool.id))
     db.delete(tool)
     db.commit()

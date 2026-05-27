@@ -31,7 +31,10 @@ test.describe.serial("Frontend", () => {
     await page.goto("/souls");
     const card = cardWithText(page, name);
     await expect(card).toContainText("Edited by Playwright.");
-    await card.getByRole("button", { name: "Delete" }).click();
+    await card.getByRole("button", { name: "Deactivate" }).click();
+    await page.getByRole("button", { name: "Deactivate soul" }).click();
+    await expect(page.getByText("Soul deactivated.")).toBeVisible();
+    await cardWithText(page, name).getByRole("button", { name: "Delete" }).click();
     await expect(page.getByRole("dialog", { name: "Delete soul?" })).toBeVisible();
     await page.getByRole("button", { name: "Delete soul" }).click();
     await expect(page.getByText("Soul deleted.")).toBeVisible();
@@ -102,6 +105,7 @@ test.describe.serial("Frontend", () => {
     await agentCard.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("button", { name: "Delete agent" }).click();
     await expect(page.getByText("Agent deleted.")).toBeVisible();
+    await backend.put(`/souls/${soul.id}`, { data: { is_active: false } });
     await apiDelete(`/souls/${soul.id}`);
     expect(agentId).toBeGreaterThan(0);
   });
@@ -123,7 +127,10 @@ test.describe.serial("Frontend", () => {
     await page.goto("/tools");
     const card = cardWithText(page, toolName);
     await expect(card).toContainText("Edited in frontend e2e.");
-    await card.getByRole("button", { name: "Delete" }).click();
+    await card.getByRole("button", { name: "Deactivate" }).click();
+    await page.getByRole("button", { name: "Deactivate tool" }).click();
+    await expect(page.getByText("Tool deactivated.")).toBeVisible();
+    await cardWithText(page, toolName).getByRole("button", { name: "Delete" }).click();
     await page.getByRole("button", { name: "Delete tool" }).click();
     await expect(page.getByText("Tool deleted.")).toBeVisible();
   });
@@ -205,8 +212,7 @@ test.describe.serial("Frontend", () => {
     const experimentId = idFromUrl(page.url());
     await page.getByRole("button", { name: "Run experiment" }).click();
     await expect(page.getByText(/Experiment run created with runs/)).toBeVisible({ timeout: 60000 });
-    const runMessage = await page.getByText(/Experiment run created with runs/).textContent();
-    const runIds = (runMessage?.replace(/^.*runs\s+/i, "").match(/\d+/g) ?? []).map(Number);
+    await page.getByText(/Experiment run created with runs/).textContent();
     await page.goto("/experiments");
     await cardWithText(page, experimentName).getByRole("button", { name: "Archive" }).click();
     await expect(page.getByRole("dialog", { name: "Archive experiment?" })).toBeVisible();
@@ -254,12 +260,6 @@ async function createApiAgent(name: string) {
 
 async function apiPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const response = await backend.post(path, { data: body });
-  expect(response.ok(), `${path} should return success`).toBeTruthy();
-  return (await response.json()) as T;
-}
-
-async function apiGet<T>(path: string): Promise<T> {
-  const response = await backend.get(path);
   expect(response.ok(), `${path} should return success`).toBeTruthy();
   return (await response.json()) as T;
 }

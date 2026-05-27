@@ -44,6 +44,7 @@ export function ToolsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [pendingAction, setPendingAction] = useState<{ tool: Tool; action: "delete" | "deactivate" | "activate" } | null>(null);
+  const [forceWarning, setForceWarning] = useState<{ tool: Tool } | null>(null);
   const [safetyWarning, setSafetyWarning] = useState("");
   const [working, setWorking] = useState(false);
 
@@ -83,7 +84,7 @@ export function ToolsPage() {
     setError("");
     try {
       if (pendingAction.action === "delete") {
-        await api.deleteTool(pendingAction.tool.id);
+        await api.deleteTool(pendingAction.tool.id, true);
         setMessage("Tool deleted.");
       } else {
         await api.updateTool(pendingAction.tool.id, { is_active: pendingAction.action === "activate" });
@@ -127,20 +128,26 @@ export function ToolsPage() {
                 <Link to={`/tools/${tool.id}`}>
                   <Button type="button" variant="outline" size="sm"><Edit size={15} /> Edit</Button>
                 </Link>
-                <Button
-                  type="button"
-                  variant={tool.is_active && assignmentCounts[tool.id] ? "outline" : tool.is_active ? "destructive" : "default"}
-                  size="sm"
-                  onClick={() =>
-                    setPendingAction({
-                      tool,
-                      action: !tool.is_active ? "activate" : assignmentCounts[tool.id] ? "deactivate" : "delete"
-                    })
-                  }
-                >
-                  {!tool.is_active ? <RotateCcw size={15} /> : assignmentCounts[tool.id] ? <Power size={15} /> : <Trash2 size={15} />}
-                  {!tool.is_active ? "Activate" : assignmentCounts[tool.id] ? "Deactivate" : "Delete"}
-                </Button>
+                {tool.is_active ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPendingAction({ tool, action: "deactivate" })}>
+                    <Power size={15} /> Deactivate
+                  </Button>
+                ) : (
+                  <>
+                    <Button type="button" size="sm" onClick={() => setPendingAction({ tool, action: "activate" })}>
+                      <RotateCcw size={15} /> Activate
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => {
+                      if (assignmentCounts[tool.id]) {
+                        setForceWarning({ tool });
+                      } else {
+                        setPendingAction({ tool, action: "delete" });
+                      }
+                    }}>
+                      <Trash2 size={15} /> Delete
+                    </Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -153,14 +160,29 @@ export function ToolsPage() {
           pendingAction?.action === "activate"
             ? "This makes the tool available for agent use again."
             : pendingAction?.action === "deactivate"
-              ? "This keeps the tool record and assignments but prevents treating it as active configuration."
-              : "This permanently deletes the unused tool registry entry."
+              ? "This keeps the tool record and prevents it from being selected in agent definitions."
+              : "This permanently deletes the inactive tool. Any agent-tool assignments will be removed."
         }
         confirmLabel={pendingAction?.action === "activate" ? "Activate tool" : pendingAction?.action === "deactivate" ? "Deactivate tool" : "Delete tool"}
         destructive={pendingAction?.action !== "activate"}
         loading={working}
         onCancel={() => setPendingAction(null)}
         onConfirm={applyAction}
+      />
+      <ConfirmDialog
+        open={Boolean(forceWarning)}
+        title="Force delete tool?"
+        description={`"${forceWarning?.tool.name ?? ""}" is still assigned to ${assignmentCounts[forceWarning?.tool.id ?? 0] ?? 0} agent(s). Force delete will remove all agent-tool assignments and permanently delete the tool.`}
+        confirmLabel="Force delete"
+        destructive={true}
+        loading={working}
+        onCancel={() => setForceWarning(null)}
+        onConfirm={() => {
+          if (forceWarning) {
+            setPendingAction({ tool: forceWarning.tool, action: "delete" });
+            setForceWarning(null);
+          }
+        }}
       />
       <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
     </>

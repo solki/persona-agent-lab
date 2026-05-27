@@ -34,6 +34,7 @@ def test_soul_crud(client):
     assert get_response.status_code == 200
     assert get_response.json()["name"] == "Persistent Solver"
 
+    client.put(f"/souls/{soul['id']}", json={"is_active": False})
     delete_response = client.delete(f"/souls/{soul['id']}")
     assert delete_response.status_code == 204
     assert client.get(f"/souls/{soul['id']}").status_code == 404
@@ -52,14 +53,28 @@ def test_soul_delete_is_blocked_while_agent_uses_it(client):
     )
 
     delete_response = client.delete(f"/souls/{soul['id']}")
-
     assert delete_response.status_code == 409
-    assert "Deactivate this soul" in delete_response.json()["detail"]
+    assert "Deactivate this soul before deleting" in delete_response.json()["detail"]
     assert client.get(f"/souls/{soul['id']}").status_code == 200
 
     deactivate_response = client.put(f"/souls/{soul['id']}", json={"is_active": False})
     assert deactivate_response.status_code == 200
     assert deactivate_response.json()["is_active"] is False
+
+    still_linked = client.delete(f"/souls/{soul['id']}")
+    assert still_linked.status_code == 409
+    assert "Soul Bound Agent" in still_linked.json()["detail"]
+    assert "linked to 1 agent" in still_linked.json()["detail"]
+
+
+def test_soul_delete_blocked_while_active(client):
+    soul = client.post("/souls", json={"name": "Active Unlinked Soul"}).json()
+    delete_response = client.delete(f"/souls/{soul['id']}")
+    assert delete_response.status_code == 409
+    assert "Deactivate this soul before deleting" in delete_response.json()["detail"]
+
+    client.put(f"/souls/{soul['id']}", json={"is_active": False})
+    assert client.delete(f"/souls/{soul['id']}").status_code == 204
 
 
 def test_agent_crud_preserves_isolated_defaults(client):
@@ -198,7 +213,7 @@ def test_tool_delete_is_blocked_while_assigned_to_agent(client):
     delete_response = client.delete(f"/tools/{tool['id']}")
 
     assert delete_response.status_code == 409
-    assert "Unassign or deactivate" in delete_response.json()["detail"]
+    assert "Deactivate" in delete_response.json()["detail"]
     assert client.get(f"/tools/{tool['id']}").status_code == 200
     assert client.get(f"/agents/{agent['id']}").status_code == 200
 
@@ -206,6 +221,9 @@ def test_tool_delete_is_blocked_while_assigned_to_agent(client):
     assert deactivate_response.status_code == 200
     assert deactivate_response.json()["is_active"] is False
 
-    remove_response = client.delete(f"/agents/{agent['id']}/tools/{tool['id']}")
-    assert remove_response.status_code == 204
-    assert client.delete(f"/tools/{tool['id']}").status_code == 204
+    assigned_delete = client.delete(f"/tools/{tool['id']}")
+    assert assigned_delete.status_code == 409
+    assert "still assigned" in assigned_delete.json()["detail"]
+
+    force_delete = client.delete(f"/tools/{tool['id']}?force=true")
+    assert force_delete.status_code == 204
