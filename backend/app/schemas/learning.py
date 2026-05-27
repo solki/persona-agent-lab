@@ -79,6 +79,9 @@ class ProposedMemoryRead(BaseModel):
     agent_id: int
     source_feedback_id: Optional[int] = None
     source_evaluation_id: Optional[int] = None
+    source_type: Optional[str] = None
+    source_summary: Optional[str] = None
+    source_run_id: Optional[int] = None
     memory_type: str
     content: str
     importance: int

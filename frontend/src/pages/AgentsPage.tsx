@@ -16,8 +16,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
-import type { Agent, AgentContext, AgentMemory, MemoryStatus, ProposedMemory, Soul, Tool } from "@/lib/types";
+import { api, ApiError } from "@/lib/api";
+import type { Agent, AgentContext, AgentMemory, BlockingRun, MemoryStatus, ProposedMemory, Soul, Tool } from "@/lib/types";
+import { useNotification } from "@/lib/NotificationContext";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
 const providers = ["mock", "openai_compatible", "openai", "anthropic", "ollama"] as const;
@@ -65,6 +66,7 @@ export function AgentsPage() {
   const [message, setMessage] = useState("");
   const [pendingAction, setPendingAction] = useState<{ agent: Agent; action: "delete" | "deactivate" | "activate" } | null>(null);
   const [safetyWarning, setSafetyWarning] = useState("");
+  const [blockingRuns, setBlockingRuns] = useState<BlockingRun[]>([]);
   const [working, setWorking] = useState(false);
 
   async function load() {
@@ -109,7 +111,11 @@ export function AgentsPage() {
     } catch (actionError) {
       const messageText = actionError instanceof Error ? actionError.message : "Unable to update agent.";
       setError(messageText);
-      setSafetyWarning(messageText);
+      if (pendingAction.action === "delete" && actionError instanceof ApiError && Array.isArray(actionError.body?.blocking_runs)) {
+        setBlockingRuns(actionError.body.blocking_runs as BlockingRun[]);
+      } else {
+        setSafetyWarning(messageText);
+      }
       setPendingAction(null);
     } finally {
       setWorking(false);
@@ -134,7 +140,7 @@ export function AgentsPage() {
                   <h2 className="break-words text-base font-semibold">{agent.name}</h2>
                   <StatusBadge status={agent.is_active ? "active" : "inactive"} />
                   {notificationCounts[agent.id] ? (
-                    <span aria-label="Pending feedback memory approval" className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    <span aria-label="Pending feedback memory approval" className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">
                       {notificationCounts[agent.id]}
                     </span>
                   ) : null}
@@ -189,6 +195,24 @@ export function AgentsPage() {
         onConfirm={applyAction}
       />
       <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
+      <NoticeDialog
+        open={blockingRuns.length > 0}
+        title="Cannot delete agent"
+        description="This agent has runtime history in the following runs. Archive and deactivate the agent instead, or delete the runs first."
+        onClose={() => setBlockingRuns([])}
+      >
+        <div className="mt-3 space-y-2">
+          {blockingRuns.map((run) => (
+            <Link key={run.run_id} to={`/runs/${run.run_id}`} onClick={() => setBlockingRuns([])} className="block rounded-sm border border-border bg-card p-3 hover:border-amber-500/30 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-foreground">Run {run.run_id}</span>
+                <StatusBadge status={run.status} />
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{run.workflow_name}</div>
+            </Link>
+          ))}
+        </div>
+      </NoticeDialog>
     </>
   );
 }
@@ -704,6 +728,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<ProposedMemory[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const { refresh: refreshNotifications } = useNotification();
   const notificationCount = items.filter((item) => item.status === "pending" && (item.source_feedback_id || item.source_evaluation_id)).length;
 
   const load = useCallback(async () => {
@@ -725,6 +750,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
         setMessage("Proposed memory rejected.");
       }
       await load();
+      refreshNotifications();
     } catch (reviewError) {
       setError(reviewError instanceof Error ? reviewError.message : "Unable to review proposed memory.");
     }
@@ -735,7 +761,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold">Proposed Memories</h2>
-          {notificationCount > 0 ? <span aria-label="Pending feedback memory approval" className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">{notificationCount}</span> : null}
+          {notificationCount > 0 ? <span aria-label="Pending feedback memory approval" className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">{notificationCount}</span> : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -745,11 +771,24 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
         {items.map((item) => (
           <div key={item.id} className="rounded-md border border-border p-3">
             <div className="flex flex-wrap justify-between gap-2">
-              <div><strong>{item.memory_type}</strong> <StatusBadge status={item.status} /></div>
+              <div>
+                <strong>{item.memory_type}</strong> <StatusBadge status={item.status} />
+                {item.source_type ? (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    from {item.source_type}
+                    {item.source_run_id ? (
+                      <Link to={`/runs/${item.source_run_id}`} className="ml-1 text-amber-400 hover:underline">(run {item.source_run_id})</Link>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
               {item.status === "pending" ? (
                 <div className="flex gap-2"><Button type="button" size="sm" onClick={() => void review(item, "approve")}>Approve</Button><Button type="button" size="sm" variant="outline" onClick={() => void review(item, "reject")}>Reject</Button></div>
               ) : null}
             </div>
+            {item.source_summary ? (
+              <p className="mt-1 text-xs text-muted-foreground italic line-clamp-2">"{item.source_summary}"</p>
+            ) : null}
             <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>
           </div>
         ))}

@@ -1,9 +1,10 @@
-import { Activity, Archive, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { Activity, Archive, MessageSquare, RefreshCw, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FormField } from "@/components/shared/FormField";
 import { JsonCollapse, JsonCollapseList } from "@/components/shared/JsonCollapse";
 import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,8 +12,9 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
-import type { Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
+import type { AgentFeedback, AgentExecution, ReflectionResponse, Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 type RunFilter = "active" | "archived" | "all";
@@ -195,11 +197,13 @@ export function RunsPage() {
 
 export function RunDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const runId = Number(id);
   const [run, setRun] = useState<Run | null>(null);
   const [trace, setTrace] = useState<TraceEvent[]>([]);
   const [monitor, setMonitor] = useState<RunMonitor | null>(null);
   const [error, setError] = useState("");
+  const [rerunning, setRerunning] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -215,6 +219,19 @@ export function RunDetailPage() {
     void load();
   }, [runId]);
 
+  async function handleRerun() {
+    if (!run) return;
+    const task = typeof run.input?.task === "string" ? run.input.task : JSON.stringify(run.input);
+    setRerunning(true);
+    try {
+      const newRun = await api.runWorkflow(run.workflow_id, task);
+      navigate(`/runs/${newRun.id}/monitor`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Re-run failed.");
+      setRerunning(false);
+    }
+  }
+
   if (error) {
     return <Alert title="Error" tone="error">{error}</Alert>;
   }
@@ -227,7 +244,14 @@ export function RunDetailPage() {
       <PageHeader title={`Run ${run.id}`} description="Collapsed JSON keeps trace and monitor payloads readable while preserving detail on demand." />
       <div className="space-y-4">
         <Card>
-          <CardHeader><h2 className="text-base font-semibold">Summary</h2></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold">Summary</h2>
+              <Button type="button" variant="outline" size="sm" onClick={() => void handleRerun()} disabled={rerunning}>
+                <RotateCcw size={14} /> {rerunning ? "Re-running..." : "Re-run"}
+              </Button>
+            </div>
+          </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
             <div><span className="text-xs text-muted-foreground">Status</span><div className="mt-1"><StatusBadge status={run.archived_at ? "archived" : run.status} /></div></div>
             <div><span className="text-xs text-muted-foreground">Started</span><p className="mt-1 text-sm">{formatDate(run.started_at)}</p></div>
@@ -264,8 +288,207 @@ export function RunDetailPage() {
             ) : <EmptyState title="No monitor data" body="Monitor data is unavailable for this run." />}
           </CardContent>
         </Card>
+        {monitor?.agent_executions?.length ? <LearningFeedbackSection runId={run.id} executions={monitor.agent_executions} /> : null}
       </div>
     </>
+  );
+}
+
+function LearningFeedbackSection({ runId, executions }: { runId: number; executions: AgentExecution[] }) {
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+  const [feedbackType, setFeedbackType] = useState("improvement");
+  const [feedbackText, setFeedbackText] = useState("");
+  const [rating, setRating] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [lastFeedback, setLastFeedback] = useState<AgentFeedback | null>(null);
+  const [lastReflection, setLastReflection] = useState<ReflectionResponse | null>(null);
+
+  const selectedExec = executions.find((e) => e.agent_id === selectedAgentId);
+
+  function resetForm() {
+    setFeedbackText("");
+    setRating(null);
+    setFeedbackType("improvement");
+    setLastFeedback(null);
+    setLastReflection(null);
+    setMessage("");
+    setError("");
+  }
+
+  function selectAgent(agentId: number) {
+    if (selectedAgentId === agentId) return;
+    setSelectedAgentId(agentId);
+    resetForm();
+  }
+
+  async function submitFeedback() {
+    if (!selectedAgentId || !feedbackText.trim()) return;
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+    try {
+      const feedback = await api.createFeedback(runId, selectedAgentId, {
+        feedback_text: feedbackText.trim(),
+        feedback_type: feedbackType,
+        rating
+      });
+      setLastFeedback(feedback);
+      setMessage("Feedback submitted.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to submit feedback.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function generateProposedMemory() {
+    if (!selectedAgentId || !lastFeedback) return;
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+    try {
+      const reflection = await api.reflectOnFeedback(runId, selectedAgentId, {
+        feedback_id: lastFeedback.id,
+        memory_type: "lesson"
+      });
+      setLastReflection(reflection);
+      setMessage("Proposed memory created from feedback.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate proposed memory.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-base font-semibold">Learning & Feedback</h2>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {message ? <Alert title="Success" tone="success">{message}</Alert> : null}
+        {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
+
+        {/* Agent selection */}
+        <div>
+          <p className="mb-2 text-sm text-muted-foreground">Select a participating agent to provide feedback:</p>
+          <div className="flex flex-wrap gap-2">
+            {executions.map((exec) => (
+              <button
+                key={exec.agent_id}
+                type="button"
+                onClick={() => selectAgent(exec.agent_id)}
+                className={`rounded-sm border px-3 py-2 text-left text-sm transition-colors ${
+                  selectedAgentId === exec.agent_id
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                    : "border-border bg-card hover:border-amber-500/20"
+                }`}
+              >
+                <span className="font-medium">{exec.agent_name_snapshot}</span>
+                <span className="ml-2 text-xs text-muted-foreground">step {exec.sequence_index}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Feedback form */}
+        {selectedExec ? (
+          <div className="rounded-sm border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={16} className="text-amber-400" />
+              <span className="text-sm font-medium">{selectedExec.agent_name_snapshot}</span>
+              <StatusBadge status={selectedExec.status} />
+            </div>
+
+            {!lastFeedback ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="Feedback type">
+                    <Select value={feedbackType} onChange={(e) => setFeedbackType(e.target.value)}>
+                      <option value="general">General</option>
+                      <option value="improvement">Improvement</option>
+                      <option value="praise">Praise</option>
+                      <option value="issue">Issue</option>
+                    </Select>
+                  </FormField>
+                  <FormField label="Rating (optional)">
+                    <div className="flex gap-1 pt-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          aria-label={`Rating ${n}`}
+                          onClick={() => setRating(rating === n ? null : n)}
+                          className={`h-8 w-8 rounded-sm text-sm font-medium transition-colors ${
+                            rating && rating >= n
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              : "border border-border text-muted-foreground hover:border-amber-500/20"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </FormField>
+                </div>
+                <FormField label="Feedback">
+                  <Textarea
+                    rows={3}
+                    placeholder="Describe what the agent did well or what could be improved..."
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                  />
+                </FormField>
+                <Button type="button" onClick={() => void submitFeedback()} disabled={submitting || !feedbackText.trim()}>
+                  {submitting ? "Submitting..." : "Submit feedback"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="rounded-sm border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Type:</span>
+                    <span className="font-medium">{lastFeedback.feedback_type}</span>
+                    {lastFeedback.rating ? (
+                      <>
+                        <span className="text-muted-foreground">· Rating:</span>
+                        <span className="font-medium">{lastFeedback.rating}/5</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{lastFeedback.feedback_text}</p>
+                </div>
+
+                {!lastReflection ? (
+                  <div className="flex items-center gap-2">
+                    <Button type="button" onClick={() => void generateProposedMemory()} disabled={submitting}>
+                      <Sparkles size={14} /> {submitting ? "Generating..." : "Generate proposed memory from feedback"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
+                  </div>
+                ) : (
+                  <div className="rounded-sm border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-emerald-400 font-medium">Proposed memory created</span>
+                      <StatusBadge status={lastReflection.proposed_memory.status} />
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">{lastReflection.proposed_memory.content}</p>
+                    <Link
+                      to={`/agents/${selectedAgentId}`}
+                      className="inline-flex items-center gap-1 text-xs text-amber-400 hover:underline"
+                    >
+                      View agent proposed memories →
+                    </Link>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -447,6 +670,19 @@ export function RunMonitorPage() {
             <div className="grid gap-3 md:grid-cols-4">
               <div><span className="text-xs text-muted-foreground">Total tokens</span><p className="font-mono text-lg font-medium">{monitor.token_usage_summary.total_tokens.toLocaleString()}</p></div>
               <div><span className="text-xs text-muted-foreground">Est. cost</span><p className="font-mono text-lg font-medium">${monitor.token_usage_summary.estimated_cost.toFixed(4)}</p></div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Learning summary */}
+        <Card>
+          <CardHeader><h2 className="text-sm font-medium">Learning Events</h2></CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div><span className="text-xs text-muted-foreground">Feedback</span><p className="font-mono text-lg font-medium">{monitor.learning_event_summary.feedback_count}</p></div>
+              <div><span className="text-xs text-muted-foreground">Evaluations</span><p className="font-mono text-lg font-medium">{monitor.learning_event_summary.evaluation_count}</p></div>
+              <div><span className="text-xs text-muted-foreground">Proposed memories</span><p className="font-mono text-lg font-medium">{monitor.learning_event_summary.proposed_memory_count}</p></div>
+              <div><span className="text-xs text-muted-foreground">Learning events</span><p className="font-mono text-lg font-medium">{monitor.learning_event_summary.learning_event_count}</p></div>
             </div>
           </CardContent>
         </Card>

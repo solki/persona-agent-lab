@@ -148,7 +148,7 @@ docker compose down -v
 
 ## Frontend
 
-The frontend foundation starts in Milestone 5 with Next.js, TypeScript, Tailwind CSS, and typed API helpers.
+The frontend uses Vite, React, TypeScript, Tailwind CSS, shadcn/ui primitives, and typed API helpers.
 
 Local commands:
 

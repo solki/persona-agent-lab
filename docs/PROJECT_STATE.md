@@ -34,7 +34,7 @@ Milestone 10 status: implemented.
 
 ## Current Frontend Modules
 
-- `src/App.tsx`: App root with refine resource registration, React Router routes, and dashboard Overview component.
+- `src/App.tsx`: App root with refine resource registration, React Router routes, NotificationProvider wrapper, and dashboard Overview component.
 - `src/pages/AgentsPage.tsx`: Agent list (`AgentsPage`), create/edit form (`AgentFormPage`), detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review, feedback-derived approval badges, and memory CRUD (`AgentDetailPage`).
 - `src/pages/SoulsPage.tsx`: Soul/persona list (`SoulsPage`), create and edit form (`SoulFormPage`) with confirmed delete support and blocked-delete error display.
 - `src/pages/ToolsPage.tsx`: Tool registry list (`ToolsPage`), create and edit form (`ToolFormPage`) with config JSON editor and active flag controls.
@@ -45,6 +45,7 @@ Milestone 10 status: implemented.
 - `src/components/ui/`: shadcn/ui-style primitives (button, card, input, label, select, textarea).
 - `src/lib/api.ts`: Typed backend API wrapper using `VITE_API_BASE_URL` with Vite `/api` dev proxy.
 - `src/lib/types.ts`: Frontend TypeScript interfaces matching backend schemas.
+- `src/lib/NotificationContext.tsx`: React context providing shared notification state with `totalCount` and `refresh()` across the app.
 - `src/index.css`: Tailwind CSS with custom dark lab theme tokens, dot-grid utility, and live-pulse animation.
 - `e2e/frontend.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, and agent isolation assertions.
 
@@ -145,7 +146,7 @@ Milestone 10 status: implemented.
 - Agent create/edit exposes soul selection, active status, provider, free-text model, temperature, max tokens, system prompt, and JSON editors for memory, context, and handoff policies.
 - Policy editors validate JSON before submitting to the backend. Default templates use manual memory review, active context inclusion, and handoff disabled.
 - Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
-- Sidebar Agents, the Agents list, and the Agent detail Proposed Memories section show red approval badges only for pending `ProposedMemory` rows created from feedback or evaluation sources. Manual pending `AgentMemory` rows and reviewed proposed memories do not trigger these badges.
+- Sidebar Agents, the Agents list, and the Agent detail Proposed Memories section show amber approval badges only for pending `ProposedMemory` rows created from feedback or evaluation sources. Manual pending `AgentMemory` rows and reviewed proposed memories do not trigger these badges.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
 - Agents, souls, tools, contexts, memories, workflows, experiments, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Experiment deletion is blocked (409) when the experiment has been run; use the `?force=true` query parameter only for test cleanup. Mutations show loading states, success/error messages, and refresh or redirect after success.

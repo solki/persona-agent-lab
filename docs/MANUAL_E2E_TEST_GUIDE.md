@@ -356,15 +356,15 @@ Expected result:
 
 - Proposed memory starts as pending.
 - The proposed memory does not affect future runs until approved.
-- The sidebar **Agents** item shows a red pending feedback memory approval badge.
-- The Agents list shows the same red badge only on the agent that owns the feedback-derived pending proposed memory.
+- The sidebar **Agents** item shows an amber pending feedback memory approval badge.
+- The Agents list shows the same amber badge only on the agent that owns the feedback-derived pending proposed memory.
 - Manually added pending memories do not show this badge.
 
 ### P. Approve Proposed Memory
 
 1. Select **Review on agent page**.
 2. Find **Proposed Memories**.
-3. Confirm the **Proposed Memories** section shows a red pending feedback memory approval badge.
+3. Confirm the **Proposed Memories** section shows a amber pending feedback memory approval badge.
 4. In the Pending group, select **Approve**.
 
 Expected result:
@@ -372,7 +372,7 @@ Expected result:
 - The proposed memory moves to approved.
 - The app says it was written as active agent memory.
 - The approved memory appears as active memory for the same agent.
-- The red approval badge disappears after all feedback-derived pending proposed memories for that agent are approved or rejected.
+- The amber approval badge disappears after all feedback-derived pending proposed memories for that agent are approved or rejected.
 
 ### Q. Re-Run Workflow
 
@@ -749,9 +749,9 @@ Inactive agent selected:
 - [ ] Token usage page opens from the monitor or Runs page.
 - [ ] Feedback is saved for Persistent Troubleshooter.
 - [ ] Proposed memory is generated with pending status.
-- [ ] Sidebar and agent pages show pending feedback memory approval badges for feedback-derived pending proposed memories only.
+- [ ] Sidebar and agent pages show amber pending feedback memory approval badges for feedback-derived pending proposed memories only.
 - [ ] Proposed memory is approved.
-- [ ] Pending feedback memory approval badges disappear after approval or rejection.
+- [ ] Amber pending feedback memory approval badges disappear after approval or rejection.
 - [ ] Approved memory appears as active memory.
 - [ ] Re-run includes approved memory for Persistent Troubleshooter.
 - [ ] Re-run does not retrieve that memory for other agents.
@@ -768,7 +768,7 @@ Inactive agent selected:
 
 ## 10. CRUD Cleanup Policy
 
-Use these meanings consistently when manually testing either frontend:
+Use these meanings consistently when manually testing the frontend:
 
 - **Delete** permanently removes an unused record. If backend safety checks reject the delete, the UI should show the backend warning instead of failing silently.
 - **Archive** hides runtime or historical records from default lists while preserving evidence and learning history.
