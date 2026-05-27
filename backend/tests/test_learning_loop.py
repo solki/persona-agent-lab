@@ -1,4 +1,12 @@
+from sqlalchemy import select
+
+from app.models.agent import Agent
+from app.models.learning import AgentFeedback, ProposedMemory
+from app.models.run import Run
 from app.runtime.context_assembler import ContextAssembler
+from app.runtime.provider_interface import ProviderInterface, ProviderResponse
+from app.schemas.learning import ReflectionRequest
+from app.services.learning_service import ReflectionService
 
 
 def create_agent(client, name, memory_policy=None):
@@ -290,3 +298,139 @@ def test_proposed_memory_wrong_agent_routes_return_not_found(client):
 
     assert client.post(f"/agents/{second_agent['id']}/proposed-memories/{proposed['id']}/approve").status_code == 404
     assert client.post(f"/agents/{second_agent['id']}/proposed-memories/{proposed['id']}/reject").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# ReflectionService unit tests — real LLM path and fallback
+# ---------------------------------------------------------------------------
+
+
+class FakeRealProvider(ProviderInterface):
+    """Simulates a real provider with controlled output."""
+
+    def __init__(self, response_content: str):
+        self._response = response_content
+        self.last_prompt: str | None = None
+        self.last_config: dict | None = None
+
+    def generate(self, prompt: str, config: dict) -> ProviderResponse:
+        self.last_prompt = prompt
+        self.last_config = config
+        return ProviderResponse(content=self._response, metadata={"provider": "test", "model": "test"})
+
+
+def _create_test_agent_run_feedback(db_session):
+    """Create agent, run, and feedback for unit tests. Returns (agent, run, feedback)."""
+    agent = Agent(name="LLM Reflect Test Agent", role="worker", system_prompt="Test prompt.")
+    db_session.add(agent)
+    db_session.commit()
+    db_session.refresh(agent)
+
+    run = Run(
+        workflow_id=1,
+        input={"task": "Test task for reflection."},
+        status="completed",
+        config_snapshot={"agents": [{"id": agent.id}]},
+    )
+    db_session.add(run)
+    db_session.commit()
+    db_session.refresh(run)
+
+    feedback = AgentFeedback(
+        run_id=run.id,
+        agent_id=agent.id,
+        feedback_text="The agent should check internal data before asking customers for files.",
+        feedback_type="correction",
+        rating=2,
+    )
+    db_session.add(feedback)
+    db_session.commit()
+    db_session.refresh(feedback)
+
+    return agent, run, feedback
+
+
+def test_llm_reflection_produces_proposed_memory_from_valid_json(db_session):
+    provider = FakeRealProvider(
+        '{"content": "When handling BI tasks, verify internal data sources first.", "rationale": "Reduces unnecessary customer back-and-forth."}'
+    )
+    service = ReflectionService(db_session, provider)
+    agent, run, feedback = _create_test_agent_run_feedback(db_session)
+
+    reflection, proposed = service.reflect(
+        run, agent, ReflectionRequest(feedback_id=feedback.id, memory_type="lesson", importance=80)
+    )
+
+    assert "verify internal data sources first" in reflection
+    assert proposed.content == reflection
+    assert proposed.status == "pending"
+    assert proposed.importance == 80
+    assert "BI" not in provider.last_prompt
+    assert "internal data" in provider.last_prompt
+    assert provider.last_config["temperature"] == 0.3
+
+
+def test_llm_reflection_falls_back_to_mock_on_bad_json(db_session):
+    provider = FakeRealProvider("not valid json!!!")
+    service = ReflectionService(db_session, provider)
+    agent, run, feedback = _create_test_agent_run_feedback(db_session)
+
+    reflection, proposed = service.reflect(
+        run, agent, ReflectionRequest(feedback_id=feedback.id, memory_type="lesson", importance=70)
+    )
+
+    assert len(reflection) > 0
+    assert proposed.status == "pending"
+
+
+def test_llm_reflection_falls_back_to_mock_on_missing_content(db_session):
+    provider = FakeRealProvider('{"rationale": "Some rationale but no content field."}')
+    service = ReflectionService(db_session, provider)
+    agent, run, feedback = _create_test_agent_run_feedback(db_session)
+
+    reflection, proposed = service.reflect(
+        run, agent, ReflectionRequest(feedback_id=feedback.id, memory_type="lesson", importance=70)
+    )
+
+    assert len(reflection) > 0
+    assert proposed.status == "pending"
+
+
+def test_llm_reflection_falls_back_to_mock_on_empty_content(db_session):
+    provider = FakeRealProvider('{"content": "", "rationale": "Empty content."}')
+    service = ReflectionService(db_session, provider)
+    agent, run, feedback = _create_test_agent_run_feedback(db_session)
+
+    reflection, proposed = service.reflect(
+        run, agent, ReflectionRequest(feedback_id=feedback.id, memory_type="lesson", importance=70)
+    )
+
+    assert len(reflection) > 0
+    assert proposed.status == "pending"
+
+
+def test_llm_reflection_handles_json_in_code_block(db_session):
+    provider = FakeRealProvider(
+        '```json\n{"content": "Always check internal logs before escalating.", "rationale": "Saves escalation bandwidth."}\n```'
+    )
+    service = ReflectionService(db_session, provider)
+    agent, run, feedback = _create_test_agent_run_feedback(db_session)
+
+    reflection, proposed = service.reflect(
+        run, agent, ReflectionRequest(feedback_id=feedback.id, memory_type="lesson", importance=85)
+    )
+
+    assert "check internal logs" in reflection
+    assert proposed.status == "pending"
+
+
+def test_reflection_service_without_provider_uses_mock(db_session):
+    service = ReflectionService(db_session)
+    agent, run, feedback = _create_test_agent_run_feedback(db_session)
+
+    reflection, proposed = service.reflect(
+        run, agent, ReflectionRequest(feedback_id=feedback.id, memory_type="lesson", importance=75)
+    )
+
+    assert len(reflection) > 0
+    assert proposed.status == "pending"
