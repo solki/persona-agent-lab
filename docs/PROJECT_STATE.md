@@ -46,7 +46,7 @@ Milestone 10 status: implemented.
 - `src/lib/api.ts`: Typed backend API wrapper using `VITE_API_BASE_URL` with Vite `/api` dev proxy.
 - `src/lib/types.ts`: Frontend TypeScript interfaces matching backend schemas.
 - `src/index.css`: Tailwind CSS with custom dark lab theme tokens, dot-grid utility, and live-pulse animation.
-- `e2e/frontend-v2.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, and agent isolation assertions.
+- `e2e/frontend.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, and agent isolation assertions.
 
 ## Current Data Models
 

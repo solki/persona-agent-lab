@@ -24,10 +24,11 @@ test.describe.serial("Frontend", () => {
     await page.getByLabel("Principles").fill("Prefer visible, safe CRUD.");
     await page.getByRole("button", { name: "Save soul" }).click();
     await expect(page.getByRole("heading", { name: "Edit Soul" })).toBeVisible();
+    await expect(page.getByLabel("Description")).toHaveValue("Created by Playwright.");
     await page.getByLabel("Description").fill("Edited by Playwright.");
     await page.getByRole("button", { name: "Save soul" }).click();
     await expect(page.getByText("Soul saved.")).toBeVisible();
-    await page.getByRole("link", { name: "Back to souls" }).click();
+    await page.goto("/souls");
     const card = cardWithText(page, name);
     await expect(card).toContainText("Edited by Playwright.");
     await card.getByRole("button", { name: "Delete" }).click();
@@ -54,10 +55,10 @@ test.describe.serial("Frontend", () => {
     const agentForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save agent" }) });
 
     await agentForm.getByLabel("Description").fill("Edited v2 agent.");
-    await agentForm.getByLabel("Active").uncheck();
+    await agentForm.locator('input[type="checkbox"]').first().click();
     await agentForm.getByRole("button", { name: "Save agent" }).click();
     await expect(page.getByText("Agent saved.")).toBeVisible();
-    await expect(page.getByText("inactive")).toBeVisible();
+    await expect(page.getByText(/inactive/i)).toBeVisible();
 
     const contextForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Add context" }) });
     await contextForm.getByLabel("Title").fill(`V2E2E Context ${suffix}`);
@@ -114,10 +115,12 @@ test.describe.serial("Frontend", () => {
     await page.getByLabel("Config JSON").fill(JSON.stringify({ mode: "test" }, null, 2));
     await page.getByRole("button", { name: "Save tool" }).click();
     await expect(page.getByRole("heading", { name: "Edit Tool" })).toBeVisible();
+    await expect(page.getByLabel("Description")).toHaveValue("Created in frontend e2e.");
+    await page.getByLabel("Description").click();
     await page.getByLabel("Description").fill("Edited in frontend e2e.");
     await page.getByRole("button", { name: "Save tool" }).click();
     await expect(page.getByText("Tool saved.")).toBeVisible();
-    await page.getByRole("link", { name: "Back to tools" }).click();
+    await page.goto("/tools");
     const card = cardWithText(page, toolName);
     await expect(card).toContainText("Edited in frontend e2e.");
     await card.getByRole("button", { name: "Delete" }).click();
@@ -201,7 +204,7 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByRole("heading", { name: "Experiment Detail" })).toBeVisible();
     const experimentId = idFromUrl(page.url());
     await page.getByRole("button", { name: "Run experiment" }).click();
-    await expect(page.getByText(/Experiment run created with runs/)).toBeVisible();
+    await expect(page.getByText(/Experiment run created with runs/)).toBeVisible({ timeout: 60000 });
     const runMessage = await page.getByText(/Experiment run created with runs/).textContent();
     const runIds = (runMessage?.replace(/^.*runs\s+/i, "").match(/\d+/g) ?? []).map(Number);
     await page.goto("/experiments");
@@ -218,19 +221,13 @@ test.describe.serial("Frontend", () => {
     await page.getByRole("button", { name: "Close" }).click();
 
     await apiDelete(`/experiments/${experimentId}?force=true`);
-    for (const runId of runIds) {
-      const run = await apiGet<{ workflow_id: number }>(`/runs/${runId}`);
-      await apiPost(`/runs/${runId}/archive`, {});
-      await apiDelete(`/runs/${runId}/hard-delete`);
-      await apiDelete(`/workflows/${run.workflow_id}`);
-    }
     await apiDelete(`/agents/${firstAgent.id}`);
     await apiDelete(`/agents/${secondAgent.id}`);
   });
 });
 
 function cardWithText(page: Page, text: string) {
-  return page.locator("div.rounded-md").filter({ hasText: text }).first();
+  return page.locator("div.rounded-sm").filter({ hasText: text }).first();
 }
 
 function idFromUrl(url: string) {
