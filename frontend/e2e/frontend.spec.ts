@@ -287,6 +287,180 @@ test.describe.serial("Frontend", () => {
     await apiDelete(`/agents/${firstAgent.id}`);
     await apiDelete(`/agents/${secondAgent.id}`);
   });
+
+  test("shows blocking run links when agent delete is rejected due to runtime history", async ({ page }) => {
+    const agent = await createApiAgent(`V2E2E BlockedDelete Agent ${suffix}`);
+    const workflow = await apiPost<{ id: number; name: string }>("/workflows", {
+      name: `V2E2E BlockedDelete Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [agent.id] },
+      is_active: true
+    });
+    const run = await apiPost<{ id: number; status: string }>(`/workflows/${workflow.id}/run`, { task: "Create runtime history for blocked delete." });
+
+    await backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
+
+    await page.goto("/agents");
+    await cardWithText(page, agent.name).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete agent?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete agent" }).click();
+
+    await expect(page.getByRole("dialog", { name: "Cannot delete agent" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Cannot delete agent" })).toContainText("runtime history");
+    const runLink = page.getByRole("link", { name: `Run ${run.id}` });
+    await expect(runLink).toBeVisible();
+    await expect(page.getByText(workflow.name)).toBeVisible();
+
+    await runLink.click();
+    await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
+
+    await apiPost(`/runs/${run.id}/archive`, {});
+    await apiDelete(`/runs/${run.id}/hard-delete`);
+    await apiDelete(`/workflows/${workflow.id}`);
+    await apiDelete(`/agents/${agent.id}`);
+  });
+
+  test("submits feedback on a run agent and generates a pending proposed memory", async ({ page }) => {
+    const agent = await createApiAgent(`V2E2E Feedback Agent ${suffix}`);
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `V2E2E Feedback Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [agent.id] },
+      is_active: true
+    });
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: "Produce output for feedback e2e." });
+
+    await page.goto(`/runs/${run.id}`);
+    await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
+    await expect(page.getByText("Learning & Feedback")).toBeVisible();
+
+    // Select the agent
+    await page.getByRole("button", { name: agent.name }).click();
+
+    // Fill feedback form
+    await page.getByLabel("Feedback type").selectOption("improvement");
+    await page.getByLabel("Rating 4").click();
+    await page.getByPlaceholder("Describe what the agent did well or what could be improved...").fill("The agent provided a thorough analysis. Consider adding more concrete examples next time.");
+    await page.getByRole("button", { name: "Submit feedback" }).click();
+
+    await expect(page.getByText("Feedback submitted.")).toBeVisible();
+    await expect(page.getByText("The agent provided a thorough analysis.")).toBeVisible();
+
+    // Generate proposed memory
+    await page.getByRole("button", { name: /Generate proposed memory from feedback/ }).click();
+
+    await expect(page.getByText("Proposed memory created from feedback.")).toBeVisible();
+    await expect(page.getByText("Proposed memory created", { exact: true })).toBeVisible();
+    await expect(page.getByText("View agent proposed memories")).toBeVisible();
+
+    // Cleanup: learning records prevent hard-delete; archive run and deactivate agent instead
+    await apiPost(`/runs/${run.id}/archive`, {});
+    await backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
+  });
+
+  test("full learning loop: feedback -> reflect -> approve -> active memory -> re-run", async ({ page }) => {
+    const agent = await createApiAgent(`V2E2E Loop Agent ${suffix}`);
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `V2E2E Loop Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [agent.id] },
+      is_active: true
+    });
+    const task = "Full loop verification task.";
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task });
+
+    // Step 1: Navigate to run detail, submit feedback
+    await page.goto(`/runs/${run.id}`);
+    await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
+    await page.getByRole("button", { name: agent.name }).click();
+    await page.getByLabel("Feedback type").selectOption("improvement");
+    await page.getByLabel("Rating 5").click();
+    await page.getByPlaceholder("Describe what the agent did well or what could be improved...").fill("Excellent work on the full loop test. Keep up the good patterns.");
+    await page.getByRole("button", { name: "Submit feedback" }).click();
+    await expect(page.getByText("Feedback submitted.")).toBeVisible();
+
+    // Step 2: Generate proposed memory from feedback
+    await page.getByRole("button", { name: /Generate proposed memory from feedback/ }).click();
+    await expect(page.getByText("Proposed memory created from feedback.")).toBeVisible();
+
+    // Step 3: Navigate to agent detail, approve the proposed memory
+    await page.getByRole("link", { name: "View agent proposed memories" }).click();
+    await expect(page.getByRole("heading", { name: "Agent Detail" })).toBeVisible();
+    await expect(page.getByText("Proposed Memories")).toBeVisible();
+
+    // Verify source info is shown on proposed memory card
+    await expect(page.getByText(/from feedback/)).toBeVisible();
+    await expect(page.getByText(new RegExp(`\\(run ${run.id}\\)`))).toBeVisible();
+
+    // Approve it
+    await page.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Proposed memory approved.")).toBeVisible();
+
+    // Step 4: Verify approved memory is visible in the agent detail
+    await expect(page.getByText(/lesson.*approved/)).toBeVisible();
+
+    // Step 5: Go back to run detail and re-run
+    await page.goto(`/runs/${run.id}`);
+    await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
+    await page.getByRole("button", { name: "Re-run" }).click();
+
+    // Step 6: Verify redirected to new run monitor page
+    await expect(page.getByRole("heading", { name: /Run \d+ Monitor/ })).toBeVisible();
+    const newRunId = idFromUrl(page.url());
+    expect(newRunId).not.toBe(run.id);
+
+    // Step 7: Verify learning summary card exists on monitor page
+    await expect(page.getByText("Learning Events")).toBeVisible();
+    await expect(page.getByText("Feedback")).toBeVisible();
+    await expect(page.getByText("Proposed memories")).toBeVisible();
+
+    // Cleanup
+    await apiPost(`/runs/${run.id}/archive`, {});
+    await apiPost(`/runs/${newRunId}/archive`, {});
+    await backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
+  });
+
+  test("rejected proposed memory does not create active memory and clears badge", async ({ page }) => {
+    const agent = await createApiAgent(`V2E2E Reject Agent ${suffix}`);
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `V2E2E Reject Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [agent.id] },
+      is_active: true
+    });
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: "Test rejected memory flow." });
+    const feedback = await apiPost<{ id: number }>(`/runs/${run.id}/agents/${agent.id}/feedback`, {
+      feedback_text: "This feedback will be rejected.",
+      feedback_type: "issue"
+    });
+    await apiPost(`/agents/${agent.id}/proposed-memories`, {
+      source_feedback_id: feedback.id,
+      content: "Proposed memory that will be rejected.",
+      memory_type: "lesson"
+    });
+
+    // Navigate to agent detail
+    await page.goto(`/agents/${agent.id}`);
+    await expect(page.getByText("Proposed Memories")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reject" })).toBeVisible();
+
+    // Reject the proposed memory
+    await page.getByRole("button", { name: "Reject" }).click();
+    await expect(page.getByText("Proposed memory rejected.")).toBeVisible();
+
+    // Verify badge cleared for this agent's proposed memories
+    await expect(page.locator("main").getByLabel("Pending feedback memory approval")).toHaveCount(0);
+
+    // Verify the proposed memory shows rejected status, no longer has Approve/Reject buttons
+    await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+    await expect(page.getByText("rejected")).toBeVisible();
+
+    // Cleanup
+    await apiPost(`/runs/${run.id}/archive`, {});
+    await backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
+  });
 });
 
 function cardWithText(page: Page, text: string) {

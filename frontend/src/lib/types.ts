@@ -80,6 +80,9 @@ export interface ProposedMemory {
   agent_id: number;
   source_feedback_id?: number | null;
   source_evaluation_id?: number | null;
+  source_type?: string | null;
+  source_summary?: string | null;
+  source_run_id?: number | null;
   memory_type: string;
   content: string;
   importance: number;
@@ -87,6 +90,13 @@ export interface ProposedMemory {
   created_at: string;
   approved_at?: string | null;
   rejected_at?: string | null;
+}
+
+export interface LearningEventSummary {
+  feedback_count: number;
+  evaluation_count: number;
+  proposed_memory_count: number;
+  learning_event_count: number;
 }
 
 export interface ProposedMemoryNotificationSummary {
@@ -171,6 +181,31 @@ export interface RunMonitor {
     total_tokens: number;
     estimated_cost: number;
   };
-  learning_event_summary: Record<string, unknown>;
+  learning_event_summary: LearningEventSummary;
   errors: Array<Record<string, unknown>>;
+}
+
+export interface BlockingRun {
+  run_id: number;
+  status: string;
+  workflow_name: string;
+  created_at: string | null;
+}
+
+export interface AgentFeedback {
+  id: number;
+  run_id: number;
+  agent_id: number;
+  trace_event_id?: number | null;
+  rating?: number | null;
+  feedback_text: string;
+  feedback_type: string;
+  created_at: string;
+}
+
+export interface ReflectionResponse {
+  run_id: number;
+  agent_id: number;
+  reflection: string;
+  proposed_memory: ProposedMemory;
 }

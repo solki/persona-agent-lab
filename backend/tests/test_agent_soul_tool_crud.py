@@ -227,3 +227,42 @@ def test_tool_delete_is_blocked_while_assigned_to_agent(client):
 
     force_delete = client.delete(f"/tools/{tool['id']}?force=true")
     assert force_delete.status_code == 204
+
+
+def test_agent_delete_blocked_with_blocking_run_details(client):
+    agent = client.post(
+        "/agents",
+        json={"name": "Agent With History", "role": "worker", "system_prompt": "Run in a workflow."},
+    ).json()
+
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "Blocked Delete Workflow",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [agent["id"]]},
+        },
+    ).json()
+
+    run_response = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Create runtime history."})
+    assert run_response.status_code == 201
+    run = run_response.json()
+
+    delete_response = client.delete(f"/agents/{agent['id']}")
+    assert delete_response.status_code == 409
+
+    body = delete_response.json()
+    assert "detail" in body
+    assert isinstance(body["detail"], dict)
+    assert "message" in body["detail"]
+    assert "blocking_runs" in body["detail"]
+    blocking_runs = body["detail"]["blocking_runs"]
+    assert isinstance(blocking_runs, list)
+    assert len(blocking_runs) == 1
+    assert blocking_runs[0]["run_id"] == run["id"]
+    assert blocking_runs[0]["status"] == run["status"]
+    assert blocking_runs[0]["workflow_name"] == workflow["name"]
+    assert blocking_runs[0]["created_at"] is not None
+
+    # Verify agent still exists (delete was blocked)
+    assert client.get(f"/agents/{agent['id']}").status_code == 200

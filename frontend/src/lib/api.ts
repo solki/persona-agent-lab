@@ -1,11 +1,13 @@
 import type {
   Agent,
   AgentContext,
+  AgentFeedback,
   AgentMemory,
   Experiment,
   ExperimentRun,
   ProposedMemory,
   ProposedMemoryNotificationSummary,
+  ReflectionResponse,
   Run,
   RunMonitor,
   Soul,
@@ -19,7 +21,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 type JsonBody = Record<string, unknown>;
 
 export class ApiError extends Error {
-  constructor(message: string, public status?: number) {
+  constructor(message: string, public status?: number, public body?: Record<string, unknown>) {
     super(message);
   }
 }
@@ -34,7 +36,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new ApiError(await errorMessage(response), response.status);
+    const { message, body: errorBody } = await parseError(response);
+    throw new ApiError(message, response.status, errorBody);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -42,25 +45,29 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function errorMessage(response: Response) {
+async function parseError(response: Response): Promise<{ message: string; body?: Record<string, unknown> }> {
   try {
     const type = response.headers.get("content-type") ?? "";
     if (type.includes("application/json")) {
-      const body = (await response.json()) as { detail?: unknown; message?: unknown };
+      const body = (await response.json()) as Record<string, unknown>;
       if (typeof body.detail === "string") {
-        return body.detail;
+        return { message: body.detail, body };
       }
-      if (Array.isArray(body.detail)) {
-        return body.detail.map((item) => JSON.stringify(item)).join("; ");
+      if (typeof body.detail === "object" && body.detail !== null) {
+        const detail = body.detail as Record<string, unknown>;
+        if (typeof detail.message === "string") {
+          return { message: detail.message, body: detail };
+        }
+        return { message: JSON.stringify(detail), body: detail };
       }
       if (typeof body.message === "string") {
-        return body.message;
+        return { message: body.message, body };
       }
     }
     const text = await response.text();
-    return text || `Request failed: ${response.status}`;
+    return { message: text || `Request failed: ${response.status}` };
   } catch {
-    return `Request failed: ${response.status}`;
+    return { message: `Request failed: ${response.status}` };
   }
 }
 
@@ -131,5 +138,8 @@ export const api = {
   getRunMonitor: (id: number) => request<RunMonitor>(`/runs/${id}/monitor`),
   archiveRun: (id: number) => request<{ message: string }>(`/runs/${id}/archive`, { method: "POST" }),
   activateRun: (id: number) => request<{ message: string }>(`/runs/${id}/activate`, { method: "POST" }),
-  hardDeleteRun: (id: number) => request<{ message: string }>(`/runs/${id}/hard-delete`, { method: "DELETE" })
+  hardDeleteRun: (id: number) => request<{ message: string }>(`/runs/${id}/hard-delete`, { method: "DELETE" }),
+
+  createFeedback: (runId: number, agentId: number, payload: JsonBody) => request<AgentFeedback>(`/runs/${runId}/agents/${agentId}/feedback`, body("POST", payload)),
+  reflectOnFeedback: (runId: number, agentId: number, payload: JsonBody) => request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, body("POST", payload))
 };

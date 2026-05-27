@@ -768,7 +768,7 @@ Inactive agent selected:
 
 ## 10. CRUD Cleanup Policy
 
-Use these meanings consistently when manually testing either frontend:
+Use these meanings consistently when manually testing the frontend:
 
 - **Delete** permanently removes an unused record. If backend safety checks reject the delete, the UI should show the backend warning instead of failing silently.
 - **Archive** hides runtime or historical records from default lists while preserving evidence and learning history.

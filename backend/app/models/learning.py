@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, object_session
 
 from app.database import Base
 
@@ -47,3 +47,40 @@ class ProposedMemory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     rejected_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def source_type(self) -> Optional[str]:
+        if self.source_feedback_id is not None:
+            return "feedback"
+        if self.source_evaluation_id is not None:
+            return "evaluation"
+        return None
+
+    @property
+    def source_summary(self) -> Optional[str]:
+        session = object_session(self)
+        if session is None:
+            return None
+        if self.source_feedback_id is not None:
+            feedback = session.get(AgentFeedback, self.source_feedback_id)
+            if feedback:
+                return feedback.feedback_text[:120] if len(feedback.feedback_text) > 120 else feedback.feedback_text
+        if self.source_evaluation_id is not None:
+            evaluation = session.get(AgentEvaluation, self.source_evaluation_id)
+            if evaluation:
+                parts = [f"{key}: {value}" for key, value in list(evaluation.scores.items())[:3]]
+                return ", ".join(parts) if parts else None
+        return None
+
+    @property
+    def source_run_id(self) -> Optional[int]:
+        session = object_session(self)
+        if session is None:
+            return None
+        if self.source_feedback_id is not None:
+            feedback = session.get(AgentFeedback, self.source_feedback_id)
+            return feedback.run_id if feedback else None
+        if self.source_evaluation_id is not None:
+            evaluation = session.get(AgentEvaluation, self.source_evaluation_id)
+            return evaluation.run_id if evaluation else None
+        return None

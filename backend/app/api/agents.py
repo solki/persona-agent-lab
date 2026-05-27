@@ -40,6 +40,15 @@ def update_agent(agent_id: int, payload: AgentUpdate, db: Session = Depends(get_
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_agent(agent_id: int, db: Session = Depends(get_db)):
     agent = require_agent(db, agent_id)
+    blocking_runs = agent_service.blocking_runs_for_agent(db, agent.id)
+    if blocking_runs:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"Agent has {len(blocking_runs)} related run(s) with runtime history. Archive and deactivate the agent instead, or delete the runs first.",
+                "blocking_runs": blocking_runs,
+            },
+        )
     try:
         agent_service.delete_agent(db, agent)
     except ValueError as exc:
