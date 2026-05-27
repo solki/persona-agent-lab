@@ -10,11 +10,19 @@ Milestone 9 status: implemented.
 
 Milestone 10 status: implemented.
 
+Phase 2 Milestone 1 (Real LLM Hardening): implemented.
+
+Phase 2 Milestone 2 (Frontend Learning Loop): implemented.
+
+Phase 2 Milestone 3 (LLM Reflection): implemented.
+
+Phase 2 Milestone 4 (Customer Escalation Learning Demo): implemented.
+
 ## Current Architecture
 
 - Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
 - Frontend: Vite, React, TypeScript, Tailwind CSS, shadcn/ui primitives, typed API client with Vite dev proxy, dashboard, and complete configuration management for souls, agents, tools, workflows, runs, experiments, agent-tool assignment, and policy-aware CRUD lifecycle actions. Playwright E2E coverage.
-- Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
+- Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`. A seed script at `backend/scripts/seed_demo.py` creates the Customer Escalation Recovery demo agents and workflow.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
 
@@ -186,4 +194,4 @@ Milestone 10 status: implemented.
 - No Alembic migrations; local startup can create tables automatically for MVP development.
 - No authentication, authorization, multi-user isolation, or production deployment setup.
 - Frontend E2E tests require a running backend and local services; they are not yet wired into a containerized one-command stack.
-- Seed data scripts are not present.
+- Seed data scripts are present (`backend/scripts/seed_demo.py`) but not yet wired into a containerized one-command stack.

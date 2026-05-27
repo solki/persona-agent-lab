@@ -92,7 +92,7 @@ Use the Runs page archive filter to view archived runs. Permanent delete is limi
 
 ## Reflection
 
-`ReflectionService` converts feedback or evaluation into a proposed memory. In mock mode, reflection is deterministic so local tests and experiments do not require an LLM API key.
+`ReflectionService` converts feedback or evaluation into a proposed memory. In mock mode, reflection is deterministic so local tests and experiments do not require an LLM API key. When a real provider (e.g. `openai_compatible`) is configured, the service calls the LLM through the existing provider abstraction to generate higher-quality proposed memory content, falling back to mock reflection on parse failures.
 
 Example feedback:
 
@@ -106,7 +106,7 @@ Mock proposed memory:
 In BI discrepancy tasks, first check dashboard filters, date range, metric definition, refresh timestamp, and ETL logic internally before asking the customer for files.
 ```
 
-The service does not call external LLM APIs directly. Future provider-backed reflection should go through the existing provider abstraction.
+The service does not call external LLM APIs directly. Provider-backed reflection goes through the existing provider abstraction.
 
 ## Frontend Flow
 
@@ -144,3 +144,70 @@ Expected isolation assertions:
 - Other agents do not retrieve the feedback-derived memory.
 - Rejected proposed memories never appear in context assembly.
 - Soul/persona fields are unchanged.
+
+## Demo Scenario: Customer Escalation Recovery
+
+A reusable 3-agent sequential workflow that demonstrates the full learning loop with a realistic customer escalation use case.
+
+### Quick Start
+
+```bash
+cd backend && python scripts/seed_demo.py
+```
+
+This creates three agents (Escalation Triage, Policy Guardrail, Customer Response Writer) and a sequential workflow. The script prints step-by-step instructions and sample inputs.
+
+### Scenario
+
+A customer files a complaint with repeated support contact, a missing item, late delivery, and a chargeback threat. The order number and contact details are already provided.
+
+### Agents
+
+| Agent | Role | Responsibility |
+|-------|------|----------------|
+| Escalation Triage Agent | escalation-triage | Analyze severity, identify repeated info requests, flag chargeback/public-complaint risk |
+| Policy Guardrail Agent | policy-guardrail | Verify refund eligibility, catch promises made before verification, ensure compliance |
+| Customer Response Writer | customer-response-writer | Draft empathetic response, never ask for already-provided info, recommend human follow-up |
+
+### Workflow
+
+Sequential: Triage -> Policy Guard -> Response Writer.
+
+### First Run (Before Learning)
+
+Input: A complaint with order #ORD-98234, 3 prior support contacts, missing item, late delivery, chargeback threat, social media risk, and contact details already provided.
+
+Expected issues:
+- Agent asks for order number or contact details (already in the complaint)
+- Agent fails to flag chargeback and public complaint risk
+- Agent promises refund before verification
+- Agent does not recommend urgent human follow-up
+
+### Feedback
+
+```text
+The agent asked for the order number and contact details when both were already
+provided in the complaint. It failed to identify the chargeback threat and social
+media risk. It promised a refund without verification. It did not recommend urgent
+human follow-up for this high-risk case.
+```
+
+Type: correction, Rating: 2/5.
+
+### Reflection -> Approve
+
+Generate proposed memory from feedback, navigate to agent detail, approve. The approved memory teaches the agent:
+- Do not ask for information already provided
+- Identify chargeback/public complaint risk
+- Recommend urgent human follow-up
+- Avoid promising refund before verification
+
+### Second Run (After Learning)
+
+Input: A different complaint with order #ORD-10456, subscription upgrade issue, 4 prior contacts, charge dispute threat, consumer protection agency mention.
+
+Expected improvement: The agent's context now includes the approved memory, so the second run should reference the learned lesson. The trace events and config snapshot from the second run show the active memory was included in context assembly.
+
+### E2E Test
+
+The `Customer Escalation Recovery: full learning loop with 3-agent sequential workflow` test in `frontend/e2e/frontend.spec.ts` automates this entire flow.

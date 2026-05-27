@@ -412,6 +412,7 @@ function LearningFeedbackSection({ runId, executions }: { runId: number; executi
                     <Select value={feedbackType} onChange={(e) => setFeedbackType(e.target.value)}>
                       <option value="general">General</option>
                       <option value="improvement">Improvement</option>
+                      <option value="correction">Correction</option>
                       <option value="praise">Praise</option>
                       <option value="issue">Issue</option>
                     </Select>

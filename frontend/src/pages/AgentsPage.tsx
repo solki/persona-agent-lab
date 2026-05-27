@@ -514,6 +514,7 @@ function MemoryManager({ agentId, refreshKey = 0 }: { agentId: number; refreshKe
   const form = useForm({ defaultValues: { memory_type: "lesson", content: "", source: "frontend", importance: 50, status: "pending" as MemoryStatus } });
 
   const load = useCallback(async () => {
+    void refreshKey;
     setItems(await api.listMemories(agentId));
   }, [agentId, refreshKey]);
 

@@ -787,3 +787,54 @@ Experiments and runs should not create circular cleanup instructions. Archive ex
 - Runtime monitoring uses polling rather than WebSockets.
 - Run cleanup uses archive by default. Archived runs are hidden from the default Runs list, can be viewed with the Archived runs filter, and can be activated back into Active runs. Permanent delete is limited to archived runs that pass backend safety checks.
 - Authentication and multi-user authorization are not implemented in the MVP.
+
+## 12. Customer Escalation Recovery Demo
+
+A second demo scenario proving an agent can learn not to ask for repeated information, identify escalation risk, and recommend human follow-up after receiving corrective feedback.
+
+### Quick Seed
+
+Instead of manually creating agents, run the seed script:
+
+```bash
+cd backend && python scripts/seed_demo.py
+```
+
+The script creates three agents (Escalation Triage, Policy Guardrail, Customer Response Writer) and a sequential workflow. It prints the IDs, sample complaint texts, feedback text, and step-by-step instructions.
+
+### Scenario
+
+A customer files a complaint with repeated support contacts, a missing item, late delivery, and a chargeback threat. The order number and contact details are already provided in the complaint text.
+
+### Agents
+
+| Agent | Role | Responsibility |
+|-------|------|----------------|
+| Escalation Triage Agent | escalation-triage | Analyze severity, identify repeated info requests, flag chargeback/public-complaint risk |
+| Policy Guardrail Agent | policy-guardrail | Verify refund eligibility, catch promises made before verification, ensure compliance |
+| Customer Response Writer | customer-response-writer | Draft empathetic response, never ask for already-provided info, recommend human follow-up |
+
+### Manual Steps
+
+1. Seed the demo: `cd backend && python scripts/seed_demo.py`
+2. Open the app at `http://localhost:3000`
+3. Navigate to **Workflows**, find "Escalation Recovery Workflow", select **Run**
+4. Paste the first complaint (printed by the seed script) and select **Run workflow**
+5. Wait for the run to complete, then open the run detail page
+6. Submit feedback on the Escalation Triage Agent:
+   - Type: `correction`
+   - Rating: `2`
+   - Text: see seed script output
+7. Select **Generate proposed memory from feedback**
+8. Navigate to the agent detail page and **Approve** the proposed memory
+9. Return to the run and select **Re-run**
+10. Paste the second complaint (printed by the seed script) and run
+11. Compare the two runs: the second run's trace should include the approved memory in context assembly
+
+### Expected Results
+
+- First run: agent may ask for already-provided info, miss risk signals, promise unverified refund
+- After feedback + reflection + approve: agent's active memory contains the learned lesson
+- Second run: approved memory appears in context assembly for the Escalation Triage Agent
+- Other agents (Policy Guardrail, Response Writer) do not see the Triage agent's memory
+- The E2E test `Customer Escalation Recovery: full learning loop with 3-agent sequential workflow` automates this flow

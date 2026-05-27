@@ -509,6 +509,134 @@ test.describe.serial("Frontend", () => {
       await expect(icon).toBeVisible();
     }
   });
+
+  test("Customer Escalation Recovery: full learning loop with 3-agent sequential workflow", async ({ page }) => {
+    // Step 1: Create three agents
+    const triageSoul = await apiPost<{ id: number }>("/souls", {
+      name: `Escalation Triage Soul ${suffix}`,
+      persona: "Methodical triage analyst. Prioritizes risk signals over process formalities.",
+      is_active: true,
+    });
+    const policySoul = await apiPost<{ id: number }>("/souls", {
+      name: `Policy Guard Soul ${suffix}`,
+      persona: "Strict but fair compliance officer. Catches policy gaps before they become liabilities.",
+      is_active: true,
+    });
+    const writerSoul = await apiPost<{ id: number }>("/souls", {
+      name: `Customer Response Soul ${suffix}`,
+      persona: "Empathetic communicator who balances customer care with business reality.",
+      is_active: true,
+    });
+
+    const createDemoAgent = async (name: string, role: string, prompt: string, soulId: number, temp = 0.2) =>
+      apiPost<{ id: number; name: string }>("/agents", {
+        name: `${name} ${suffix}`,
+        role,
+        system_prompt: prompt,
+        soul_id: soulId,
+        llm_provider: "mock",
+        model: "mock-deterministic",
+        temperature: temp,
+        max_tokens: 1024,
+        memory_policy: { write_mode: "manual_review", retrieval_enabled: true },
+        context_policy: { include_active_context: true },
+        handoff_policy: { allow_handoff: false, allowed_agent_ids: [] },
+        is_active: true,
+      });
+
+    const triage = await createDemoAgent(
+      "Demo Triage",
+      "escalation-triage",
+      "You are an escalation triage specialist. Analyze customer complaints for severity, identify repeated information requests, and assess escalation risk. Never ask for information already provided. Flag chargeback threats, public complaint risks, and regulatory concerns immediately.",
+      triageSoul.id,
+    );
+    const policy = await createDemoAgent(
+      "Demo Policy Guard",
+      "policy-guardrail",
+      "You are a policy compliance guard. Review responses for policy violations, verify refund eligibility before promising refunds, and ensure regulatory requirements are met. Flag any response that promises a refund before verification is complete.",
+      policySoul.id,
+    );
+    const writer = await createDemoAgent(
+      "Demo Response Writer",
+      "customer-response-writer",
+      "You are a customer response writer. Draft empathetic, professional responses to escalated complaints. Never ask for information already provided by the customer. Include clear next steps and recommend human follow-up for high-risk cases.",
+      writerSoul.id,
+      0.3,
+    );
+
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `Escalation Recovery Demo ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [triage.id, policy.id, writer.id] },
+      is_active: true,
+    });
+
+    // Step 2: Run first complaint
+    const firstComplaint =
+      "Customer Complaint - Order #ORD-98234:\n" +
+      "I've contacted support 3 times already about my missing item from order #ORD-98234. " +
+      "The delivery was 2 weeks late and now the package is missing the main item I ordered. " +
+      "I paid $249.99 for this and I'm getting nowhere with your team. " +
+      "If this isn't resolved today I'm filing a chargeback with my credit card company " +
+      "and posting about this on social media. " +
+      "My email is customer@example.com and phone is 555-0123.";
+
+    const run1 = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: firstComplaint });
+
+    // Step 3: Submit feedback on the triage agent
+    await page.goto(`/runs/${run1.id}`);
+    await expect(page.getByRole("heading", { name: `Run ${run1.id}` })).toBeVisible();
+
+    // Expand the triage agent's feedback section
+    await page.getByRole("button", { name: triage.name }).click();
+    await page.getByLabel("Feedback type").selectOption("correction");
+    await page.getByLabel("Rating 2").click();
+    await page.getByPlaceholder("Describe what the agent did well or what could be improved...").fill(
+      "The agent asked for the order number and contact details when both were already provided in the complaint. " +
+        "It failed to identify the chargeback threat and social media risk. " +
+        "It promised a refund without verification. " +
+        "It did not recommend urgent human follow-up for this high-risk case.",
+    );
+    await page.getByRole("button", { name: "Submit feedback" }).click();
+    await expect(page.getByText("Feedback submitted.")).toBeVisible();
+
+    // Step 4: Generate proposed memory from feedback
+    await page.getByRole("button", { name: /Generate proposed memory from feedback/ }).click();
+    await expect(page.getByText("Proposed memory created from feedback.")).toBeVisible();
+
+    // Step 5: Navigate to agent detail, approve the proposed memory
+    await page.getByRole("link", { name: "View agent proposed memories" }).click();
+    await expect(page.getByRole("heading", { name: "Agent Detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Proposed Memories", exact: true })).toBeVisible();
+    await expect(page.getByText(/from feedback/).last()).toBeVisible();
+
+    await page.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Proposed memory approved.")).toBeVisible();
+    await expect(page.getByText(/lesson.*approved/)).toBeVisible();
+
+    // Step 6: Re-run the workflow (re-uses original task automatically)
+    await page.goto(`/runs/${run1.id}`);
+    await expect(page.getByRole("heading", { name: `Run ${run1.id}` })).toBeVisible();
+    await page.getByRole("button", { name: "Re-run" }).click();
+
+    // Step 7: Verify redirected to new run monitor (wait for navigation to complete)
+    await page.waitForURL(/\/runs\/\d+\/monitor/, { timeout: 60000 });
+    const run2Id = idFromUrl(page.url());
+    expect(run2Id).not.toBe(run1.id);
+    await expect(page.getByRole("heading", { name: /Run \d+ Monitor/ })).toBeVisible();
+
+    // Step 8: Verify learning events card appears on new run monitor
+    await expect(page.getByRole("heading", { name: "Learning Events" })).toBeVisible();
+    await expect(page.getByText("Feedback")).toBeVisible();
+    await expect(page.getByText("Proposed memories")).toBeVisible();
+
+    // Cleanup
+    await apiPost(`/runs/${run1.id}/archive`, {});
+    await apiPost(`/runs/${run2Id}/archive`, {});
+    for (const agent of [triage, policy, writer]) {
+      await backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
+    }
+  });
 });
 
 function cardWithText(page: Page, text: string) {
