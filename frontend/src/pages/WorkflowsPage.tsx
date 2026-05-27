@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FieldHelp } from "@/components/shared/FieldHelp";
 import { FormField } from "@/components/shared/FormField";
 import { JsonCollapse } from "@/components/shared/JsonCollapse";
 import { NoticeDialog } from "@/components/shared/NoticeDialog";
@@ -266,7 +267,7 @@ export function WorkflowFormPage() {
           <CardContent>
             <form className="grid gap-4 lg:grid-cols-2" onSubmit={form.handleSubmit(submit)}>
               <FormField label="Name" error={form.formState.errors.name?.message}><Input {...form.register("name")} /></FormField>
-              <FormField label="Workflow type">
+              <FormField label="Workflow type" help={<FieldHelp pattern="tooltip" content="Execution strategy. sequential: agents run one after another in order. supervisor: a supervisor agent delegates to worker agents. handoff_swarm: agents hand off to each other dynamically based on handoff policy." />}>
                 <Select {...form.register("workflow_type")}>
                   <option value="sequential">sequential</option>
                   <option value="supervisor">supervisor</option>
@@ -289,7 +290,7 @@ export function WorkflowFormPage() {
                 </FormField>
                 {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Order: {selectedAgentIds.map((id) => agentById[id] ?? `Agent ${id}`).join(" -> ")}</p> : null}
               </div>
-              <div className="lg:col-span-2"><FormField label="Graph config JSON"><Textarea className="font-mono" rows={8} {...form.register("graphConfigJson")} /></FormField></div>
+              <div className="lg:col-span-2"><FormField label="Graph config JSON" help={<FieldHelp pattern="popover" title="Graph config" content="Raw graph configuration sent to the workflow engine. The agent picker above is a convenience — the JSON is the source of truth. Edit directly for advanced configurations not supported by the picker." />}><Textarea className="font-mono" rows={8} {...form.register("graphConfigJson")} /></FormField></div>
               <div className="flex items-end gap-2">
                 <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : "Save workflow"}</Button>
                 <Link to="/workflows"><Button type="button" variant="outline">Back to workflows</Button></Link>

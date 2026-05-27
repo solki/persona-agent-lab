@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FieldHelp } from "@/components/shared/FieldHelp";
 import { FormField } from "@/components/shared/FormField";
 import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -252,7 +253,7 @@ export function ToolFormPage() {
         <FormField label="Tool type" error={form.formState.errors.tool_type?.message}>
           <Input {...form.register("tool_type")} />
         </FormField>
-        <FormField label="Config JSON">
+        <FormField label="Config JSON" help={<FieldHelp pattern="popover" title="Tool configuration" content="Tool-specific configuration. Structure depends on the tool type.\n\nFor custom tools: any JSON object.\nFor web_search: may include base_url, api_key_ref, max_results.\n\nNever put secrets directly in this field." />}>
           <Textarea className="font-mono" rows={8} {...form.register("configJson")} />
         </FormField>
         <label className="flex items-center gap-2 text-sm">
