@@ -1,6 +1,7 @@
 import { Refine } from "@refinedev/core";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/shared/AppLayout";
+import { NotificationProvider } from "@/lib/NotificationContext";
 import { AgentDetailPage, AgentFormPage, AgentsPage } from "@/pages/AgentsPage";
 import { ExperimentFormPage, ExperimentsPage } from "@/pages/ExperimentsPage";
 import { RunMonitorPage, RunsPage, RunDetailPage } from "@/pages/RunsPage";
@@ -11,6 +12,7 @@ import { WorkflowFormPage, WorkflowsPage } from "@/pages/WorkflowsPage";
 export function App() {
   return (
     <BrowserRouter>
+      <NotificationProvider>
       <Refine
         resources={[
           { name: "souls", list: "/souls", create: "/souls/new", edit: "/souls/:id" },
@@ -46,6 +48,7 @@ export function App() {
           </Route>
         </Routes>
       </Refine>
+      </NotificationProvider>
     </BrowserRouter>
   );
 }

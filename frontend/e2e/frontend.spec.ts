@@ -198,6 +198,63 @@ test.describe.serial("Frontend", () => {
     await apiDelete(`/agents/${agent.id}`);
   });
 
+  test("shows and clears notification badges for feedback-derived pending proposed memories", async ({ page }) => {
+    const beforeSummary = await apiGet<{ total_count: number }>("/proposed-memory-notifications");
+    const beforeCount = beforeSummary.total_count;
+
+    const agent = await createApiAgent(`V2E2E Notify Agent ${suffix}`);
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `V2E2E Notify Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [agent.id] },
+      is_active: true
+    });
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: "Test notification badges." });
+    const feedback = await apiPost<{ id: number }>(`/runs/${run.id}/agents/${agent.id}/feedback`, {
+      feedback_text: "Consider improving the notification system.",
+      feedback_type: "improvement"
+    });
+    const proposed = await apiPost<{ id: number; status: string }>(`/agents/${agent.id}/proposed-memories`, {
+      source_feedback_id: feedback.id,
+      content: "Test proposed memory from feedback for notification badges.",
+      memory_type: "lesson"
+    });
+    expect(proposed.status).toBe("pending");
+    const expectedTotal = String(beforeCount + 1);
+
+    // Sidebar badge on Agents nav
+    await page.goto("/");
+    const sidebarBadge = page.getByLabel("Pending feedback memory approval");
+    await expect(sidebarBadge).toBeVisible();
+    await expect(sidebarBadge).toHaveText(expectedTotal);
+
+    // Agent list card badge
+    await page.goto("/agents");
+    const agentCard = cardWithText(page, agent.name);
+    await expect(agentCard.getByLabel("Pending feedback memory approval")).toBeVisible();
+
+    // Agent detail Proposed Memories section badge (scope to main to exclude sidebar badge)
+    await page.goto(`/agents/${agent.id}`);
+    await expect(page.locator("main").getByLabel("Pending feedback memory approval")).toBeVisible();
+    await expect(page.locator("main").getByLabel("Pending feedback memory approval")).toHaveText("1");
+
+    // Approve via UI → detail section badge cleared
+    await page.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Proposed memory approved.")).toBeVisible();
+    await expect(page.locator("main").getByLabel("Pending feedback memory approval")).toHaveCount(0);
+
+    // Sidebar badge returns to baseline
+    if (beforeCount === 0) {
+      await expect(page.getByLabel("Pending feedback memory approval")).toHaveCount(0);
+    } else {
+      await expect(page.getByLabel("Pending feedback memory approval")).toHaveText(String(beforeCount));
+    }
+
+    // Cleanup (feedback/learning records prevent cascaded deletes; archive + deactivate instead)
+    await apiPost(`/runs/${run.id}/archive`, {});
+    backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
+  });
+
   test("archives an experiment with related runs without circular cleanup", async ({ page }) => {
     const firstAgent = await createApiAgent(`V2E2E Experiment Agent A ${suffix}`);
     const secondAgent = await createApiAgent(`V2E2E Experiment Agent B ${suffix}`);
@@ -260,6 +317,12 @@ async function createApiAgent(name: string) {
 
 async function apiPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const response = await backend.post(path, { data: body });
+  expect(response.ok(), `${path} should return success`).toBeTruthy();
+  return (await response.json()) as T;
+}
+
+async function apiGet<T>(path: string): Promise<T> {
+  const response = await backend.get(path);
   expect(response.ok(), `${path} should return success`).toBeTruthy();
   return (await response.json()) as T;
 }

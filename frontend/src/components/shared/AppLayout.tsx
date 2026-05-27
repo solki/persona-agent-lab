@@ -1,6 +1,7 @@
-import { Beaker, Bot, Brain, FlaskConical, Hammer, History, Home, Network, Users } from "lucide-react";
+import { Beaker, Brain, FlaskConical, Hammer, History, Home, Network, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useNotification } from "@/lib/NotificationContext";
 
 const nav = [
   { href: "/", label: "Overview", icon: Home },
@@ -13,6 +14,8 @@ const nav = [
 ];
 
 export function AppLayout() {
+  const { totalCount } = useNotification();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
@@ -54,9 +57,12 @@ export function AppLayout() {
               >
                 <Icon size={16} strokeWidth={1.5} className={cn("shrink-0")} />
                 <span className="font-medium">{item.label}</span>
-                {item.label === "Agents" ? (
-                  <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-                    <Bot size={12} className="inline" />
+                {item.label === "Agents" && totalCount > 0 ? (
+                  <span
+                    aria-label="Pending feedback memory approval"
+                    className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-400 border border-amber-500/30"
+                  >
+                    {totalCount}
                   </span>
                 ) : null}
               </NavLink>

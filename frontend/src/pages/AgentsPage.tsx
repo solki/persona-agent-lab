@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import type { Agent, AgentContext, AgentMemory, MemoryStatus, ProposedMemory, Soul, Tool } from "@/lib/types";
+import { useNotification } from "@/lib/NotificationContext";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
 const providers = ["mock", "openai_compatible", "openai", "anthropic", "ollama"] as const;
@@ -134,7 +135,7 @@ export function AgentsPage() {
                   <h2 className="break-words text-base font-semibold">{agent.name}</h2>
                   <StatusBadge status={agent.is_active ? "active" : "inactive"} />
                   {notificationCounts[agent.id] ? (
-                    <span aria-label="Pending feedback memory approval" className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    <span aria-label="Pending feedback memory approval" className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">
                       {notificationCounts[agent.id]}
                     </span>
                   ) : null}
@@ -704,6 +705,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<ProposedMemory[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const { refresh: refreshNotifications } = useNotification();
   const notificationCount = items.filter((item) => item.status === "pending" && (item.source_feedback_id || item.source_evaluation_id)).length;
 
   const load = useCallback(async () => {
@@ -725,6 +727,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
         setMessage("Proposed memory rejected.");
       }
       await load();
+      refreshNotifications();
     } catch (reviewError) {
       setError(reviewError instanceof Error ? reviewError.message : "Unable to review proposed memory.");
     }
@@ -735,7 +738,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold">Proposed Memories</h2>
-          {notificationCount > 0 ? <span aria-label="Pending feedback memory approval" className="rounded-full bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white">{notificationCount}</span> : null}
+          {notificationCount > 0 ? <span aria-label="Pending feedback memory approval" className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">{notificationCount}</span> : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
