@@ -49,7 +49,7 @@ export function SoulsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [pendingAction, setPendingAction] = useState<{ soul: Soul; action: "delete" | "deactivate" | "activate" } | null>(null);
-  const [safetyWarning, setSafetyWarning] = useState("");
+  const [blockedDelete, setBlockedDelete] = useState<{ soul: Soul; linkedAgents: Agent[] } | null>(null);
   const [working, setWorking] = useState(false);
 
   async function load() {
@@ -80,16 +80,24 @@ export function SoulsPage() {
       if (pendingAction.action === "delete") {
         await api.deleteSoul(pendingAction.soul.id);
         setMessage("Soul deleted.");
+        setPendingAction(null);
       } else {
         await api.updateSoul(pendingAction.soul.id, { is_active: pendingAction.action === "activate" });
         setMessage(pendingAction.action === "activate" ? "Soul activated." : "Soul deactivated.");
+        setPendingAction(null);
       }
-      setPendingAction(null);
       await load();
     } catch (actionError) {
+      if (pendingAction.action === "delete") {
+        const linked = agents.filter((a) => a.soul_id === pendingAction.soul.id);
+        if (linked.length > 0) {
+          setBlockedDelete({ soul: pendingAction.soul, linkedAgents: linked });
+          setPendingAction(null);
+          return;
+        }
+      }
       const messageText = actionError instanceof Error ? actionError.message : "Unable to update soul.";
       setError(messageText);
-      setSafetyWarning(messageText);
       setPendingAction(null);
     } finally {
       setWorking(false);
@@ -132,15 +140,20 @@ export function SoulsPage() {
                       <Edit size={15} /> Edit
                     </Button>
                   </Link>
-                  <Button
-                    type="button"
-                    variant={soul.is_active && soulUsage[soul.id] ? "outline" : soul.is_active ? "destructive" : "default"}
-                    size="sm"
-                    onClick={() => setPendingAction({ soul, action: !soul.is_active ? "activate" : soulUsage[soul.id] ? "deactivate" : "delete" })}
-                  >
-                    {!soul.is_active ? <RotateCcw size={15} /> : soulUsage[soul.id] ? <Power size={15} /> : <Trash2 size={15} />}
-                    {!soul.is_active ? "Activate" : soulUsage[soul.id] ? "Deactivate" : "Delete"}
-                  </Button>
+                  {soul.is_active ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setPendingAction({ soul, action: "deactivate" })}>
+                      <Power size={15} /> Deactivate
+                    </Button>
+                  ) : (
+                    <>
+                      <Button type="button" size="sm" onClick={() => setPendingAction({ soul, action: "activate" })}>
+                        <RotateCcw size={15} /> Activate
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => setPendingAction({ soul, action: "delete" })}>
+                        <Trash2 size={15} /> Delete
+                      </Button>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -155,7 +168,7 @@ export function SoulsPage() {
             ? "This makes the soul available for new and existing agent configuration."
             : pendingAction?.action === "deactivate"
               ? "This keeps the referenced soul for existing agents but prevents treating it as active reusable configuration."
-              : "This permanently deletes the unused soul."
+              : "This permanently deletes the inactive soul."
         }
         confirmLabel={pendingAction?.action === "activate" ? "Activate soul" : pendingAction?.action === "deactivate" ? "Deactivate soul" : "Delete soul"}
         destructive={pendingAction?.action !== "activate"}
@@ -163,7 +176,24 @@ export function SoulsPage() {
         onCancel={() => setPendingAction(null)}
         onConfirm={applyAction}
       />
-      <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
+      <NoticeDialog
+        open={Boolean(blockedDelete)}
+        title="Cannot delete soul"
+        onClose={() => setBlockedDelete(null)}
+      >
+        <p className="mb-3 text-sm text-muted-foreground">
+          This soul is linked to {blockedDelete?.linkedAgents.length ?? 0} agent(s). Reassign or remove the soul from those agents before deleting.
+        </p>
+        <ul className="space-y-1">
+          {blockedDelete?.linkedAgents.map((agent) => (
+            <li key={agent.id}>
+              <Link to={`/agents/${agent.id}`} className="text-amber-400 hover:underline" onClick={() => setBlockedDelete(null)}>
+                {agent.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </NoticeDialog>
     </>
   );
 }

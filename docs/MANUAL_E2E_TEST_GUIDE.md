@@ -655,7 +655,7 @@ Backend not running:
 Frontend cannot reach backend:
 
 - Symptom: lists do not load or save actions fail.
-- Fix: confirm `NEXT_PUBLIC_API_BASE_URL` is unset or set to `http://localhost:8000`.
+- Fix: confirm `VITE_API_BASE_URL` is unset or set to `http://localhost:8000`.
 
 CORS error:
 

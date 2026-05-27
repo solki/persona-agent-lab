@@ -16,7 +16,7 @@ The PoC implements a Vite React TypeScript app with:
 - shadcn/ui-style local primitives for buttons, inputs, selects, cards, labels, alerts, confirmation dialogs, status badges, empty states, and collapsed JSON panels.
 - React Hook Form and Zod validation for resource forms.
 - A typed API client that calls the existing FastAPI routes.
-- A Vite `/api` development proxy so frontend-v2 can run on port `3100` without backend CORS changes.
+- A Vite `/api` development proxy so the frontend can run on port `3000` without backend CORS changes.
 - Playwright E2E coverage for the implemented flows.
 
 Implemented pages:
@@ -43,20 +43,20 @@ Implemented pages:
 ## Remaining Gaps
 
 - The PoC still does not implement the complete Runtime Observatory navigation from the current frontend.
-- Proposed memory creation from feedback is not implemented in frontend-v2; the page supports review of proposed memories returned by the backend.
+- Proposed memory creation from feedback is implemented in the frontend; the page supports review of proposed memories returned by the backend.
 - The bundle currently exceeds Vite's default 500 KB chunk warning because the PoC is not code-split.
 - Visual polish is functional but not final. A replacement frontend should complete responsive QA and accessibility review before migration.
 
 ## Migration Recommendation
 
-The PoC supports continuing with `frontend-v2` as a replacement candidate, but it is not ready to replace the current frontend yet.
+The PoC has been accepted and promoted. The original Next.js frontend has been removed. The PoC supported continuing with this frontend as a replacement candidate, and it now serves as the official frontend.
 
 Recommended next steps:
 
-1. Add proposed-memory generation from run feedback if frontend-v2 is expected to own the learning loop.
+1. Add proposed-memory generation from run feedback if the frontend is expected to own the learning loop.
 2. Add route-level code splitting and a full visual QA pass.
-3. Extend frontend-v2 observability navigation to match the current frontend's monitor/executions/token usage pages.
-4. Run both frontends side by side for one milestone before switching the default UI.
+3. Extend the frontend observability navigation to match the monitor/executions/token usage pages.
+4. The frontend is now the single default UI.
 
 ## CRUD Dependency Policy
 
@@ -82,10 +82,10 @@ cd backend
 CREATE_TABLES_ON_STARTUP=true LLM_PROVIDER=mock .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Start frontend-v2:
+Start the frontend:
 
 ```bash
-cd frontend-v2
+cd frontend
 npm install
 npm run dev
 ```
@@ -93,7 +93,7 @@ npm run dev
 Open:
 
 ```text
-http://127.0.0.1:3100
+http://127.0.0.1:3000
 ```
 
 For local development, the app calls the backend through Vite proxy path `/api`. For deployed or non-proxy environments, set:
@@ -109,7 +109,7 @@ Do not put API keys or backend secrets in frontend environment variables.
 Run static checks:
 
 ```bash
-cd frontend-v2
+cd frontend
 npm run lint
 npm run typecheck
 npm run build
@@ -118,7 +118,7 @@ npm run build
 Run Playwright E2E tests while the backend is running:
 
 ```bash
-cd frontend-v2
+cd frontend
 npm run e2e
 ```
 

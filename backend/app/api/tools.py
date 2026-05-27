@@ -37,10 +37,10 @@ def update_tool(tool_id: int, payload: ToolUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/{tool_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_tool(tool_id: int, db: Session = Depends(get_db)):
+def delete_tool(tool_id: int, force: bool = False, db: Session = Depends(get_db)):
     tool = require_tool(db, tool_id)
     try:
-        tool_service.delete_tool(db, tool)
+        tool_service.delete_tool(db, tool, force=force)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -108,7 +108,7 @@ export const api = {
   getTool: (id: number) => request<Tool>(`/tools/${id}`),
   createTool: (payload: JsonBody) => request<Tool>("/tools", body("POST", payload)),
   updateTool: (id: number, payload: JsonBody) => request<Tool>(`/tools/${id}`, body("PUT", payload)),
-  deleteTool: (id: number) => request<void>(`/tools/${id}`, { method: "DELETE" }),
+  deleteTool: (id: number, force = false) => request<void>(`/tools/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
 
   listWorkflows: () => request<Workflow[]>("/workflows"),
   getWorkflow: (id: number) => request<Workflow>(`/workflows/${id}`),
