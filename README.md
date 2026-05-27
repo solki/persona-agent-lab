@@ -33,7 +33,7 @@ Milestone 10 adds an Agent Runtime Observatory. Users can monitor run status by 
 
 ```text
 backend/      FastAPI backend, persistence, runtime, tools, memory, and tests.
-frontend/     Next.js frontend for agent, workflow, run, and experiment management.
+frontend/     Vite React frontend for agent, workflow, run, and experiment management.
 docs/         Architecture, setup, isolation, memory, workflow, and experiment guides.
 .skills/      Project-specific Codex skills for planning, implementation, review, and experiments.
 ```
@@ -45,7 +45,6 @@ docs/         Architecture, setup, isolation, memory, workflow, and experiment g
    ```bash
    cp .env.example .env
    cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env.local
    ```
 
 2. Start required local infrastructure:
@@ -149,7 +148,7 @@ OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com
 OPENAI_COMPATIBLE_MODEL=deepseek-v4-flash
 ```
 
-LLM API keys belong only in backend environment files such as `backend/.env` or a server-side deployment secret store. Do not put LLM API keys in `frontend/.env.local` or expose them through frontend variables.
+LLM API keys belong only in backend environment files such as `backend/.env` or a server-side deployment secret store. Do not put LLM API keys in frontend environment files or expose them through frontend variables.
 
 To verify the active provider, start the backend and call `GET /health`; the response includes `llm_provider`. Workflow run trace output also stores provider metadata on agent output events.
 
@@ -251,7 +250,7 @@ The frontend exposes the main backend-supported configuration records:
 
 Destructive actions use an in-app confirmation dialog, show loading and success/error states, and refresh or redirect after success. If a delete is blocked, the frontend shows the FastAPI error message, such as a soul still being assigned to an agent or a workflow still having runs.
 
-Policy and tool config editors validate JSON in the browser before sending requests. LLM API keys must still remain backend-only; the frontend uses only `NEXT_PUBLIC_API_BASE_URL` to reach the FastAPI API.
+Policy and tool config editors validate JSON in the browser before sending requests. LLM API keys must still remain backend-only; the frontend uses the Vite `/api` dev proxy (or `VITE_API_BASE_URL` in production) to reach the FastAPI API.
 
 ## Review Status
 

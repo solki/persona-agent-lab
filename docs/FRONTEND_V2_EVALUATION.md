@@ -1,10 +1,12 @@
 # Frontend v2 Evaluation
 
+> **Note (May 2026):** `frontend-v2` has been promoted to the official `frontend/`. This document is retained for historical context on the evaluation that led to the migration.
+
 ## Purpose
 
-`frontend-v2` is a proof of concept for replacing the current Persona Agent Lab frontend with a refine + shadcn/ui foundation. The PoC validates whether a new frontend can provide more consistent CRUD, clearer loading and error states, safer destructive actions, and easier future iteration while continuing to use the existing FastAPI backend.
+`frontend-v2` was a proof of concept for replacing the original Persona Agent Lab frontend (Next.js) with a Vite + refine + shadcn/ui foundation. The PoC validated whether a new frontend could provide more consistent CRUD, clearer loading and error states, safer destructive actions, and easier future iteration while continuing to use the existing FastAPI backend.
 
-The existing `frontend` app remains untouched and usable. `frontend-v2` is a separate app next to it.
+The PoC has been accepted and promoted. The original Next.js frontend has been removed.
 
 ## Implemented Scope
 

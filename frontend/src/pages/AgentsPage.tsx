@@ -478,7 +478,7 @@ function MemoryManager({ agentId }: { agentId: number }) {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const form = useForm({ defaultValues: { memory_type: "lesson", content: "", source: "frontend_v2", importance: 50, status: "pending" as MemoryStatus } });
+  const form = useForm({ defaultValues: { memory_type: "lesson", content: "", source: "frontend", importance: 50, status: "pending" as MemoryStatus } });
 
   const load = useCallback(async () => {
     setItems(await api.listMemories(agentId));
@@ -504,7 +504,7 @@ function MemoryManager({ agentId }: { agentId: number }) {
         setMessage("Memory created.");
       }
       setEditing(null);
-      form.reset({ memory_type: "lesson", content: "", source: "frontend_v2", importance: 50, status: "pending" });
+      form.reset({ memory_type: "lesson", content: "", source: "frontend", importance: 50, status: "pending" });
       await load();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save memory.");

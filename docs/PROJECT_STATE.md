@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after standardizing frontend-v2 CRUD dependency handling.
+Last updated after promoting frontend-v2 to the official frontend.
 
 ## Project Purpose
 
@@ -13,7 +13,7 @@ Milestone 10 status: implemented.
 ## Current Architecture
 
 - Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
-- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, complete configuration management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, experiment comparison UI, and Playwright E2E coverage. `frontend-v2` is a separate Vite/refine/React prototype that now covers souls, agents, tools, workflows, runs, experiments, agent-tool assignment, and policy-aware CRUD lifecycle actions.
+- Frontend: Vite, React, TypeScript, Tailwind CSS, shadcn/ui primitives, typed API client with Vite dev proxy, dashboard, and complete configuration management for souls, agents, tools, workflows, runs, experiments, agent-tool assignment, and policy-aware CRUD lifecycle actions. Playwright E2E coverage.
 - Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.

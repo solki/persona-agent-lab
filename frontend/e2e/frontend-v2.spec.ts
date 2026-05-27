@@ -4,7 +4,7 @@ const API_BASE = process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:8000";
 const suffix = `${Date.now()}`;
 let backend: APIRequestContext;
 
-test.describe.serial("frontend-v2 PoC", () => {
+test.describe.serial("Frontend", () => {
   test.beforeAll(async () => {
     backend = await playwrightRequest.newContext({ baseURL: API_BASE });
     const health = await backend.get("/health");
@@ -20,16 +20,16 @@ test.describe.serial("frontend-v2 PoC", () => {
     await page.goto("/souls");
     await page.getByRole("link", { name: "New soul" }).click();
     await page.getByLabel("Name").fill(name);
-    await page.getByLabel("Description").fill("Created by frontend-v2 Playwright.");
+    await page.getByLabel("Description").fill("Created by Playwright.");
     await page.getByLabel("Principles").fill("Prefer visible, safe CRUD.");
     await page.getByRole("button", { name: "Save soul" }).click();
     await expect(page.getByRole("heading", { name: "Edit Soul" })).toBeVisible();
-    await page.getByLabel("Description").fill("Edited by frontend-v2 Playwright.");
+    await page.getByLabel("Description").fill("Edited by Playwright.");
     await page.getByRole("button", { name: "Save soul" }).click();
     await expect(page.getByText("Soul saved.")).toBeVisible();
     await page.getByRole("link", { name: "Back to souls" }).click();
     const card = cardWithText(page, name);
-    await expect(card).toContainText("Edited by frontend-v2 Playwright.");
+    await expect(card).toContainText("Edited by Playwright.");
     await card.getByRole("button", { name: "Delete" }).click();
     await expect(page.getByRole("dialog", { name: "Delete soul?" })).toBeVisible();
     await page.getByRole("button", { name: "Delete soul" }).click();
@@ -47,7 +47,7 @@ test.describe.serial("frontend-v2 PoC", () => {
     await page.getByLabel("Soul").selectOption({ label: soul.name });
     await page.getByLabel("Provider").selectOption("mock");
     await page.getByLabel("Model").fill("mock-deterministic");
-    await page.getByLabel("System prompt").fill("Validate frontend-v2 agent CRUD.");
+    await page.getByLabel("System prompt").fill("Validate agent CRUD.");
     await page.getByRole("button", { name: "Save agent" }).click();
     await expect(page.getByRole("heading", { name: "Agent Detail" })).toBeVisible();
     const agentId = idFromUrl(page.url());
@@ -79,7 +79,7 @@ test.describe.serial("frontend-v2 PoC", () => {
 
     const memoryForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Add memory" }) });
     await memoryForm.getByLabel("Type").fill("lesson");
-    await memoryForm.getByLabel("Source").fill("frontend_v2_e2e");
+    await memoryForm.getByLabel("Source").fill("e2e");
     await memoryForm.getByLabel("Content").fill(`Initial memory ${suffix}`);
     await memoryForm.getByRole("button", { name: "Add memory" }).click();
     await expect(page.getByText("Memory created.")).toBeVisible();
@@ -133,7 +133,7 @@ test.describe.serial("frontend-v2 PoC", () => {
       graph_config: { agent_sequence: [agent.id] },
       is_active: true
     });
-    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: "Create a short frontend-v2 run result." });
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: "Create a short run result." });
 
     await page.goto("/runs");
     const runCard = cardWithText(page, `Run ${run.id}`);
@@ -172,7 +172,7 @@ test.describe.serial("frontend-v2 PoC", () => {
     const workflowName = `V2E2E Workflow UI ${suffix}`;
     await page.goto("/workflows/new");
     await page.getByLabel("Name").fill(workflowName);
-    await page.getByLabel("Description").fill("Created through frontend-v2 workflow UI.");
+    await page.getByLabel("Description").fill("Created through workflow UI.");
     await page.getByText(agent.name).click();
     await page.getByRole("button", { name: "Save workflow" }).click();
     await expect(page.getByRole("heading", { name: "Workflow Detail" })).toBeVisible();
@@ -242,7 +242,7 @@ function idFromUrl(url: string) {
 async function createApiAgent(name: string) {
   return apiPost<{ id: number; name: string }>("/agents", {
     name,
-    role: "frontend-v2 e2e agent",
+    role: "e2e agent",
     system_prompt: "Run a deterministic mock workflow.",
     llm_provider: "mock",
     model: "mock-deterministic",

@@ -15,7 +15,6 @@ Before starting, make sure:
 - Qdrant is running through Docker Compose if you want the full local stack available.
 - The backend is running at `http://localhost:8000`.
 - The frontend is running at `http://localhost:3000`.
-- Optional frontend-v2 validation runs at `http://localhost:3100` and uses the same backend through the Vite `/api` proxy.
 - The recommended provider for this manual test is `mock`.
 - Optional `openai_compatible` provider configuration may be used, but mock mode is safer for repeatable local testing.
 - LLM API keys are stored only in backend environment files or server-side secret stores.
@@ -45,20 +44,6 @@ Start the frontend in a second terminal:
 cd frontend
 npm install
 npm run dev
-```
-
-To validate `frontend-v2` instead of the current frontend, start it in another terminal:
-
-```bash
-cd frontend-v2
-npm install
-npm run dev
-```
-
-Open frontend-v2 at:
-
-```text
-http://localhost:3100
 ```
 
 Check backend health:
@@ -269,7 +254,7 @@ Expected result:
 
 - The tool appears in the assigned tools list for this agent.
 - Other agents do not automatically receive the tool.
-- In frontend-v2, removing this relationship is labeled **Unassign**. It removes only the assignment and does not delete the agent or tool.
+- Removing a tool-assignment relationship is labeled **Unassign**. It removes only the assignment and does not delete the agent or tool.
 
 ### J. Create Workflow Using Agent Picker
 

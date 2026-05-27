@@ -22,7 +22,7 @@ export function AppLayout() {
           </span>
           <span>
             <strong className="block text-base">Persona Agent Lab</strong>
-            <span className="text-xs text-muted-foreground">frontend-v2 PoC</span>
+            <span className="text-xs text-muted-foreground">Agent Swarm Lab</span>
           </span>
         </div>
         <nav className="space-y-1">
