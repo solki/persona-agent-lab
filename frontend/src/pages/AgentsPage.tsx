@@ -234,6 +234,7 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [agent, setAgent] = useState<Agent | null>(null);
+  const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const form = useForm<AgentFormValues>({ resolver: zodResolver(agentSchema), defaultValues: defaultAgent });
 
   const load = useCallback(async () => {
@@ -375,9 +376,9 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
         {mode === "edit" && agentId ? (
           <>
             <ContextManager agentId={agentId} />
-            <MemoryManager agentId={agentId} />
+            <MemoryManager agentId={agentId} refreshKey={memoryRefreshKey} />
             <ToolAssignmentManager agentId={agentId} />
-            <ProposedMemoryManager agentId={agentId} />
+            <ProposedMemoryManager agentId={agentId} onMemoryChanged={() => setMemoryRefreshKey((k) => k + 1)} />
           </>
         ) : null}
       </div>
@@ -503,7 +504,7 @@ function ContextManager({ agentId }: { agentId: number }) {
   );
 }
 
-function MemoryManager({ agentId }: { agentId: number }) {
+function MemoryManager({ agentId, refreshKey = 0 }: { agentId: number; refreshKey?: number }) {
   const [items, setItems] = useState<AgentMemory[]>([]);
   const [editing, setEditing] = useState<AgentMemory | null>(null);
   const [pendingAction, setPendingAction] = useState<{ item: AgentMemory; action: "archive" | "activate" | "delete" } | null>(null);
@@ -514,7 +515,7 @@ function MemoryManager({ agentId }: { agentId: number }) {
 
   const load = useCallback(async () => {
     setItems(await api.listMemories(agentId));
-  }, [agentId]);
+  }, [agentId, refreshKey]);
 
   useEffect(() => {
     void load().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : "Unable to load memories."));
@@ -725,7 +726,7 @@ function ToolAssignmentManager({ agentId }: { agentId: number }) {
   );
 }
 
-function ProposedMemoryManager({ agentId }: { agentId: number }) {
+function ProposedMemoryManager({ agentId, onMemoryChanged }: { agentId: number; onMemoryChanged?: () => void }) {
   const [items, setItems] = useState<ProposedMemory[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -752,6 +753,7 @@ function ProposedMemoryManager({ agentId }: { agentId: number }) {
       }
       await load();
       refreshNotifications();
+      if (onMemoryChanged) onMemoryChanged();
     } catch (reviewError) {
       setError(reviewError instanceof Error ? reviewError.message : "Unable to review proposed memory.");
     }

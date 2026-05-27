@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { useNotification } from "@/lib/NotificationContext";
 import type { AgentFeedback, AgentExecution, ReflectionResponse, Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -305,6 +306,7 @@ function LearningFeedbackSection({ runId, executions }: { runId: number; executi
   const [lastFeedback, setLastFeedback] = useState<AgentFeedback | null>(null);
   const [lastReflection, setLastReflection] = useState<ReflectionResponse | null>(null);
 
+  const { refresh: refreshNotifications } = useNotification();
   const selectedExec = executions.find((e) => e.agent_id === selectedAgentId);
 
   function resetForm() {
@@ -354,6 +356,7 @@ function LearningFeedbackSection({ runId, executions }: { runId: number; executi
         memory_type: "lesson"
       });
       setLastReflection(reflection);
+      refreshNotifications();
       setMessage("Proposed memory created from feedback.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate proposed memory.");
