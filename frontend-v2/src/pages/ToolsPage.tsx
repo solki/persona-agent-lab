@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Power, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -8,6 +8,7 @@ import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
+import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -38,17 +39,31 @@ const emptyTool: ToolFormValues = {
 
 export function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
+  const [assignmentCounts, setAssignmentCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<Tool | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ tool: Tool; action: "delete" | "deactivate" | "activate" } | null>(null);
+  const [safetyWarning, setSafetyWarning] = useState("");
+  const [working, setWorking] = useState(false);
 
   async function load() {
     setLoading(true);
     setError("");
     try {
-      setTools(await api.listTools());
+      const [toolData, agentData] = await Promise.all([api.listTools(), api.listAgents()]);
+      const assignments = await Promise.all(
+        agentData.map(async (agent) => {
+          const assigned = await api.listAgentTools(agent.id);
+          return assigned.map((tool) => tool.id);
+        })
+      );
+      const counts: Record<number, number> = {};
+      assignments.flat().forEach((toolId) => {
+        counts[toolId] = (counts[toolId] ?? 0) + 1;
+      });
+      setTools(toolData);
+      setAssignmentCounts(counts);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load tools.");
     } finally {
@@ -60,21 +75,29 @@ export function ToolsPage() {
     void load();
   }, []);
 
-  async function deleteTool() {
-    if (!pendingDelete) {
+  async function applyAction() {
+    if (!pendingAction) {
       return;
     }
-    setDeleting(true);
+    setWorking(true);
     setError("");
     try {
-      await api.deleteTool(pendingDelete.id);
-      setMessage("Tool deleted.");
-      setPendingDelete(null);
+      if (pendingAction.action === "delete") {
+        await api.deleteTool(pendingAction.tool.id);
+        setMessage("Tool deleted.");
+      } else {
+        await api.updateTool(pendingAction.tool.id, { is_active: pendingAction.action === "activate" });
+        setMessage(pendingAction.action === "activate" ? "Tool activated." : "Tool deactivated.");
+      }
+      setPendingAction(null);
       await load();
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete tool.");
+    } catch (actionError) {
+      const messageText = actionError instanceof Error ? actionError.message : "Unable to update tool.";
+      setError(messageText);
+      setSafetyWarning(messageText);
+      setPendingAction(null);
     } finally {
-      setDeleting(false);
+      setWorking(false);
     }
   }
 
@@ -95,27 +118,51 @@ export function ToolsPage() {
                   <StatusBadge status={tool.is_active ? "active" : "inactive"} />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{tool.description || "No description"}</p>
-                <p className="mt-2 text-xs text-muted-foreground">Type: {tool.tool_type}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Type: {tool.tool_type}
+                  {assignmentCounts[tool.id] ? ` · Assigned to ${assignmentCounts[tool.id]} agent(s)` : ""}
+                </p>
               </div>
               <div className="flex gap-2">
                 <Link to={`/tools/${tool.id}`}>
                   <Button type="button" variant="outline" size="sm"><Edit size={15} /> Edit</Button>
                 </Link>
-                <Button type="button" variant="destructive" size="sm" onClick={() => setPendingDelete(tool)}><Trash2 size={15} /> Delete</Button>
+                <Button
+                  type="button"
+                  variant={tool.is_active && assignmentCounts[tool.id] ? "outline" : tool.is_active ? "destructive" : "default"}
+                  size="sm"
+                  onClick={() =>
+                    setPendingAction({
+                      tool,
+                      action: !tool.is_active ? "activate" : assignmentCounts[tool.id] ? "deactivate" : "delete"
+                    })
+                  }
+                >
+                  {!tool.is_active ? <RotateCcw size={15} /> : assignmentCounts[tool.id] ? <Power size={15} /> : <Trash2 size={15} />}
+                  {!tool.is_active ? "Activate" : assignmentCounts[tool.id] ? "Deactivate" : "Delete"}
+                </Button>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
       <ConfirmDialog
-        open={Boolean(pendingDelete)}
-        title="Delete tool?"
-        description="This removes the tool registry entry and its agent assignments if backend safety checks allow it."
-        confirmLabel="Delete tool"
-        loading={deleting}
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={deleteTool}
+        open={Boolean(pendingAction)}
+        title={pendingAction?.action === "activate" ? "Activate tool?" : pendingAction?.action === "deactivate" ? "Deactivate tool?" : "Delete tool?"}
+        description={
+          pendingAction?.action === "activate"
+            ? "This makes the tool available for agent use again."
+            : pendingAction?.action === "deactivate"
+              ? "This keeps the tool record and assignments but prevents treating it as active configuration."
+              : "This permanently deletes the unused tool registry entry."
+        }
+        confirmLabel={pendingAction?.action === "activate" ? "Activate tool" : pendingAction?.action === "deactivate" ? "Deactivate tool" : "Delete tool"}
+        destructive={pendingAction?.action !== "activate"}
+        loading={working}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={applyAction}
       />
+      <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
     </>
   );
 }

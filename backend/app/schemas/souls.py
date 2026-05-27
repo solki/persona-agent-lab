@@ -11,6 +11,7 @@ class SoulBase(BaseModel):
     collaboration_style: Optional[str] = None
     failure_handling_style: Optional[str] = None
     escalation_style: Optional[str] = None
+    is_active: bool = True
 
 
 class SoulCreate(SoulBase):
@@ -25,6 +26,7 @@ class SoulUpdate(BaseModel):
     collaboration_style: Optional[str] = None
     failure_handling_style: Optional[str] = None
     escalation_style: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class SoulRead(SoulBase):

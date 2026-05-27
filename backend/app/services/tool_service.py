@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.models.tool import AgentTool, Tool
@@ -32,6 +32,7 @@ def update_tool(db: Session, tool: Tool, payload: ToolUpdate) -> Tool:
 
 
 def delete_tool(db: Session, tool: Tool) -> None:
-    db.execute(delete(AgentTool).where(AgentTool.c.tool_id == tool.id))
+    if db.scalar(select(exists().where(AgentTool.c.tool_id == tool.id))):
+        raise ValueError("Unassign or deactivate this tool instead. It is still assigned to one or more agents.")
     db.delete(tool)
     db.commit()

@@ -2,6 +2,8 @@ import type {
   Agent,
   AgentContext,
   AgentMemory,
+  Experiment,
+  ExperimentRun,
   ProposedMemory,
   ProposedMemoryNotificationSummary,
   Run,
@@ -78,6 +80,9 @@ export const api = {
   createAgent: (payload: JsonBody) => request<Agent>("/agents", body("POST", payload)),
   updateAgent: (id: number, payload: JsonBody) => request<Agent>(`/agents/${id}`, body("PUT", payload)),
   deleteAgent: (id: number) => request<void>(`/agents/${id}`, { method: "DELETE" }),
+  listAgentTools: (agentId: number) => request<Tool[]>(`/agents/${agentId}/tools`),
+  assignToolToAgent: (agentId: number, toolId: number) => request<void>(`/agents/${agentId}/tools/${toolId}`, { method: "POST" }),
+  unassignToolFromAgent: (agentId: number, toolId: number) => request<void>(`/agents/${agentId}/tools/${toolId}`, { method: "DELETE" }),
 
   listContexts: (agentId: number) => request<AgentContext[]>(`/agents/${agentId}/contexts`),
   createContext: (agentId: number, payload: JsonBody) => request<AgentContext>(`/agents/${agentId}/contexts`, body("POST", payload)),
@@ -106,11 +111,25 @@ export const api = {
   deleteTool: (id: number) => request<void>(`/tools/${id}`, { method: "DELETE" }),
 
   listWorkflows: () => request<Workflow[]>("/workflows"),
+  getWorkflow: (id: number) => request<Workflow>(`/workflows/${id}`),
+  createWorkflow: (payload: JsonBody) => request<Workflow>("/workflows", body("POST", payload)),
+  updateWorkflow: (id: number, payload: JsonBody) => request<Workflow>(`/workflows/${id}`, body("PUT", payload)),
+  deleteWorkflow: (id: number) => request<void>(`/workflows/${id}`, { method: "DELETE" }),
+  runWorkflow: (id: number, task: string) => request<Run>(`/workflows/${id}/run`, body("POST", { task })),
+
+  listExperiments: (includeArchived = false) => request<Experiment[]>(`/experiments${includeArchived ? "?include_archived=true" : ""}`),
+  getExperiment: (id: number) => request<Experiment>(`/experiments/${id}`),
+  createExperiment: (payload: JsonBody) => request<Experiment>("/experiments", body("POST", payload)),
+  deleteExperiment: (id: number, force = false) => request<void>(`/experiments/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
+  archiveExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/archive`, { method: "POST" }),
+  activateExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/activate`, { method: "POST" }),
+  runExperiment: (id: number) => request<ExperimentRun>(`/experiments/${id}/run`, { method: "POST" }),
 
   listRuns: (includeArchived = false) => request<Run[]>(`/runs${includeArchived ? "?include_archived=true" : ""}`),
   getRun: (id: number) => request<Run>(`/runs/${id}`),
   getRunTrace: (id: number) => request<TraceEvent[]>(`/runs/${id}/trace`),
   getRunMonitor: (id: number) => request<RunMonitor>(`/runs/${id}/monitor`),
   archiveRun: (id: number) => request<{ message: string }>(`/runs/${id}/archive`, { method: "POST" }),
-  activateRun: (id: number) => request<{ message: string }>(`/runs/${id}/activate`, { method: "POST" })
+  activateRun: (id: number) => request<{ message: string }>(`/runs/${id}/activate`, { method: "POST" }),
+  hardDeleteRun: (id: number) => request<{ message: string }>(`/runs/${id}/hard-delete`, { method: "DELETE" })
 };

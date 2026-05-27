@@ -16,6 +16,7 @@ class Experiment(Base):
     task_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     agent_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
     evaluation_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

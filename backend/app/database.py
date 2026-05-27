@@ -33,12 +33,25 @@ def initialize_database(bind: Engine = engine) -> None:
 
 def _ensure_local_schema_columns(bind: Engine) -> None:
     inspector = inspect(bind)
-    if "runs" not in inspector.get_table_names():
-        return
-    columns = {column["name"] for column in inspector.get_columns("runs")}
-    if "archived_at" not in columns:
-        with bind.begin() as connection:
-            connection.execute(text("ALTER TABLE runs ADD COLUMN archived_at TIMESTAMP"))
+    table_names = set(inspector.get_table_names())
+
+    if "runs" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("runs")}
+        if "archived_at" not in columns:
+            with bind.begin() as connection:
+                connection.execute(text("ALTER TABLE runs ADD COLUMN archived_at TIMESTAMP"))
+
+    if "souls" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("souls")}
+        if "is_active" not in columns:
+            with bind.begin() as connection:
+                connection.execute(text("ALTER TABLE souls ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true"))
+
+    if "experiments" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("experiments")}
+        if "archived_at" not in columns:
+            with bind.begin() as connection:
+                connection.execute(text("ALTER TABLE experiments ADD COLUMN archived_at TIMESTAMP"))
 
 
 def get_db() -> Generator[Session, None, None]:

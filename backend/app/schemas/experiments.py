@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -17,8 +18,16 @@ class ExperimentCreate(ExperimentBase):
 
 class ExperimentRead(ExperimentBase):
     id: int
+    archived_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class ExperimentArchiveResponse(BaseModel):
+    id: int
+    archived: bool
+    archived_at: Optional[datetime] = None
+    message: str
 
 
 class ExperimentRunRead(BaseModel):

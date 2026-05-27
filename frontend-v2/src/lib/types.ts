@@ -7,6 +7,7 @@ export interface Soul {
   collaboration_style?: string | null;
   failure_handling_style?: string | null;
   escalation_style?: string | null;
+  is_active: boolean;
 }
 
 export interface Agent {
@@ -57,6 +58,23 @@ export interface AgentMemory {
   status: MemoryStatus;
 }
 
+export interface Experiment {
+  id: number;
+  name: string;
+  description?: string | null;
+  task_prompt: string;
+  agent_ids: number[];
+  evaluation_config: Record<string, unknown>;
+  archived_at?: string | null;
+}
+
+export interface ExperimentRun {
+  id: number;
+  experiment_id: number;
+  run_ids: number[];
+  comparison_result?: Record<string, unknown> | null;
+}
+
 export interface ProposedMemory {
   id: number;
   agent_id: number;
@@ -79,6 +97,7 @@ export interface ProposedMemoryNotificationSummary {
 export interface Workflow {
   id: number;
   name: string;
+  description?: string | null;
   workflow_type: string;
   graph_config: Record<string, unknown>;
   is_active: boolean;

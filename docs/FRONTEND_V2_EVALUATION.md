@@ -10,7 +10,7 @@ The existing `frontend` app remains untouched and usable. `frontend-v2` is a sep
 
 The PoC implements a Vite React TypeScript app with:
 
-- refine resource registration for Souls, Agents, Tools, and Runs.
+- refine resource registration for Souls, Agents, Tools, Workflows, Runs, and Experiments.
 - shadcn/ui-style local primitives for buttons, inputs, selects, cards, labels, alerts, confirmation dialogs, status badges, empty states, and collapsed JSON panels.
 - React Hook Form and Zod validation for resource forms.
 - A typed API client that calls the existing FastAPI routes.
@@ -19,12 +19,14 @@ The PoC implements a Vite React TypeScript app with:
 
 Implemented pages:
 
-- `/souls`: list, create, edit, delete.
-- `/agents`: list, create, edit, delete, soul selector, provider/model fields, `is_active`, and JSON policy editors.
-- `/agents/:id`: agent configuration plus scoped contexts, scoped memories, and proposed memory review.
-- `/tools`: list, create, edit, delete, active state, and JSON config editor.
-- `/runs`: active/archived/all filter, archive, activate, and run detail links.
+- `/souls`: list, create, edit, delete unused souls, activate/deactivate referenced souls.
+- `/agents`: list, create, edit, activate/deactivate, delete inactive safe agents, soul selector, provider/model fields, `is_active`, and JSON policy editors.
+- `/agents/:id`: agent configuration plus scoped contexts, scoped memories, agent-tool assignment/unassignment, and proposed memory review.
+- `/tools`: list, create, edit, delete unused tools, activate/deactivate assigned tools, active state, and JSON config editor.
+- `/workflows`: list, create, edit, run, activate/deactivate, and delete inactive workflows that have no historical runs.
+- `/runs`: active/archived/all filter, archive, activate, guarded permanent delete for archived safe runs, selected-run archive/activate, and run detail links.
 - `/runs/:id`: summary, run input/output, trace events, and monitor payloads with collapsed JSON by default.
+- `/experiments`: list, create, run, archive, activate, and guarded delete for safe archived experiments.
 
 ## Improvements Compared With Current Frontend
 
@@ -32,15 +34,14 @@ Implemented pages:
 - JSON payloads use progressive disclosure. Trace and monitor data are collapsed by default and can be expanded when needed.
 - The app has a clearer foundation for form validation. React Hook Form and Zod keep field validation close to the form while still matching backend schemas.
 - The API client centralizes readable FastAPI error parsing so UI actions do not silently fail.
-- Destructive actions use explicit confirmation dialogs for top-level resources and clear browser confirmations for nested agent context/memory rows.
+- Destructive and lifecycle actions use explicit confirmation dialogs for top-level resources and nested agent context/memory/tool assignment rows.
+- CRUD dependency labels are consistent: `Delete` is reserved for hard delete, `Archive` hides runtime/history records while preserving evidence, `Deactivate` disables reusable configuration, and `Unassign` removes only a relationship.
 - The Vite app is smaller and faster to iterate on during PoC work than the current Next.js frontend.
 
 ## Remaining Gaps
 
-- The PoC does not implement Workflows, Experiments, full workflow run creation, or the complete Runtime Observatory navigation.
-- Agent-tool assignment is not implemented in frontend-v2 yet.
+- The PoC still does not implement the complete Runtime Observatory navigation from the current frontend.
 - Proposed memory creation from feedback is not implemented in frontend-v2; the page supports review of proposed memories returned by the backend.
-- Nested context and memory destructive actions currently use browser confirmation dialogs. A production migration should replace them with the shared confirmation dialog for complete consistency.
 - The bundle currently exceeds Vite's default 500 KB chunk warning because the PoC is not code-split.
 - Visual polish is functional but not final. A replacement frontend should complete responsive QA and accessibility review before migration.
 
@@ -50,13 +51,19 @@ The PoC supports continuing with `frontend-v2` as a replacement candidate, but i
 
 Recommended next steps:
 
-1. Add Workflow list/create/edit/run support to frontend-v2.
-2. Add Experiments support or explicitly keep it in the current frontend until later.
-3. Add agent-tool assignment to Agent detail.
-4. Replace nested browser confirmations with shared confirmation dialogs.
-5. Add proposed-memory generation from run feedback if frontend-v2 is expected to own the learning loop.
-6. Add route-level code splitting and a full visual QA pass.
-7. Run both frontends side by side for one milestone before switching the default UI.
+1. Add proposed-memory generation from run feedback if frontend-v2 is expected to own the learning loop.
+2. Add route-level code splitting and a full visual QA pass.
+3. Extend frontend-v2 observability navigation to match the current frontend's monitor/executions/token usage pages.
+4. Run both frontends side by side for one milestone before switching the default UI.
+
+## CRUD Dependency Policy
+
+- Configuration objects are hard-deleted only when they are unused. Referenced agents, souls, tools, and workflows are deactivated instead of forcing users through circular cleanup.
+- Runtime and history objects use archive/activate by default. Runs are archived rather than deleted so traces, executions, token usage, feedback, proposed memories, and learning events remain inspectable.
+- Learning-loop objects are preserved by default. Approved memories and proposed-memory chains should be archived or reviewed, not silently destroyed.
+- Experiments can be archived without deleting related runs. Deleting a run does not require deleting its experiment first, and archiving an experiment does not remove its runs.
+- Relationship rows use `Unassign` or `Remove`. Agent-tool unassignment removes only the join record and never deletes the agent or tool.
+- Backend dependency errors are surfaced in the UI as readable warnings instead of silent failures.
 
 ## How To Run
 
@@ -118,6 +125,8 @@ The E2E tests cover:
 - Soul create, edit, and delete.
 - Agent create, edit, deactivate, scoped context create/edit/delete, scoped memory create/edit/delete, and delete.
 - Tool create, edit, and delete.
-- Run detail inspection with collapsed JSON, archive, and activate.
+- Workflow create/run.
+- Experiment create/run/archive and blocked delete warning for experiments with related runs.
+- Run detail inspection with collapsed JSON, archive, activate, selected lifecycle actions, and guarded permanent delete for safe archived runs.
 
 The tests use unique `V2E2E` names and should clean up after themselves. If a test is interrupted, remove remaining `V2E2E` records from the local database before relying on manual data checks.

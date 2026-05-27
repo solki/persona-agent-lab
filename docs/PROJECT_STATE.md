@@ -1,6 +1,6 @@
 # Project State
 
-Last updated after adding feedback-derived proposed-memory approval notifications.
+Last updated after standardizing frontend-v2 CRUD dependency handling.
 
 ## Project Purpose
 
@@ -13,7 +13,7 @@ Milestone 10 status: implemented.
 ## Current Architecture
 
 - Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
-- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, complete configuration management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, experiment comparison UI, and Playwright E2E coverage.
+- Frontend: Next.js App Router, TypeScript, React, Tailwind CSS, typed API client, dashboard, complete configuration management pages, workflow run pages, trace viewer, learning feedback UI, proposed-memory review UI, runtime observatory pages, experiment comparison UI, and Playwright E2E coverage. `frontend-v2` is a separate Vite/refine/React prototype that now covers souls, agents, tools, workflows, runs, experiments, agent-tool assignment, and policy-aware CRUD lifecycle actions.
 - Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
@@ -56,7 +56,7 @@ Milestone 10 status: implemented.
 ## Current Data Models
 
 - `Agent`: `id`, `name`, `description`, `role`, `system_prompt`, `soul_id`, `llm_provider`, `model`, `temperature`, `max_tokens`, `memory_policy`, `context_policy`, `handoff_policy`, `is_active`, timestamps.
-- `Soul`: persona fields including principles, decision style, collaboration style, failure handling style, and escalation style.
+- `Soul`: persona fields including principles, decision style, collaboration style, failure handling style, escalation style, and active flag.
 - `Tool`: name, description, type, JSON config, active flag, timestamps.
 - `AgentTool`: many-to-many assignment table between agents and tools.
 - `AgentContext`: agent-scoped title, type, content, priority, active flag, timestamps.
@@ -71,7 +71,7 @@ Milestone 10 status: implemented.
 - `Workflow`: name, description, type, graph config, active flag, timestamps.
 - `Run`: workflow id, input, output, status, config snapshot, started/ended/archive timestamps, creation timestamp.
 - `TraceEvent`: run id, event type, optional agent id, payload, timestamp.
-- `Experiment`: name, description, task prompt, selected agent ids, evaluation config, timestamps.
+- `Experiment`: name, description, task prompt, selected agent ids, evaluation config, archive timestamp, timestamps.
 - `ExperimentRun`: experiment id, run ids, comparison result, timestamp.
 
 ## Current API Endpoints
@@ -90,7 +90,7 @@ Milestone 10 status: implemented.
 - Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
 - Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `POST /runs/{run_id}/activate`, `DELETE /runs/{run_id}/hard-delete`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
 - Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
-- Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `DELETE /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/run`
+- Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `DELETE /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/archive`, `POST /experiments/{experiment_id}/activate`, `POST /experiments/{experiment_id}/run`
 
 ## Current Runtime Flow
 
@@ -154,14 +154,15 @@ Milestone 10 status: implemented.
 - Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
 - Souls expose persona fields and can be created, edited, or deleted.
 - Agents, souls, tools, contexts, memories, workflows, experiments, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Experiment deletion is blocked (409) when the experiment has been run; use the `?force=true` query parameter only for test cleanup. Mutations show loading states, success/error messages, and refresh or redirect after success.
-- Soul deletion is blocked while agents still reference the soul. Workflow deletion is blocked while runs still reference the workflow. Agent deletion removes only that agent's owned configuration when no runtime history exists.
+- Soul deletion is blocked while agents still reference the soul; referenced souls should be deactivated. Tool deletion is blocked while agents are assigned to the tool; assigned tools should be unassigned or deactivated. Workflow deletion is blocked while runs still reference the workflow; referenced workflows should be deactivated. Agent deletion removes only that agent's owned configuration when no runtime history exists.
+- CRUD lifecycle labels are standardized: Delete is hard delete for unused records, Archive hides historical/runtime records while preserving evidence, Deactivate disables reusable configuration, and Unassign removes relationship rows only.
 - Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
 
 ## Current Test Coverage Summary
 
 - Health endpoint and startup/CORS/table initialization.
 - SQLAlchemy model registration and agent default isolation policies.
-- Agent, soul, tool CRUD and agent-tool assignment, including blocked soul deletion and tool assignment cleanup on delete.
+- Agent, soul, tool CRUD and agent-tool assignment, including blocked soul deletion, referenced soul deactivation, and blocked assigned-tool deletion.
 - Agent context CRUD scoped by `agent_id`.
 - Agent memory CRUD scoped by `agent_id`, including approve/reject review flow.
 - Agent feedback, evaluation, reflection, proposed-memory approval/rejection, feedback-derived proposed-memory notification counts, and cross-agent learning-memory isolation.
@@ -172,7 +173,7 @@ Milestone 10 status: implemented.
 - Workflow CRUD, blocked workflow deletion while runs exist, sequential run trace events, config snapshots, and context/memory isolation in runs.
 - Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
 - Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records. Run activation restores archived runs to the active list without changing those records. Permanent delete is guarded by backend safety checks.
-- Experiment CRUD including safe delete (204 for clean experiments, 409 when runs exist) and experiment run isolation/comparison behavior.
+- Experiment CRUD including safe delete (204 for clean experiments, 409 when runs exist), experiment archive/activate with related runs preserved, and experiment run isolation/comparison behavior.
 - Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
 - Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving and activation with learning records, guarded run-delete warnings, monitor collapsed/expanded payloads, feedback-derived proposed-memory approval badges, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
 

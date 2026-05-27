@@ -68,8 +68,13 @@ test.describe.serial("frontend-v2 PoC", () => {
     await page.locator("form").filter({ has: page.getByRole("button", { name: "Save context" }) }).getByLabel("Content").fill(`Edited context ${suffix}`);
     await page.getByRole("button", { name: "Save context" }).click();
     await expect(page.getByText(`Edited context ${suffix}`)).toBeVisible();
-    page.once("dialog", (dialog) => void dialog.accept());
+    await page.locator("text=Edited context").locator("xpath=ancestor::div[contains(@class,'border')][1]").getByRole("button", { name: "Deactivate" }).click();
+    await expect(page.getByRole("dialog", { name: "Deactivate context?" })).toBeVisible();
+    await page.getByRole("button", { name: "Deactivate context" }).click();
+    await expect(page.getByText("Context deactivated.")).toBeVisible();
     await page.locator("text=Edited context").locator("xpath=ancestor::div[contains(@class,'border')][1]").getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete context?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete context" }).click();
     await expect(page.getByText("Context deleted.")).toBeVisible();
 
     const memoryForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Add memory" }) });
@@ -82,8 +87,13 @@ test.describe.serial("frontend-v2 PoC", () => {
     await page.locator("form").filter({ has: page.getByRole("button", { name: "Save memory" }) }).getByLabel("Content").fill(`Edited memory ${suffix}`);
     await page.getByRole("button", { name: "Save memory" }).click();
     await expect(page.getByText(`Edited memory ${suffix}`)).toBeVisible();
-    page.once("dialog", (dialog) => void dialog.accept());
+    await page.locator("text=Edited memory").locator("xpath=ancestor::div[contains(@class,'border')][1]").getByRole("button", { name: "Archive" }).click();
+    await expect(page.getByRole("dialog", { name: "Archive memory?" })).toBeVisible();
+    await page.getByRole("button", { name: "Archive memory" }).click();
+    await expect(page.getByText("Memory archived.")).toBeVisible();
     await page.locator("text=Edited memory").locator("xpath=ancestor::div[contains(@class,'border')][1]").getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete memory?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete memory" }).click();
     await expect(page.getByText("Memory deleted.")).toBeVisible();
 
     await page.goto("/agents");
@@ -145,10 +155,77 @@ test.describe.serial("frontend-v2 PoC", () => {
     await page.getByLabel("Run filter").selectOption("Active");
     await expect(cardWithText(page, `Run ${run.id}`)).toBeVisible();
 
-    await apiPost(`/runs/${run.id}/archive`, {});
-    await apiDelete(`/runs/${run.id}/hard-delete`);
+    await page.getByLabel("Run filter").selectOption("Active");
+    await cardWithText(page, `Run ${run.id}`).getByRole("button", { name: "Archive" }).click();
+    await page.getByRole("button", { name: "Archive run" }).click();
+    await page.getByLabel("Run filter").selectOption("Archived");
+    await cardWithText(page, `Run ${run.id}`).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("dialog", { name: "Delete run permanently?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete run" }).click();
+    await expect(page.getByText("Run deleted permanently.")).toBeVisible();
     await apiDelete(`/workflows/${workflow.id}`);
     await apiDelete(`/agents/${agent.id}`);
+  });
+
+  test("creates a workflow from agent picker and runs it", async ({ page }) => {
+    const agent = await createApiAgent(`V2E2E Workflow Agent ${suffix}`);
+    const workflowName = `V2E2E Workflow UI ${suffix}`;
+    await page.goto("/workflows/new");
+    await page.getByLabel("Name").fill(workflowName);
+    await page.getByLabel("Description").fill("Created through frontend-v2 workflow UI.");
+    await page.getByText(agent.name).click();
+    await page.getByRole("button", { name: "Save workflow" }).click();
+    await expect(page.getByRole("heading", { name: "Workflow Detail" })).toBeVisible();
+    const workflowId = idFromUrl(page.url());
+    await page.getByPlaceholder("Describe the task for this workflow.").fill("Produce a short workflow UI result.");
+    await page.getByRole("button", { name: "Run workflow" }).click();
+    await expect(page.getByRole("heading", { name: /Run \d+/ })).toBeVisible();
+    const runId = idFromUrl(page.url());
+
+    await apiPost(`/runs/${runId}/archive`, {});
+    await apiDelete(`/runs/${runId}/hard-delete`);
+    await apiDelete(`/workflows/${workflowId}`);
+    await apiDelete(`/agents/${agent.id}`);
+  });
+
+  test("archives an experiment with related runs without circular cleanup", async ({ page }) => {
+    const firstAgent = await createApiAgent(`V2E2E Experiment Agent A ${suffix}`);
+    const secondAgent = await createApiAgent(`V2E2E Experiment Agent B ${suffix}`);
+    const experimentName = `V2E2E Experiment ${suffix}`;
+    await page.goto("/experiments/new");
+    await page.getByLabel("Name").fill(experimentName);
+    await page.getByLabel("Task prompt").fill("Compare two mock agents on CRUD dependency handling.");
+    await page.getByText(firstAgent.name).click();
+    await page.getByText(secondAgent.name).click();
+    await page.getByRole("button", { name: "Save experiment" }).click();
+    await expect(page.getByRole("heading", { name: "Experiment Detail" })).toBeVisible();
+    const experimentId = idFromUrl(page.url());
+    await page.getByRole("button", { name: "Run experiment" }).click();
+    await expect(page.getByText(/Experiment run created with runs/)).toBeVisible();
+    const runMessage = await page.getByText(/Experiment run created with runs/).textContent();
+    const runIds = (runMessage?.replace(/^.*runs\s+/i, "").match(/\d+/g) ?? []).map(Number);
+    await page.goto("/experiments");
+    await cardWithText(page, experimentName).getByRole("button", { name: "Archive" }).click();
+    await expect(page.getByRole("dialog", { name: "Archive experiment?" })).toBeVisible();
+    await page.getByRole("button", { name: "Archive experiment" }).click();
+    await expect(page.getByText(/Experiment archived successfully/)).toBeVisible();
+    await expect(cardWithText(page, experimentName)).toHaveCount(0);
+    await page.getByLabel("Experiment filter").selectOption("Archived");
+    await expect(cardWithText(page, experimentName)).toContainText("archived");
+    await cardWithText(page, experimentName).getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Delete experiment" }).click();
+    await expect(page.getByRole("dialog", { name: "Action blocked" })).toContainText("Cannot safely delete experiment");
+    await page.getByRole("button", { name: "Close" }).click();
+
+    await apiDelete(`/experiments/${experimentId}?force=true`);
+    for (const runId of runIds) {
+      const run = await apiGet<{ workflow_id: number }>(`/runs/${runId}`);
+      await apiPost(`/runs/${runId}/archive`, {});
+      await apiDelete(`/runs/${runId}/hard-delete`);
+      await apiDelete(`/workflows/${run.workflow_id}`);
+    }
+    await apiDelete(`/agents/${firstAgent.id}`);
+    await apiDelete(`/agents/${secondAgent.id}`);
   });
 });
 
@@ -180,6 +257,12 @@ async function createApiAgent(name: string) {
 
 async function apiPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const response = await backend.post(path, { data: body });
+  expect(response.ok(), `${path} should return success`).toBeTruthy();
+  return (await response.json()) as T;
+}
+
+async function apiGet<T>(path: string): Promise<T> {
+  const response = await backend.get(path);
   expect(response.ok(), `${path} should return success`).toBeTruthy();
   return (await response.json()) as T;
 }

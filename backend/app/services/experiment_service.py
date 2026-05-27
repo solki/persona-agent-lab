@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
@@ -8,8 +10,11 @@ from app.runtime.workflow_runner import WorkflowRunner
 from app.schemas.experiments import ExperimentCreate
 
 
-def list_experiments(db: Session) -> list[Experiment]:
-    return list(db.scalars(select(Experiment).order_by(Experiment.id)).all())
+def list_experiments(db: Session, include_archived: bool = False) -> list[Experiment]:
+    statement = select(Experiment)
+    if not include_archived:
+        statement = statement.where(Experiment.archived_at.is_(None))
+    return list(db.scalars(statement.order_by(Experiment.id)).all())
 
 
 def get_experiment(db: Session, experiment_id: int) -> Experiment:
@@ -24,6 +29,21 @@ def create_experiment(db: Session, payload: ExperimentCreate) -> Experiment:
     return experiment
 
 
+def archive_experiment(db: Session, experiment: Experiment) -> Experiment:
+    if experiment.archived_at is None:
+        experiment.archived_at = datetime.utcnow()
+    db.commit()
+    db.refresh(experiment)
+    return experiment
+
+
+def activate_experiment(db: Session, experiment: Experiment) -> Experiment:
+    experiment.archived_at = None
+    db.commit()
+    db.refresh(experiment)
+    return experiment
+
+
 def delete_experiment(db: Session, experiment: Experiment, force: bool = False) -> dict:
     experiment_runs = db.scalars(
         select(ExperimentRun).where(ExperimentRun.experiment_id == experiment.id)
@@ -31,8 +51,7 @@ def delete_experiment(db: Session, experiment: Experiment, force: bool = False) 
 
     if experiment_runs:
         if force:
-            for er in experiment_runs:
-                db.delete(er)
+            db.execute(delete(ExperimentRun).where(ExperimentRun.experiment_id == experiment.id))
         else:
             run_ids = sorted({rid for er in experiment_runs for rid in (er.run_ids or [])})
             return {

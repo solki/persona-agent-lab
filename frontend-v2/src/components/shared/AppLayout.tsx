@@ -1,4 +1,4 @@
-import { Bot, Brain, Hammer, History, Home, Users } from "lucide-react";
+import { Bot, Brain, FlaskConical, Hammer, History, Home, Network, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -7,7 +7,9 @@ const nav = [
   { href: "/souls", label: "Souls", icon: Brain },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/tools", label: "Tools", icon: Hammer },
-  { href: "/runs", label: "Runs", icon: History }
+  { href: "/workflows", label: "Workflows", icon: Network },
+  { href: "/runs", label: "Runs", icon: History },
+  { href: "/experiments", label: "Experiments", icon: FlaskConical }
 ];
 
 export function AppLayout() {

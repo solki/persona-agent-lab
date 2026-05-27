@@ -2,9 +2,11 @@ import { Refine } from "@refinedev/core";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/shared/AppLayout";
 import { AgentDetailPage, AgentFormPage, AgentsPage } from "@/pages/AgentsPage";
+import { ExperimentFormPage, ExperimentsPage } from "@/pages/ExperimentsPage";
 import { RunsPage, RunDetailPage } from "@/pages/RunsPage";
 import { SoulFormPage, SoulsPage } from "@/pages/SoulsPage";
 import { ToolFormPage, ToolsPage } from "@/pages/ToolsPage";
+import { WorkflowFormPage, WorkflowsPage } from "@/pages/WorkflowsPage";
 
 export function App() {
   return (
@@ -14,7 +16,9 @@ export function App() {
           { name: "souls", list: "/souls", create: "/souls/new", edit: "/souls/:id" },
           { name: "agents", list: "/agents", create: "/agents/new", edit: "/agents/:id" },
           { name: "tools", list: "/tools", create: "/tools/new", edit: "/tools/:id" },
-          { name: "runs", list: "/runs", show: "/runs/:id" }
+          { name: "workflows", list: "/workflows", create: "/workflows/new", edit: "/workflows/:id" },
+          { name: "runs", list: "/runs", show: "/runs/:id" },
+          { name: "experiments", list: "/experiments", create: "/experiments/new", show: "/experiments/:id" }
         ]}
       >
         <Routes>
@@ -29,8 +33,14 @@ export function App() {
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/tools/new" element={<ToolFormPage />} />
             <Route path="/tools/:id" element={<ToolFormPage />} />
+            <Route path="/workflows" element={<WorkflowsPage />} />
+            <Route path="/workflows/new" element={<WorkflowFormPage />} />
+            <Route path="/workflows/:id" element={<WorkflowFormPage />} />
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:id" element={<RunDetailPage />} />
+            <Route path="/experiments" element={<ExperimentsPage />} />
+            <Route path="/experiments/new" element={<ExperimentFormPage />} />
+            <Route path="/experiments/:id" element={<ExperimentFormPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -51,7 +61,9 @@ function Overview() {
           ["Souls", "Create and maintain persona definitions."],
           ["Agents", "Configure model settings, policies, contexts, memories, and proposed memories."],
           ["Tools", "Manage Tool Gateway registry entries."],
-          ["Runs", "Inspect run history, trace payloads, monitor events, and archive state."]
+          ["Workflows", "Build and run ordered agent workflows."],
+          ["Runs", "Inspect run history, trace payloads, monitor events, and archive state."],
+          ["Experiments", "Compare agents while preserving related run history."]
         ].map(([title, body]) => (
           <div key={title} className="rounded-md border border-border bg-white p-4">
             <h2 className="font-semibold">{title}</h2>

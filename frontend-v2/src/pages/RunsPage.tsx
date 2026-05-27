@@ -1,10 +1,11 @@
-import { Archive, RotateCcw } from "lucide-react";
+import { Archive, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { JsonCollapse, JsonCollapseList } from "@/components/shared/JsonCollapse";
+import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,9 @@ export function RunsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [pendingAction, setPendingAction] = useState<{ run: Run; action: "archive" | "activate" } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [pendingAction, setPendingAction] = useState<{ runIds: number[]; action: "archive" | "activate" | "delete" } | null>(null);
+  const [safetyWarning, setSafetyWarning] = useState("");
   const [working, setWorking] = useState(false);
 
   async function load() {
@@ -33,6 +36,7 @@ export function RunsPage() {
       const [runData, workflowData] = await Promise.all([api.listRuns(true), api.listWorkflows()]);
       setRuns(runData);
       setWorkflows(workflowData);
+      setSelectedIds([]);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load runs.");
     } finally {
@@ -62,17 +66,46 @@ export function RunsPage() {
     setWorking(true);
     setError("");
     try {
-      const response =
-        pendingAction.action === "archive" ? await api.archiveRun(pendingAction.run.id) : await api.activateRun(pendingAction.run.id);
-      setMessage(response.message);
+      for (const runId of pendingAction.runIds) {
+        if (pendingAction.action === "archive") {
+          await api.archiveRun(runId);
+        } else if (pendingAction.action === "activate") {
+          await api.activateRun(runId);
+        } else {
+          await api.hardDeleteRun(runId);
+        }
+      }
+      setMessage(
+        pendingAction.action === "archive"
+          ? "Run archive completed. Learning records were preserved."
+          : pendingAction.action === "activate"
+            ? "Run activation completed."
+            : "Run deleted permanently."
+      );
       setPendingAction(null);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Unable to update run.");
+      const messageText = actionError instanceof Error ? actionError.message : "Unable to update run.";
+      setError(messageText);
+      setSafetyWarning(messageText);
+      setPendingAction(null);
     } finally {
       setWorking(false);
     }
   }
+
+  function toggleSelected(runId: number) {
+    setSelectedIds((current) => current.includes(runId) ? current.filter((id) => id !== runId) : [...current, runId]);
+  }
+
+  const selectedRuns = runs.filter((run) => selectedIds.includes(run.id));
+  const selectedArchivedStates = new Set(selectedRuns.map((run) => run.status === "archived" || Boolean(run.archived_at)));
+  const bulkAction =
+    selectedRuns.length === 0 || selectedArchivedStates.size !== 1
+      ? null
+      : selectedArchivedStates.has(true)
+        ? "activate"
+        : "archive";
 
   return (
     <>
@@ -88,6 +121,19 @@ export function RunsPage() {
             <option value="all">All</option>
           </Select>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!bulkAction}
+            onClick={() => bulkAction ? setPendingAction({ runIds: selectedIds, action: bulkAction }) : setError("Select either active runs or archived runs, not a mixed set.")}
+          >
+            {bulkAction === "activate" ? <RotateCcw size={15} /> : <Archive size={15} />}
+            {bulkAction === "activate" ? "Activate Selected" : "Archive Selected"}
+          </Button>
+          {selectedRuns.length > 0 && !bulkAction ? <span className="text-sm text-muted-foreground">Mixed selections must be handled separately.</span> : null}
+        </div>
         {loading ? <Alert title="Loading">Loading runs.</Alert> : null}
         {!loading && filtered.length === 0 ? <EmptyState title="No runs" body="Run a workflow in the existing app or seed a run through the backend to inspect it here." /> : null}
         {filtered.map((run) => {
@@ -96,7 +142,10 @@ export function RunsPage() {
             <Card key={run.id}>
               <CardContent className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-base font-semibold">Run {run.id}</h2>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={selectedIds.includes(run.id)} onChange={() => toggleSelected(run.id)} aria-label={`Select run ${run.id}`} />
+                    <span className="text-base font-semibold">Run {run.id}</span>
+                  </label>
                   <p className="mt-1 text-sm text-muted-foreground">{workflowName[run.workflow_id] ?? `Workflow ${run.workflow_id}`}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Created {formatDate(run.created_at)}</p>
                   <div className="mt-2"><StatusBadge status={archived ? "archived" : run.status} /></div>
@@ -107,11 +156,16 @@ export function RunsPage() {
                     type="button"
                     variant={archived ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPendingAction({ run, action: archived ? "activate" : "archive" })}
+                    onClick={() => setPendingAction({ runIds: [run.id], action: archived ? "activate" : "archive" })}
                   >
                     {archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                     {archived ? "Activate" : "Archive"}
                   </Button>
+                  {archived ? (
+                    <Button type="button" variant="destructive" size="sm" onClick={() => setPendingAction({ runIds: [run.id], action: "delete" })}>
+                      <Trash2 size={15} /> Delete
+                    </Button>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -120,18 +174,21 @@ export function RunsPage() {
       </div>
       <ConfirmDialog
         open={Boolean(pendingAction)}
-        title={pendingAction?.action === "activate" ? "Activate run?" : "Archive run?"}
+        title={pendingAction?.action === "activate" ? "Activate run?" : pendingAction?.action === "delete" ? "Delete run permanently?" : "Archive run?"}
         description={
           pendingAction?.action === "activate"
-            ? "This restores the run to the active list while preserving trace, feedback, learning, and execution records."
-            : "This hides the run from the active list while preserving trace, feedback, learning, and execution records."
+            ? "This restores the selected run(s) to the active list while preserving trace, feedback, learning, and execution records."
+            : pendingAction?.action === "delete"
+              ? "This permanently deletes the archived run only if backend safety checks confirm it has no learning, experiment, feedback, or evaluation references. If blocked, the warning will be shown here."
+              : "This hides the selected run(s) from the active list while preserving trace, feedback, learning, and execution records."
         }
-        confirmLabel={pendingAction?.action === "activate" ? "Activate run" : "Archive run"}
+        confirmLabel={pendingAction?.action === "activate" ? "Activate run" : pendingAction?.action === "delete" ? "Delete run" : "Archive run"}
         destructive={pendingAction?.action !== "activate"}
         loading={working}
         onCancel={() => setPendingAction(null)}
         onConfirm={applyAction}
       />
+      <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Power, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -8,6 +8,7 @@ import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
+import { NoticeDialog } from "@/components/shared/NoticeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
-import type { Agent, AgentContext, AgentMemory, MemoryStatus, ProposedMemory, Soul } from "@/lib/types";
+import type { Agent, AgentContext, AgentMemory, MemoryStatus, ProposedMemory, Soul, Tool } from "@/lib/types";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
 const providers = ["mock", "openai_compatible", "openai", "anthropic", "ollama"] as const;
@@ -62,8 +63,9 @@ export function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<Agent | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ agent: Agent; action: "delete" | "deactivate" | "activate" } | null>(null);
+  const [safetyWarning, setSafetyWarning] = useState("");
+  const [working, setWorking] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -88,21 +90,29 @@ export function AgentsPage() {
     void load();
   }, []);
 
-  async function deleteAgent() {
-    if (!pendingDelete) {
+  async function applyAction() {
+    if (!pendingAction) {
       return;
     }
-    setDeleting(true);
+    setWorking(true);
     setError("");
     try {
-      await api.deleteAgent(pendingDelete.id);
-      setMessage("Agent deleted.");
-      setPendingDelete(null);
+      if (pendingAction.action === "delete") {
+        await api.deleteAgent(pendingAction.agent.id);
+        setMessage("Agent deleted.");
+      } else {
+        await api.updateAgent(pendingAction.agent.id, { is_active: pendingAction.action === "activate" });
+        setMessage(pendingAction.action === "activate" ? "Agent activated." : "Agent deactivated.");
+      }
+      setPendingAction(null);
       await load();
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete agent.");
+    } catch (actionError) {
+      const messageText = actionError instanceof Error ? actionError.message : "Unable to update agent.";
+      setError(messageText);
+      setSafetyWarning(messageText);
+      setPendingAction(null);
     } finally {
-      setDeleting(false);
+      setWorking(false);
     }
   }
 
@@ -138,21 +148,42 @@ export function AgentsPage() {
                 <Link to={`/agents/${agent.id}`}>
                   <Button type="button" variant="outline" size="sm"><Edit size={15} /> Open</Button>
                 </Link>
-                <Button type="button" variant="destructive" size="sm" onClick={() => setPendingDelete(agent)}><Trash2 size={15} /> Delete</Button>
+                {agent.is_active ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPendingAction({ agent, action: "deactivate" })}>
+                    <Power size={15} /> Deactivate
+                  </Button>
+                ) : (
+                  <>
+                    <Button type="button" size="sm" onClick={() => setPendingAction({ agent, action: "activate" })}>
+                      <RotateCcw size={15} /> Activate
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => setPendingAction({ agent, action: "delete" })}>
+                      <Trash2 size={15} /> Delete
+                    </Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
       <ConfirmDialog
-        open={Boolean(pendingDelete)}
-        title="Delete agent?"
-        description="This deletes the agent if backend safety checks allow it. If the agent has run history, deactivate it from the edit form instead."
-        confirmLabel="Delete agent"
-        loading={deleting}
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={deleteAgent}
+        open={Boolean(pendingAction)}
+        title={pendingAction?.action === "activate" ? "Activate agent?" : pendingAction?.action === "deactivate" ? "Deactivate agent?" : "Delete agent?"}
+        description={
+          pendingAction?.action === "activate"
+            ? "This makes the agent available for workflows again."
+            : pendingAction?.action === "deactivate"
+              ? "This preserves the agent and its history while preventing future workflow selection as active configuration."
+              : "This permanently deletes the inactive agent only if backend safety checks confirm it has no protected history."
+        }
+        confirmLabel={pendingAction?.action === "activate" ? "Activate agent" : pendingAction?.action === "deactivate" ? "Deactivate agent" : "Delete agent"}
+        destructive={pendingAction?.action !== "activate"}
+        loading={working}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={applyAction}
       />
+      <NoticeDialog open={Boolean(safetyWarning)} title="Action blocked" description={safetyWarning} onClose={() => setSafetyWarning("")} />
     </>
   );
 }
@@ -313,6 +344,7 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
           <>
             <ContextManager agentId={agentId} />
             <MemoryManager agentId={agentId} />
+            <ToolAssignmentManager agentId={agentId} />
             <ProposedMemoryManager agentId={agentId} />
           </>
         ) : null}
@@ -324,6 +356,8 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
 function ContextManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<AgentContext[]>([]);
   const [editing, setEditing] = useState<AgentContext | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ item: AgentContext; action: "deactivate" | "activate" | "delete" } | null>(null);
+  const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const form = useForm({ defaultValues: { title: "", context_type: "note", content: "", priority: 100, is_active: true } });
@@ -359,13 +393,27 @@ function ContextManager({ agentId }: { agentId: number }) {
     }
   }
 
-  async function remove(item: AgentContext) {
-    if (!window.confirm(`Delete context "${item.title}"?`)) {
+  async function applyAction() {
+    if (!pendingAction) {
       return;
     }
-    await api.deleteContext(agentId, item.id);
-    setMessage("Context deleted.");
-    await load();
+    setWorking(true);
+    setError("");
+    try {
+      if (pendingAction.action === "delete") {
+        await api.deleteContext(agentId, pendingAction.item.id);
+        setMessage("Context deleted.");
+      } else {
+        await api.updateContext(agentId, pendingAction.item.id, { is_active: pendingAction.action === "activate" });
+        setMessage(pendingAction.action === "activate" ? "Context activated." : "Context deactivated.");
+      }
+      setPendingAction(null);
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Unable to update context.");
+    } finally {
+      setWorking(false);
+    }
   }
 
   return (
@@ -387,12 +435,38 @@ function ContextManager({ agentId }: { agentId: number }) {
           <div key={item.id} className="rounded-md border border-border p-3">
             <div className="flex flex-wrap justify-between gap-2">
               <div><strong>{item.title}</strong> <StatusBadge status={item.is_active ? "active" : "inactive"} /></div>
-              <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => edit(item)}>Edit</Button><Button type="button" size="sm" variant="destructive" onClick={() => void remove(item)}>Delete</Button></div>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => edit(item)}>Edit</Button>
+                {item.is_active ? (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setPendingAction({ item, action: "deactivate" })}>Deactivate</Button>
+                ) : (
+                  <>
+                    <Button type="button" size="sm" onClick={() => setPendingAction({ item, action: "activate" })}>Activate</Button>
+                    <Button type="button" size="sm" variant="destructive" onClick={() => setPendingAction({ item, action: "delete" })}>Delete</Button>
+                  </>
+                )}
+              </div>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>
           </div>
         ))}
       </CardContent>
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.action === "activate" ? "Activate context?" : pendingAction?.action === "deactivate" ? "Deactivate context?" : "Delete context?"}
+        description={
+          pendingAction?.action === "activate"
+            ? "This context will be eligible for future agent context assembly."
+            : pendingAction?.action === "deactivate"
+              ? "This preserves the context record while excluding it from future context assembly."
+              : "This permanently deletes the inactive context."
+        }
+        confirmLabel={pendingAction?.action === "activate" ? "Activate context" : pendingAction?.action === "deactivate" ? "Deactivate context" : "Delete context"}
+        destructive={pendingAction?.action !== "activate"}
+        loading={working}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={applyAction}
+      />
     </Card>
   );
 }
@@ -400,6 +474,8 @@ function ContextManager({ agentId }: { agentId: number }) {
 function MemoryManager({ agentId }: { agentId: number }) {
   const [items, setItems] = useState<AgentMemory[]>([]);
   const [editing, setEditing] = useState<AgentMemory | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ item: AgentMemory; action: "archive" | "activate" | "delete" } | null>(null);
+  const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const form = useForm({ defaultValues: { memory_type: "lesson", content: "", source: "frontend_v2", importance: 50, status: "pending" as MemoryStatus } });
@@ -435,13 +511,27 @@ function MemoryManager({ agentId }: { agentId: number }) {
     }
   }
 
-  async function remove(item: AgentMemory) {
-    if (!window.confirm(`Delete memory #${item.id}?`)) {
+  async function applyAction() {
+    if (!pendingAction) {
       return;
     }
-    await api.deleteMemory(agentId, item.id);
-    setMessage("Memory deleted.");
-    await load();
+    setWorking(true);
+    setError("");
+    try {
+      if (pendingAction.action === "delete") {
+        await api.deleteMemory(agentId, pendingAction.item.id);
+        setMessage("Memory deleted.");
+      } else {
+        await api.updateMemory(agentId, pendingAction.item.id, { status: pendingAction.action === "activate" ? "active" : "archived" });
+        setMessage(pendingAction.action === "activate" ? "Memory activated." : "Memory archived.");
+      }
+      setPendingAction(null);
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Unable to update memory.");
+    } finally {
+      setWorking(false);
+    }
   }
 
   return (
@@ -463,12 +553,142 @@ function MemoryManager({ agentId }: { agentId: number }) {
           <div key={item.id} className="rounded-md border border-border p-3">
             <div className="flex flex-wrap justify-between gap-2">
               <div><strong>{item.memory_type}</strong> <StatusBadge status={item.status} /></div>
-              <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => edit(item)}>Edit</Button><Button type="button" size="sm" variant="destructive" onClick={() => void remove(item)}>Delete</Button></div>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => edit(item)}>Edit</Button>
+                {item.status === "archived" ? (
+                  <>
+                    <Button type="button" size="sm" onClick={() => setPendingAction({ item, action: "activate" })}>Activate</Button>
+                    <Button type="button" size="sm" variant="destructive" onClick={() => setPendingAction({ item, action: "delete" })}>Delete</Button>
+                  </>
+                ) : (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setPendingAction({ item, action: "archive" })}>Archive</Button>
+                )}
+              </div>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>
           </div>
         ))}
       </CardContent>
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.action === "activate" ? "Activate memory?" : pendingAction?.action === "archive" ? "Archive memory?" : "Delete memory?"}
+        description={
+          pendingAction?.action === "activate"
+            ? "This memory will be eligible for future agent memory retrieval."
+            : pendingAction?.action === "archive"
+              ? "This preserves the memory record while excluding it from active retrieval."
+              : "This permanently deletes an already archived memory. Learning-chain records should stay archived instead of deleted."
+        }
+        confirmLabel={pendingAction?.action === "activate" ? "Activate memory" : pendingAction?.action === "archive" ? "Archive memory" : "Delete memory"}
+        destructive={pendingAction?.action !== "activate"}
+        loading={working}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={applyAction}
+      />
+    </Card>
+  );
+}
+
+function ToolAssignmentManager({ agentId }: { agentId: number }) {
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [assignedTools, setAssignedTools] = useState<Tool[]>([]);
+  const [selectedToolId, setSelectedToolId] = useState("");
+  const [pendingUnassign, setPendingUnassign] = useState<Tool | null>(null);
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    const [allTools, assigned] = await Promise.all([api.listTools(), api.listAgentTools(agentId)]);
+    setTools(allTools);
+    setAssignedTools(assigned);
+  }, [agentId]);
+
+  useEffect(() => {
+    void load().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : "Unable to load agent tools."));
+  }, [load]);
+
+  const assignedIds = useMemo(() => new Set(assignedTools.map((tool) => tool.id)), [assignedTools]);
+  const availableTools = tools.filter((tool) => !assignedIds.has(tool.id));
+
+  async function assignTool() {
+    if (!selectedToolId) {
+      setError("Select a tool before assigning.");
+      return;
+    }
+    setWorking(true);
+    setError("");
+    try {
+      await api.assignToolToAgent(agentId, Number(selectedToolId));
+      setSelectedToolId("");
+      setMessage("Tool assigned.");
+      await load();
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Unable to assign tool.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function unassignTool() {
+    if (!pendingUnassign) {
+      return;
+    }
+    setWorking(true);
+    setError("");
+    try {
+      await api.unassignToolFromAgent(agentId, pendingUnassign.id);
+      setMessage("Tool unassigned.");
+      setPendingUnassign(null);
+      await load();
+    } catch (unassignError) {
+      setError(unassignError instanceof Error ? unassignError.message : "Unable to unassign tool.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader><h2 className="text-base font-semibold">Agent Tools</h2></CardHeader>
+      <CardContent className="space-y-4">
+        {message ? <Alert title="Tool assignment" tone="success">{message}</Alert> : null}
+        {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
+        <div className="flex flex-wrap items-end gap-2">
+          <FormField label="Available tool">
+            <Select value={selectedToolId} onChange={(event) => setSelectedToolId(event.target.value)}>
+              <option value="">Select a tool</option>
+              {availableTools.map((tool) => (
+                <option key={tool.id} value={tool.id}>{tool.name}{tool.is_active ? "" : " (inactive)"}</option>
+              ))}
+            </Select>
+          </FormField>
+          <Button type="button" onClick={() => void assignTool()} disabled={working || !selectedToolId}>Assign</Button>
+        </div>
+        {assignedTools.length === 0 ? <EmptyState title="No assigned tools" body="Assign tools explicitly through the Tool Gateway relationship." /> : null}
+        {assignedTools.map((tool) => (
+          <div key={tool.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+            <div>
+              <strong>{tool.name}</strong>
+              <div className="mt-1 flex items-center gap-2">
+                <StatusBadge status={tool.is_active ? "active" : "inactive"} />
+                <span className="text-xs text-muted-foreground">{tool.tool_type}</span>
+              </div>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => setPendingUnassign(tool)}>Unassign</Button>
+          </div>
+        ))}
+      </CardContent>
+      <ConfirmDialog
+        open={Boolean(pendingUnassign)}
+        title="Unassign tool?"
+        description="This removes only the agent-tool relationship. The tool and the agent remain available."
+        confirmLabel="Unassign tool"
+        destructive={false}
+        loading={working}
+        onCancel={() => setPendingUnassign(null)}
+        onConfirm={unassignTool}
+      />
     </Card>
   );
 }

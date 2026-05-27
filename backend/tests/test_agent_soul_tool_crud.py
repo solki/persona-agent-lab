@@ -16,6 +16,7 @@ def test_soul_crud(client):
     soul = create_response.json()
     assert soul["id"] == 1
     assert soul["name"] == "Persistent Problem Solver"
+    assert soul["is_active"] is True
 
     list_response = client.get("/souls")
     assert list_response.status_code == 200
@@ -53,8 +54,12 @@ def test_soul_delete_is_blocked_while_agent_uses_it(client):
     delete_response = client.delete(f"/souls/{soul['id']}")
 
     assert delete_response.status_code == 409
-    assert "Reassign or delete agents" in delete_response.json()["detail"]
+    assert "Deactivate this soul" in delete_response.json()["detail"]
     assert client.get(f"/souls/{soul['id']}").status_code == 200
+
+    deactivate_response = client.put(f"/souls/{soul['id']}", json={"is_active": False})
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
 
 
 def test_agent_crud_preserves_isolated_defaults(client):
@@ -175,7 +180,7 @@ def test_tool_crud_and_agent_assignment(client):
     assert client.get(f"/tools/{tool['id']}").status_code == 404
 
 
-def test_tool_delete_removes_agent_assignments_without_deleting_agent(client):
+def test_tool_delete_is_blocked_while_assigned_to_agent(client):
     agent = client.post(
         "/agents",
         json={
@@ -192,7 +197,15 @@ def test_tool_delete_removes_agent_assignments_without_deleting_agent(client):
 
     delete_response = client.delete(f"/tools/{tool['id']}")
 
-    assert delete_response.status_code == 204
-    assert client.get(f"/tools/{tool['id']}").status_code == 404
+    assert delete_response.status_code == 409
+    assert "Unassign or deactivate" in delete_response.json()["detail"]
+    assert client.get(f"/tools/{tool['id']}").status_code == 200
     assert client.get(f"/agents/{agent['id']}").status_code == 200
-    assert client.get(f"/agents/{agent['id']}/tools").json() == []
+
+    deactivate_response = client.put(f"/tools/{tool['id']}", json={"is_active": False})
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
+
+    remove_response = client.delete(f"/agents/{agent['id']}/tools/{tool['id']}")
+    assert remove_response.status_code == 204
+    assert client.delete(f"/tools/{tool['id']}").status_code == 204
