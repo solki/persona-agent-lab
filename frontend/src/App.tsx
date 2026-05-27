@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/shared/AppLayout";
 import { AgentDetailPage, AgentFormPage, AgentsPage } from "@/pages/AgentsPage";
 import { ExperimentFormPage, ExperimentsPage } from "@/pages/ExperimentsPage";
-import { RunsPage, RunDetailPage } from "@/pages/RunsPage";
+import { RunMonitorPage, RunsPage, RunDetailPage } from "@/pages/RunsPage";
 import { SoulFormPage, SoulsPage } from "@/pages/SoulsPage";
 import { ToolFormPage, ToolsPage } from "@/pages/ToolsPage";
 import { WorkflowFormPage, WorkflowsPage } from "@/pages/WorkflowsPage";
@@ -38,6 +38,7 @@ export function App() {
             <Route path="/workflows/:id" element={<WorkflowFormPage />} />
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:id" element={<RunDetailPage />} />
+            <Route path="/runs/:id/monitor" element={<RunMonitorPage />} />
             <Route path="/experiments" element={<ExperimentsPage />} />
             <Route path="/experiments/new" element={<ExperimentFormPage />} />
             <Route path="/experiments/:id" element={<ExperimentFormPage />} />

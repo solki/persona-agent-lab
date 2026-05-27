@@ -34,24 +34,19 @@ Milestone 10 status: implemented.
 
 ## Current Frontend Modules
 
-- `app/page.tsx`: Dashboard with navigation cards and isolation summary.
-- `app/agents`: Agent list, create page, edit/detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, feedback-derived proposed-memory approval badges, proposed-memory review, and memory CRUD.
-- `app/souls`: Soul/persona list, create, edit, and delete flows.
-- `app/tools`: Tool registry page with create, edit, delete, config JSON, and active flag controls.
-- `app/workflows`: Workflow list, create/edit pages with name-based agent sequence picker, and workflow run page.
-- `app/runs`: Run list and management page with active/archived/status/workflow/search filters, links to monitor/trace/executions/token usage, selected-run archiving, archived-run activation, guarded permanent delete for safe archived runs, and confirmed lifecycle actions.
-- `app/runs/[id]`: Run trace viewer with collapsible input/output/config sections, learning feedback and reflection panel; monitor, token usage, and execution detail subpages.
-- `app/agents/[id]/evolution`: Agent evolution timeline and performance summary.
-- `app/experiments`: Experiment list, create page, and experiment run/comparison page.
-- `components/agents`: Agent form/list/detail, assigned-tool manager, context manager, proposed-memory manager, memory manager.
-- `components/souls`: Soul list and form with confirmed delete support and blocked-delete error display.
-- `components/tools`: Tool registry form/list with edit/delete support and confirmed deletion.
-- `components/workflows`: Workflow list/form/run panel with confirmed workflow deletion and confirmed sequence removal.
-- `components/runs`: Run list, run trace viewer, learning feedback panel, monitor, token usage, execution list, execution detail, and reusable collapsed JSON/event viewers.
-- `components/experiments`: Experiment list/form/runner.
-- `components/shared`: App shell, field wrapper, page header, and status message.
-- `lib/api.ts`: Typed backend API wrapper using `NEXT_PUBLIC_API_BASE_URL`.
-- `lib/types.ts`: Frontend TypeScript interfaces matching backend schemas.
+- `src/App.tsx`: App root with refine resource registration, React Router routes, and dashboard Overview component.
+- `src/pages/AgentsPage.tsx`: Agent list (`AgentsPage`), create/edit form (`AgentFormPage`), detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review, feedback-derived approval badges, and memory CRUD (`AgentDetailPage`).
+- `src/pages/SoulsPage.tsx`: Soul/persona list (`SoulsPage`), create and edit form (`SoulFormPage`) with confirmed delete support and blocked-delete error display.
+- `src/pages/ToolsPage.tsx`: Tool registry list (`ToolsPage`), create and edit form (`ToolFormPage`) with config JSON editor and active flag controls.
+- `src/pages/WorkflowsPage.tsx`: Workflow list (`WorkflowsPage`), create/edit form with agent picker (`WorkflowFormPage`), and workflow run panel with confirmed delete and sequence removal.
+- `src/pages/RunsPage.tsx`: Run list (`RunsPage`) with active/archived/status/workflow filters, archiving, activation, guarded permanent delete; run detail viewer (`RunDetailPage`) with collapsible input/output/config, trace events, learning feedback panel, token usage, and execution detail; live monitor page (`RunMonitorPage`) with polling-based status updates, agent execution cards, event stream, and token summary.
+- `src/pages/ExperimentsPage.tsx`: Experiment list (`ExperimentsPage`), create/edit form (`ExperimentFormPage`) with comparison view, archive/activate, and guarded delete with force-delete fallback for experiments with runs.
+- `src/components/shared/`: AppLayout (sidebar navigation shell), PageHeader, StatusBadge, ConfirmDialog, NoticeDialog, FormField, EmptyState, JsonCollapse, Alert, and reusable collapsed JSON/event viewers.
+- `src/components/ui/`: shadcn/ui-style primitives (button, card, input, label, select, textarea).
+- `src/lib/api.ts`: Typed backend API wrapper using `VITE_API_BASE_URL` with Vite `/api` dev proxy.
+- `src/lib/types.ts`: Frontend TypeScript interfaces matching backend schemas.
+- `src/index.css`: Tailwind CSS with custom dark lab theme tokens, dot-grid utility, and live-pulse animation.
+- `e2e/frontend-v2.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, and agent isolation assertions.
 
 ## Current Data Models
 
