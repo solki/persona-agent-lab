@@ -209,3 +209,30 @@ export interface ReflectionResponse {
   reflection: string;
   proposed_memory: ProposedMemory;
 }
+
+export interface DemoEntityRef {
+  id: number;
+  name: string;
+  created: boolean;
+}
+
+export interface DemoSeedResponse {
+  souls: DemoEntityRef[];
+  agents: DemoEntityRef[];
+  contexts: DemoEntityRef[];
+  memories: DemoEntityRef[];
+  workflow: DemoEntityRef | null;
+  first_complaint: string;
+  second_complaint: string;
+  feedback_text: string;
+  acceptance_checklist: string[];
+}
+
+export interface DemoCleanupResponse {
+  deleted_souls: number;
+  deleted_agents: number;
+  deleted_workflows: number;
+  deleted_runs: number;
+  deleted_contexts: number;
+  deleted_memories: number;
+}

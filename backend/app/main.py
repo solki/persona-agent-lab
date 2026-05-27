@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agents import router as agents_router
 from app.api.contexts import router as contexts_router
+from app.api.demo import router as demo_router
 from app.api.experiments import router as experiments_router
 from app.api.health import router as health_router
 from app.api.learning import router as learning_router
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(experiments_router)
     app.include_router(learning_router)
     app.include_router(observatory_router)
+    app.include_router(demo_router)
     return app
 
 

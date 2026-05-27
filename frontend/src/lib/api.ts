@@ -3,6 +3,8 @@ import type {
   AgentContext,
   AgentFeedback,
   AgentMemory,
+  DemoCleanupResponse,
+  DemoSeedResponse,
   Experiment,
   ExperimentRun,
   ProposedMemory,
@@ -141,5 +143,8 @@ export const api = {
   hardDeleteRun: (id: number) => request<{ message: string }>(`/runs/${id}/hard-delete`, { method: "DELETE" }),
 
   createFeedback: (runId: number, agentId: number, payload: JsonBody) => request<AgentFeedback>(`/runs/${runId}/agents/${agentId}/feedback`, body("POST", payload)),
-  reflectOnFeedback: (runId: number, agentId: number, payload: JsonBody) => request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, body("POST", payload))
+  reflectOnFeedback: (runId: number, agentId: number, payload: JsonBody) => request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, body("POST", payload)),
+
+  seedDemo: () => request<DemoSeedResponse>("/demo/seed", body("POST", {})),
+  cleanupDemo: () => request<DemoCleanupResponse>("/demo/seed", { method: "DELETE" })
 };

@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/shared/AppLayout";
 import { NotificationProvider } from "@/lib/NotificationContext";
 import { AgentDetailPage, AgentFormPage, AgentsPage } from "@/pages/AgentsPage";
+import { DemoPage } from "@/pages/DemoPage";
 import { ExperimentFormPage, ExperimentsPage } from "@/pages/ExperimentsPage";
 import { RunMonitorPage, RunsPage, RunDetailPage } from "@/pages/RunsPage";
 import { SoulFormPage, SoulsPage } from "@/pages/SoulsPage";
@@ -41,6 +42,7 @@ export function App() {
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:id" element={<RunDetailPage />} />
             <Route path="/runs/:id/monitor" element={<RunMonitorPage />} />
+            <Route path="/demo" element={<DemoPage />} />
             <Route path="/experiments" element={<ExperimentsPage />} />
             <Route path="/experiments/new" element={<ExperimentFormPage />} />
             <Route path="/experiments/:id" element={<ExperimentFormPage />} />

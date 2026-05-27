@@ -151,11 +151,13 @@ A reusable 3-agent sequential workflow that demonstrates the full learning loop 
 
 ### Quick Start
 
-```bash
-cd backend && python scripts/seed_demo.py
-```
+Open the app at `http://localhost:3000/demo` and select **Seed Demo** to idempotently create three agents (Escalation Triage, Policy Guardrail, Customer Response Writer), their souls, contexts, active memories, and a sequential workflow. The page shows created vs reused items, complaint texts, suggested feedback, a step-by-step acceptance checklist, and quick links to the workflow and agents.
 
-This creates three agents (Escalation Triage, Policy Guardrail, Customer Response Writer) and a sequential workflow. The script prints step-by-step instructions and sample inputs.
+Alternatively, seed via API:
+
+```bash
+curl -X POST http://localhost:8000/demo/seed -H "Content-Type: application/json" -d '{}'
+```
 
 ### Scenario
 
@@ -208,6 +210,10 @@ Input: A different complaint with order #ORD-10456, subscription upgrade issue, 
 
 Expected improvement: The agent's context now includes the approved memory, so the second run should reference the learned lesson. The trace events and config snapshot from the second run show the active memory was included in context assembly.
 
-### E2E Test
+### E2E Tests
 
-The `Customer Escalation Recovery: full learning loop with 3-agent sequential workflow` test in `frontend/e2e/frontend.spec.ts` automates this entire flow.
+The `Customer Escalation Recovery: full learning loop with 3-agent sequential workflow` test in `frontend/e2e/frontend.spec.ts` automates the full feedback-to-approval cycle.
+
+The `Demo page: seeds idempotently and cleans up demo data` test verifies the frontend seed/cleanup flow.
+
+The `Phase 2 acceptance: seed demo → run workflow → verify learning events` test validates the API-driven seed-to-completion path.

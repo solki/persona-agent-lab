@@ -1,4 +1,4 @@
-import { Beaker, Brain, FlaskConical, Hammer, History, Home, Network, Users } from "lucide-react";
+import { Beaker, Brain, FlaskConical, Hammer, History, Home, Network, Play, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNotification } from "@/lib/NotificationContext";
@@ -10,6 +10,7 @@ const nav = [
   { href: "/tools", label: "Tools", icon: Hammer },
   { href: "/workflows", label: "Workflows", icon: Network },
   { href: "/runs", label: "Runs", icon: History },
+  { href: "/demo", label: "Demo", icon: Play },
   { href: "/experiments", label: "Experiments", icon: FlaskConical }
 ];
 

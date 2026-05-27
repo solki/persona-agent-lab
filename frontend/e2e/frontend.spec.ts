@@ -637,6 +637,78 @@ test.describe.serial("Frontend", () => {
       await backend.put(`/agents/${agent.id}`, { data: { is_active: false } });
     }
   });
+
+  test("Demo page: seeds idempotently and cleans up demo data", async ({ page }) => {
+    await page.goto("/demo");
+    await expect(page.getByRole("heading", { name: "Phase 2 Acceptance Demo" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Customer Escalation Recovery" })).toBeVisible();
+
+    // Click Seed Demo
+    await page.getByRole("button", { name: /Seed Demo/ }).click();
+    await expect(page.getByText(/Demo seeded:/)).toBeVisible({ timeout: 5000 });
+
+    // Verify created items are shown in the summary grid
+    await expect(page.getByRole("heading", { name: "Souls" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+    await expect(page.getByText("Demo:Escalation Triage Agent")).toBeVisible();
+    await expect(page.getByText("Demo:Policy Guardrail Agent")).toBeVisible();
+    await expect(page.getByText("Demo:Customer Response Writer")).toBeVisible();
+
+    // Acceptance checklist should be visible
+    await expect(page.getByRole("heading", { name: "Step-by-Step Acceptance Checklist" })).toBeVisible();
+
+    // Quick links should appear
+    await expect(page.getByRole("heading", { name: "Quick Links" })).toBeVisible();
+
+    // Click Seed Demo again — should show reused
+    await page.getByRole("button", { name: /Seed Demo/ }).click();
+    await expect(page.getByText(/reused across/)).toBeVisible({ timeout: 5000 });
+
+    // Cleanup
+    page.on("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: /Cleanup Demo Data/ }).click();
+    await expect(page.getByText("Demo data cleaned up.")).toBeVisible({ timeout: 10000 });
+
+    // Seed again to leave clean state
+    await page.getByRole("button", { name: /Seed Demo/ }).click();
+    await expect(page.getByText(/created,/)).toBeVisible({ timeout: 5000 });
+
+    // Final cleanup
+    await backend.delete("/demo/seed");
+  });
+
+  test("Phase 2 acceptance: seed demo → run workflow → verify learning events", async ({ page }) => {
+    test.setTimeout(300_000);
+
+    // Step 1: Seed demo data via API
+    const seed = await apiPost<{
+      agents: Array<{ id: number; name: string }>;
+      workflow: { id: number; name: string } | null;
+      first_complaint: string;
+    }>("/demo/seed", {});
+    const triage = seed.agents.find((a) => a.name.includes("Triage"))!;
+    const workflow = seed.workflow!;
+
+    // Step 2: Run workflow (synchronous — returns after completion)
+    const run1 = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, { task: seed.first_complaint });
+
+    // Step 3: Navigate to run monitor — should show completed run with agent executions
+    await page.goto(`/runs/${run1.id}/monitor`);
+    await expect(page.getByRole("heading", { name: /Run \d+ Monitor/ })).toBeVisible();
+    await expect(page.getByText("Idle")).toBeVisible();
+
+    // Step 4: Verify agent executions are visible
+    await expect(page.getByText(triage.name)).toBeVisible();
+
+    // Step 5: Verify trace events show 3 agents ran
+    const trace = await apiGet<Array<{ event_type: string; agent_id: number | null }>>(`/runs/${run1.id}/trace`);
+    const agentCompletedEvents = trace.filter((e) => e.event_type === "agent_completed");
+    expect(agentCompletedEvents.length).toBeGreaterThanOrEqual(3);
+
+    // Cleanup
+    await apiPost(`/runs/${run1.id}/archive`, {});
+    await backend.delete("/demo/seed");
+  });
 });
 
 function cardWithText(page: Page, text: string) {

@@ -794,13 +794,19 @@ A second demo scenario proving an agent can learn not to ask for repeated inform
 
 ### Quick Seed
 
-Instead of manually creating agents, run the seed script:
+Open the app at `http://localhost:3000`, navigate to **Demo** in the sidebar, and select **Seed Demo**. The page creates three agents (Escalation Triage, Policy Guardrail, Customer Response Writer), their souls, contexts, active memories, and a sequential workflow. The seed is idempotent — clicking again shows which items were reused.
+
+The same seed can also be triggered via API:
 
 ```bash
-cd backend && python scripts/seed_demo.py
+curl -X POST http://localhost:8000/demo/seed -H "Content-Type: application/json" -d '{}'
 ```
 
-The script creates three agents (Escalation Triage, Policy Guardrail, Customer Response Writer) and a sequential workflow. It prints the IDs, sample complaint texts, feedback text, and step-by-step instructions.
+Cleanup is available from the Demo page (**Cleanup Demo Data** button) or via API:
+
+```bash
+curl -X DELETE http://localhost:8000/demo/seed
+```
 
 ### Scenario
 
@@ -816,20 +822,19 @@ A customer files a complaint with repeated support contacts, a missing item, lat
 
 ### Manual Steps
 
-1. Seed the demo: `cd backend && python scripts/seed_demo.py`
-2. Open the app at `http://localhost:3000`
-3. Navigate to **Workflows**, find "Escalation Recovery Workflow", select **Run**
-4. Paste the first complaint (printed by the seed script) and select **Run workflow**
-5. Wait for the run to complete, then open the run detail page
-6. Submit feedback on the Escalation Triage Agent:
+1. Open the **Demo** page at `http://localhost:3000/demo` and select **Seed Demo**
+2. Navigate to **Workflows**, find "Demo:Escalation Recovery Workflow", select **Run**
+3. Copy the **First Run Complaint** from the Demo page and paste it as the task input, then select **Run workflow**
+4. Wait for the run to complete, then open the run detail page
+5. Submit feedback on the Escalation Triage Agent:
    - Type: `correction`
    - Rating: `2`
-   - Text: see seed script output
-7. Select **Generate proposed memory from feedback**
-8. Navigate to the agent detail page and **Approve** the proposed memory
-9. Return to the run and select **Re-run**
-10. Paste the second complaint (printed by the seed script) and run
-11. Compare the two runs: the second run's trace should include the approved memory in context assembly
+   - Text: copy the **Suggested Feedback** from the Demo page
+6. Select **Generate proposed memory from feedback**
+7. Navigate to the agent detail page (use the **Triage Agent** quick link on the Demo page) and **Approve** the proposed memory
+8. Return to the run and select **Re-run**
+9. Paste the **Second Run Complaint** from the Demo page and run
+10. Compare the two runs: the second run's trace should include the approved memory in context assembly
 
 ### Expected Results
 
@@ -837,4 +842,5 @@ A customer files a complaint with repeated support contacts, a missing item, lat
 - After feedback + reflection + approve: agent's active memory contains the learned lesson
 - Second run: approved memory appears in context assembly for the Escalation Triage Agent
 - Other agents (Policy Guardrail, Response Writer) do not see the Triage agent's memory
-- The E2E test `Customer Escalation Recovery: full learning loop with 3-agent sequential workflow` automates this flow
+- The E2E tests `Demo page: seeds idempotently and cleans up demo data` and `Phase 2 acceptance: seed demo → run workflow → verify learning events` automate this flow
+- The E2E test `Customer Escalation Recovery: full learning loop with 3-agent sequential workflow` automates the full feedback-to-approval cycle
