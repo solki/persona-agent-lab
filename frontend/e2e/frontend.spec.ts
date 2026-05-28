@@ -709,6 +709,41 @@ test.describe.serial("Frontend", () => {
     await apiPost(`/runs/${run1.id}/archive`, {});
     await backend.delete("/demo/seed");
   });
+
+  test("Admin cleanup: button hidden by default, visible with ?adminCleanup=1", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText("Admin cleanup")).not.toBeVisible();
+
+    await page.goto("/?adminCleanup=1");
+    await expect(page.getByText("Admin cleanup")).toBeVisible();
+  });
+
+  test("Admin cleanup: confirmation phrase required, shows deleted counts on success", async ({ page }) => {
+    // Seed some data first
+    await apiPost("/demo/seed", {});
+
+    await page.goto("/?adminCleanup=1");
+    await page.getByText("Admin cleanup").click();
+
+    // Dialog should be visible
+    await expect(page.getByRole("heading", { name: "Admin Cleanup" })).toBeVisible();
+
+    // Confirm button should be disabled until phrase is typed
+    const confirmBtn = page.getByRole("button", { name: "Clear All Lab Data" });
+    await expect(confirmBtn).toBeDisabled();
+
+    // Type the phrase
+    await page.getByRole("textbox").fill("CLEAR LAB DATA");
+    await expect(confirmBtn).toBeEnabled();
+
+    // Click confirm
+    await confirmBtn.click();
+
+    // Should show success with deleted counts
+    await expect(page.getByText("Cleanup complete:")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Souls:/)).toBeVisible();
+    await expect(page.getByText(/Agents:/)).toBeVisible();
+  });
 });
 
 function cardWithText(page: Page, text: string) {

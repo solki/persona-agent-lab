@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin import router as admin_router
 from app.api.agents import router as agents_router
 from app.api.contexts import router as contexts_router
 from app.api.demo import router as demo_router
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(admin_router)
     app.include_router(health_router)
     app.include_router(souls_router)
     app.include_router(agents_router)

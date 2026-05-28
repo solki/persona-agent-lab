@@ -1,4 +1,5 @@
 import type {
+  AdminCleanupResponse,
   Agent,
   AgentContext,
   AgentFeedback,
@@ -146,5 +147,7 @@ export const api = {
   reflectOnFeedback: (runId: number, agentId: number, payload: JsonBody) => request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, body("POST", payload)),
 
   seedDemo: () => request<DemoSeedResponse>("/demo/seed", body("POST", {})),
-  cleanupDemo: () => request<DemoCleanupResponse>("/demo/seed", { method: "DELETE" })
+  cleanupDemo: () => request<DemoCleanupResponse>("/demo/seed", { method: "DELETE" }),
+
+  cleanupLabData: () => request<AdminCleanupResponse>("/admin/cleanup-lab-data", body("POST", {}))
 };
