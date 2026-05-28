@@ -653,6 +653,7 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByText("Demo:Escalation Triage Agent")).toBeVisible();
     await expect(page.getByText("Demo:Policy Guardrail Agent")).toBeVisible();
     await expect(page.getByText("Demo:Customer Response Writer")).toBeVisible();
+    await expect(page.getByText("Demo:Escalation Quality Reviewer")).toBeVisible();
 
     // Acceptance checklist should be visible
     await expect(page.getByRole("heading", { name: "Step-by-Step Acceptance Checklist" })).toBeVisible();
@@ -783,6 +784,16 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByText("Memory decision:")).toBeVisible({ timeout: 15000 });
     await expect(page.getByText("corrective", { exact: true })).toBeVisible();
 
+    // Should show reviewed output section with execution metadata
+    await expect(page.getByText("Reviewed Output")).toBeVisible();
+    await expect(page.getByText(/execution #/)).toBeVisible();
+    await expect(page.getByText(/Run #\d+/)).toBeVisible();
+    await expect(page.getByText(/Target agent #\d+/)).toBeVisible();
+    await expect(page.getByText(/Reviewer agent #\d+/)).toBeVisible();
+    // The reviewed output <pre> should contain content (not "(no output captured)")
+    await expect(page.locator("pre").filter({ hasText: /./ }).first()).toBeVisible();
+    await expect(page.getByText("(no output captured)")).toHaveCount(0);
+
     // Should show derived criteria
     await expect(page.getByText("Derived Criteria")).toBeVisible();
 
@@ -839,6 +850,9 @@ test.describe.serial("Frontend", () => {
     // Should show "No corrective memory needed" (use exact to avoid matching the success alert)
     await expect(page.getByText("No corrective memory needed", { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText("The reviewer determined this agent performed well")).toBeVisible();
+
+    // Should show reviewed output section
+    await expect(page.getByText("Reviewed Output")).toBeVisible();
 
     // Should NOT show proposed memory card
     await expect(page.getByText("Proposed Memory")).toHaveCount(0);
