@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from app.schemas.memories import AgentMemoryRead
 
@@ -43,7 +43,13 @@ class AgentEvaluationCreate(BaseModel):
 
     @field_validator("scores")
     @classmethod
-    def validate_scores(cls, scores: dict[str, int]) -> dict[str, int]:
+    def validate_scores(cls, scores: dict[str, int], info: ValidationInfo) -> dict[str, int]:
+        evaluator_type = info.data.get("evaluator_type", "human")
+        if evaluator_type == "agent_reviewer":
+            invalid = [key for key, value in scores.items() if value < 1 or value > 5]
+            if invalid:
+                raise ValueError(f"Evaluation scores must be between 1 and 5: {', '.join(sorted(invalid))}")
+            return scores
         score_keys = set(scores.keys())
         missing = EVALUATION_RUBRIC - score_keys
         unknown = score_keys - EVALUATION_RUBRIC
@@ -124,3 +130,16 @@ class ReflectionResponse(BaseModel):
     agent_id: int
     reflection: str
     proposed_memory: ProposedMemoryRead
+
+
+class ReviewRequest(BaseModel):
+    reviewer_agent_id: int
+    trace_event_id: Optional[int] = None
+
+
+class ReviewResponse(BaseModel):
+    run_id: int
+    target_agent_id: int
+    reviewer_agent_id: int
+    evaluation: AgentEvaluationRead
+    proposed_memory: Optional[ProposedMemoryRead] = None

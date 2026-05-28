@@ -11,6 +11,7 @@ import type {
   ProposedMemory,
   ProposedMemoryNotificationSummary,
   ReflectionResponse,
+  ReviewerEvaluationResponse,
   Run,
   RunMonitor,
   Soul,
@@ -145,6 +146,9 @@ export const api = {
 
   createFeedback: (runId: number, agentId: number, payload: JsonBody) => request<AgentFeedback>(`/runs/${runId}/agents/${agentId}/feedback`, body("POST", payload)),
   reflectOnFeedback: (runId: number, agentId: number, payload: JsonBody) => request<ReflectionResponse>(`/runs/${runId}/agents/${agentId}/reflect`, body("POST", payload)),
+
+  reviewAgentOutput: (runId: number, targetAgentId: number, payload: JsonBody) =>
+    request<ReviewerEvaluationResponse>(`/runs/${runId}/agents/${targetAgentId}/review`, body("POST", payload)),
 
   seedDemo: () => request<DemoSeedResponse>("/demo/seed", body("POST", {})),
   cleanupDemo: () => request<DemoCleanupResponse>("/demo/seed", { method: "DELETE" }),

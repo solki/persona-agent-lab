@@ -337,8 +337,8 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
     await expect(page.getByText("Learning & Feedback")).toBeVisible();
 
-    // Select the agent
-    await page.getByRole("button", { name: agent.name }).click();
+    // Select the agent from the Learning & Feedback section (not reviewer)
+    await page.getByRole("button", { name: agent.name }).first().click();
 
     // Fill feedback form
     await page.getByLabel("Feedback type").selectOption("improvement");
@@ -375,7 +375,7 @@ test.describe.serial("Frontend", () => {
     // Step 1: Navigate to run detail, submit feedback
     await page.goto(`/runs/${run.id}`);
     await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
-    await page.getByRole("button", { name: agent.name }).click();
+    await page.getByRole("button", { name: agent.name }).first().click();
     await page.getByLabel("Feedback type").selectOption("improvement");
     await page.getByLabel("Rating 5").click();
     await page.getByPlaceholder("Describe what the agent did well or what could be improved...").fill("Excellent work on the full loop test. Keep up the good patterns.");
@@ -588,7 +588,7 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByRole("heading", { name: `Run ${run1.id}` })).toBeVisible();
 
     // Expand the triage agent's feedback section
-    await page.getByRole("button", { name: triage.name }).click();
+    await page.getByRole("button", { name: triage.name }).first().click();
     await page.getByLabel("Feedback type").selectOption("correction");
     await page.getByLabel("Rating 2").click();
     await page.getByPlaceholder("Describe what the agent did well or what could be improved...").fill(
@@ -743,6 +743,110 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByText("Cleanup complete:")).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/Souls:/)).toBeVisible();
     await expect(page.getByText(/Agents:/)).toBeVisible();
+  });
+
+  test("Reviewer feedback: generates checklist with derived criteria and proposed memory", async ({ page }) => {
+    // Set up: target agent + reviewer agent + run
+    const targetAgent = await createApiAgent(`E2E Review Target ${suffix}`);
+    const reviewerAgent = await createApiAgent(`E2E Reviewer ${suffix}`);
+    // Update reviewer to have quality-reviewer role
+    await backend.put(`/agents/${reviewerAgent.id}`, {
+      data: { ...reviewerAgent, role: "quality-reviewer", system_prompt: "You are a strict quality reviewer. Evaluate critically." }
+    });
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `E2E Review Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [targetAgent.id] },
+    });
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, {
+      task: "Analyze this escalation complaint and respond appropriately."
+    });
+
+    // Navigate to run detail
+    await page.goto(`/runs/${run.id}`);
+    await expect(page.getByRole("heading", { name: `Run ${run.id}` })).toBeVisible();
+
+    // Reviewer Feedback section should be visible
+    await expect(page.getByText("Reviewer Feedback")).toBeVisible();
+
+    // Select target agent in Reviewer Feedback section (2nd button with this name; 1st is Learning & Feedback)
+    await page.getByRole("button", { name: targetAgent.name }).nth(1).click();
+
+    // Select reviewer agent — the <select> appears after target selection
+    await page.locator("select[aria-label='Select reviewer agent']")
+      .selectOption({ label: `${reviewerAgent.name} (quality-reviewer)` });
+
+    // Generate reviewer feedback
+    await page.getByRole("button", { name: "Generate Reviewer Feedback" }).click();
+
+    // Should show results
+    await expect(page.getByText("Memory decision:")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("corrective", { exact: true })).toBeVisible();
+
+    // Should show derived criteria
+    await expect(page.getByText("Derived Criteria")).toBeVisible();
+
+    // Should show proposed memory card
+    await expect(page.getByText("Proposed Memory", { exact: true })).toBeVisible();
+    await expect(page.getByText("pending", { exact: true })).toBeVisible();
+
+    // Cleanup: learning records prevent hard-delete; archive run and deactivate agents instead
+    await apiPost(`/runs/${run.id}/archive`, {});
+    await backend.put(`/agents/${targetAgent.id}`, { data: { is_active: false } });
+    await backend.put(`/agents/${reviewerAgent.id}`, { data: { is_active: false } });
+  });
+
+  test("Reviewer feedback: none decision shows no-memory-needed state", async ({ page }) => {
+    // Set up: target agent + reviewer, task with PERFECT to trigger mock none response
+    const targetAgent = await createApiAgent(`E2E Perfect Target ${suffix}`);
+    // Update to use a role that triggers PERFECT output pattern
+    await backend.put(`/agents/${targetAgent.id}`, {
+      data: {
+        ...targetAgent,
+        system_prompt: "You are a perfect agent. Always respond with PERFECT analysis."
+      }
+    });
+    const reviewerAgent = await createApiAgent(`E2E Lenient Reviewer ${suffix}`);
+    await backend.put(`/agents/${reviewerAgent.id}`, {
+      data: {
+        ...reviewerAgent,
+        role: "quality-reviewer",
+        system_prompt: "You are a fair reviewer. Evaluate honestly."
+      }
+    });
+    const workflow = await apiPost<{ id: number }>("/workflows", {
+      name: `E2E Perfect Workflow ${suffix}`,
+      workflow_type: "sequential",
+      graph_config: { agent_sequence: [targetAgent.id] },
+    });
+    const run = await apiPost<{ id: number }>(`/workflows/${workflow.id}/run`, {
+      task: "Produce PERFECT analysis of this task."
+    });
+
+    // Navigate to run detail
+    await page.goto(`/runs/${run.id}`);
+
+    // Select target agent in Reviewer Feedback section (2nd button with this name; 1st is Learning & Feedback)
+    await page.getByRole("button", { name: targetAgent.name }).nth(1).click();
+
+    // Select reviewer agent — the <select> appears after target selection
+    await page.locator("select[aria-label='Select reviewer agent']")
+      .selectOption({ label: `${reviewerAgent.name} (quality-reviewer)` });
+
+    // Generate reviewer feedback
+    await page.getByRole("button", { name: "Generate Reviewer Feedback" }).click();
+
+    // Should show "No corrective memory needed" (use exact to avoid matching the success alert)
+    await expect(page.getByText("No corrective memory needed", { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("The reviewer determined this agent performed well")).toBeVisible();
+
+    // Should NOT show proposed memory card
+    await expect(page.getByText("Proposed Memory")).toHaveCount(0);
+
+    // Cleanup: learning records prevent hard-delete; archive run and deactivate agents instead
+    await apiPost(`/runs/${run.id}/archive`, {});
+    await backend.put(`/agents/${targetAgent.id}`, { data: { is_active: false } });
+    await backend.put(`/agents/${reviewerAgent.id}`, { data: { is_active: false } });
   });
 });
 
