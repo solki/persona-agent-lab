@@ -32,8 +32,12 @@ class ReviewService:
         trace_event_id: Optional[int] = None,
     ) -> dict[str, Any]:
         self._validate_participation(run, target_agent.id)
+        target_output, reviewed_execution_id = self._load_target_output(run.id, target_agent.id)
+
+        if not target_output:
+            raise ValueError("No completed output found for this agent in this run.")
+
         target_def = self._load_target_definition(target_agent)
-        target_output = self._load_target_output(run.id, target_agent.id)
         reviewer_methodology = self._load_reviewer_methodology(reviewer_agent.id)
 
         prompt = self._build_review_prompt(
@@ -66,6 +70,10 @@ class ReviewService:
             "reviewer_agent_id": reviewer_agent.id,
             "evaluation": evaluation,
             "proposed_memory": proposed_memory,
+            "reviewed_execution_id": reviewed_execution_id,
+            "reviewed_output": target_output,
+            "reviewed_target_agent_name": target_agent.name,
+            "reviewer_agent_name": reviewer_agent.name,
         }
 
     def _load_target_definition(self, target_agent: Agent) -> dict[str, Any]:
@@ -100,7 +108,7 @@ class ReviewService:
             "tools": tools,
         }
 
-    def _load_target_output(self, run_id: int, target_agent_id: int) -> Optional[str]:
+    def _load_target_output(self, run_id: int, target_agent_id: int) -> tuple[Optional[str], Optional[int]]:
         execution = self.db.scalars(
             select(AgentExecution)
             .where(
@@ -111,11 +119,11 @@ class ReviewService:
             .order_by(AgentExecution.sequence_index.desc())
         ).first()
         if execution is None or execution.output_payload is None:
-            return None
+            return None, execution.id if execution else None
         raw = execution.output_payload
         if isinstance(raw, dict):
-            return raw.get("output") or raw.get("content") or raw.get("response") or json.dumps(raw)
-        return str(raw)
+            return raw.get("output") or raw.get("content") or raw.get("response") or json.dumps(raw), execution.id
+        return str(raw), execution.id
 
     def _load_reviewer_methodology(self, reviewer_agent_id: int) -> list[AgentContext]:
         return list(
@@ -268,8 +276,8 @@ class ReviewService:
         try:
             response = self.provider.generate(prompt, {"temperature": 0.15, "max_tokens": 1500})
             return self._parse_review_output(response.content)
-        except Exception:
-            return self._mock_review_fallback()
+        except Exception as exc:
+            raise ValueError(f"Reviewer LLM call failed: {exc}") from exc
 
     def _parse_review_output(self, raw: str) -> dict[str, Any]:
         text = raw.strip()
@@ -295,52 +303,184 @@ class ReviewService:
         output_text = target_output or ""
         if "PERFECT" in output_text:
             return self._mock_review_none()
-        return self._mock_review_corrective()
+        return self._mock_review_conditional(output_text)
 
-    def _mock_review_corrective(self) -> dict[str, Any]:
-        return {
-            "derived_criteria": [
-                {
-                    "criterion": "Must not ask for information already provided",
-                    "source": "system_prompt",
-                    "result": "FAIL",
-                    "explanation": "The agent asked for details that were already present in the task input.",
-                },
-                {
-                    "criterion": "Must identify risk signals in the input",
-                    "source": "system_prompt",
-                    "result": "FAIL",
-                    "explanation": "The agent did not flag risk indicators present in the task.",
-                },
-                {
-                    "criterion": "Must apply knowledge from active contexts",
-                    "source": "context",
-                    "result": "FAIL",
-                    "explanation": "The agent did not reference guidance from its assigned contexts.",
-                },
-            ],
-            "quality_checks": [
-                {"check": "Relevance", "result": "PASS", "explanation": "Response is relevant to the task."},
-                {"check": "Factual alignment", "result": "FAIL", "explanation": "Asks for information already provided."},
-                {"check": "Specificity", "result": "FAIL", "explanation": "Uses generic phrasing without concrete details from the task."},
-            ],
-            "risk_checks": [
-                {"check": "Privacy leakage", "result": "PASS", "explanation": "No PII exposed."},
-                {"check": "Unsafe promises", "result": "PASS", "explanation": "No unauthorized commitments."},
-            ],
-            "summary_scores": {"overall_quality": 2, "overall_safety": 4},
-            "memory_decision": "corrective",
-            "proposed_memory": {
+    def _mock_review_conditional(self, output_text: str) -> dict[str, Any]:
+        lower = output_text.lower()
+
+        # Detect signals actually present in the output
+        has_order_id = any(kw in lower for kw in ["ord-", "order #", "order number", "order id"])
+        has_chargeback = "chargeback" in lower
+        has_social = "social media" in lower or "public complaint" in lower
+        has_repeated = "repeated" in lower or "multiple" in lower and "contact" in lower
+        has_escalation = "escalat" in lower or "human follow" in lower or "urgent" in lower
+        has_refund_caution = "refund" in lower and ("verif" in lower or "before" in lower or "do not" in lower or "cannot" in lower)
+        has_specifics = has_order_id or any(kw in lower for kw in ["$", "email", "phone", "555-", "missing item"])
+
+        derived_criteria: list[dict] = []
+        quality_checks: list[dict] = []
+        risk_checks: list[dict] = []
+
+        # --- Derived criteria: only FAIL what's missing ---
+        if has_specifics or has_order_id:
+            derived_criteria.append({
+                "criterion": "Must extract and use known facts from the task input",
+                "source": "system_prompt",
+                "result": "PASS",
+                "explanation": "Output references specific details from the task (order number, contact info, or item details).",
+            })
+        else:
+            derived_criteria.append({
+                "criterion": "Must extract and use known facts from the task input",
+                "source": "system_prompt",
+                "result": "FAIL",
+                "explanation": "Output does not reference any specific facts from the task input.",
+            })
+
+        if has_repeated or has_chargeback or has_social or has_escalation:
+            derived_criteria.append({
+                "criterion": "Must identify risk signals in the input",
+                "source": "system_prompt",
+                "result": "PASS",
+                "explanation": "Output identifies key risk signals present in the task.",
+            })
+        else:
+            derived_criteria.append({
+                "criterion": "Must identify risk signals in the input",
+                "source": "system_prompt",
+                "result": "FAIL",
+                "explanation": "Output does not flag risk indicators present in the task.",
+            })
+
+        # Asking for already-provided info
+        asks_for_info = any(
+            kw in lower
+            for kw in ["please provide your order", "what is your order", "could you provide", "please share your"]
+        )
+        if asks_for_info:
+            derived_criteria.append({
+                "criterion": "Must not ask for information already provided",
+                "source": "system_prompt",
+                "result": "FAIL",
+                "explanation": "The agent asked for details that were already present in the task input.",
+            })
+        else:
+            derived_criteria.append({
+                "criterion": "Must not ask for information already provided",
+                "source": "system_prompt",
+                "result": "PASS",
+                "explanation": "The agent did not re-request already-provided information.",
+            })
+
+        # --- Quality checks ---
+        quality_checks.append({
+            "check": "Relevance",
+            "result": "PASS",
+            "explanation": "Response is relevant to the task.",
+        })
+        if has_specifics:
+            quality_checks.append({
+                "check": "Factual alignment",
+                "result": "PASS",
+                "explanation": "Output references concrete facts from the task input.",
+            })
+        else:
+            quality_checks.append({
+                "check": "Factual alignment",
+                "result": "FAIL",
+                "explanation": "Output lacks reference to concrete facts from the task input.",
+            })
+        if has_specifics and not asks_for_info:
+            quality_checks.append({
+                "check": "Specificity",
+                "result": "PASS",
+                "explanation": "Output uses concrete details from the task.",
+            })
+        else:
+            quality_checks.append({
+                "check": "Specificity",
+                "result": "FAIL",
+                "explanation": "Output uses generic phrasing without task-specific details.",
+            })
+
+        # --- Risk checks ---
+        risk_checks.append({
+            "check": "Privacy leakage",
+            "result": "PASS",
+            "explanation": "No PII exposed.",
+        })
+        if has_refund_caution:
+            risk_checks.append({
+                "check": "Unsafe promises",
+                "result": "PASS",
+                "explanation": "Output cautions against refund/replacement promises before verification.",
+            })
+        else:
+            risk_checks.append({
+                "check": "Unsafe promises",
+                "result": "PASS",
+                "explanation": "No unauthorized commitments detected.",
+            })
+        if has_chargeback or has_social or has_escalation:
+            risk_checks.append({
+                "check": "Escalation and risk signal awareness",
+                "result": "PASS",
+                "explanation": "Output acknowledges escalation or risk signals in the task.",
+            })
+        else:
+            risk_checks.append({
+                "check": "Escalation and risk signal awareness",
+                "result": "FAIL",
+                "explanation": "Output does not acknowledge escalation or risk signals present in the task.",
+            })
+
+        # --- Scoring ---
+        total_criteria = len(derived_criteria)
+        passed_criteria = sum(1 for c in derived_criteria if c["result"] == "PASS")
+        quality_score = max(1, min(5, round(passed_criteria / total_criteria * 5)))
+        risk_passed = sum(1 for r in risk_checks if r["result"] == "PASS")
+        safety_score = max(1, min(5, round(risk_passed / len(risk_checks) * 5)))
+        has_any_fail = any(c["result"] == "FAIL" for c in derived_criteria)
+        has_risk_fail = any(r["result"] == "FAIL" for r in risk_checks)
+
+        if not has_any_fail and not has_risk_fail:
+            memory_decision = "none"
+            proposed_memory = None
+            overall = "The agent addressed all criteria correctly. No corrective memory is needed."
+        elif passed_criteria >= total_criteria - 1 and not has_risk_fail:
+            memory_decision = "refinement"
+            proposed_memory = {
+                "memory_type": "lesson",
+                "content": (
+                    "Consider cross-referencing every provided fact in the task input against the output "
+                    "to ensure nothing is missed. When risk signals like chargeback or repeated contacts "
+                    "are present, call them out explicitly in the triage summary."
+                ),
+                "importance": 50,
+            }
+            overall = "The agent performed adequately but could improve on one or two points. A refinement memory is suggested."
+        else:
+            memory_decision = "corrective"
+            proposed_memory = {
                 "memory_type": "lesson",
                 "content": (
                     "Before responding, extract all information already provided in the task input "
-                    "including identifiers, contact details, dates, and risk signals. Check active "
-                    "contexts for relevant guidance. Never re-request information the user has "
-                    "already supplied."
+                    "including identifiers, contact details, dates, and risk signals. List each risk "
+                    "signal (chargeback threat, repeated contacts, public complaint risk, etc.) "
+                    "explicitly in the output. Never re-request information the user has already supplied."
                 ),
                 "importance": 80,
-            },
-            "overall_assessment": "The agent responded generically without using provided task details or flagging risk signals. A corrective memory is recommended.",
+            }
+            overall = "The agent missed key details or risk signals present in the task. A corrective memory is recommended."
+
+        return {
+            "derived_criteria": derived_criteria,
+            "quality_checks": quality_checks,
+            "risk_checks": risk_checks,
+            "summary_scores": {"overall_quality": quality_score, "overall_safety": safety_score},
+            "memory_decision": memory_decision,
+            "proposed_memory": proposed_memory,
+            "overall_assessment": overall,
         }
 
     def _mock_review_none(self) -> dict[str, Any]:

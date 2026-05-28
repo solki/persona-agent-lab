@@ -506,6 +506,7 @@ function ReviewerFeedbackSection({ runId, executions }: { runId: number; executi
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ReviewerEvaluationResponse | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    reviewedOutput: true,
     criteria: true,
     quality: false,
     risk: false,
@@ -666,6 +667,49 @@ function ReviewerFeedbackSection({ runId, executions }: { runId: number; executi
                   Reviewed by <span className="font-medium text-foreground">{reviewerAgent.name}</span>
                 </span>
               ) : null}
+            </div>
+
+            {/* Reviewed output */}
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("reviewedOutput")}
+                className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-violet-400 transition-colors"
+              >
+                {expandedSections.reviewedOutput ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                Reviewed Output
+                {result.reviewed_execution_id != null ? (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    (execution #{result.reviewed_execution_id})
+                  </span>
+                ) : null}
+              </button>
+              {expandedSections.reviewedOutput ? (
+                <div className="mt-2 rounded-sm border border-border bg-background p-3">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mb-2">
+                    <span>Run #{result.run_id}</span>
+                    <span>Target: {result.reviewed_target_agent_name || `Agent #${result.target_agent_id}`}</span>
+                    <span>Reviewer: {result.reviewer_agent_name || `Agent #${result.reviewer_agent_id}`}</span>
+                    {result.reviewed_execution_id != null ? (
+                      <span>Execution #{result.reviewed_execution_id}</span>
+                    ) : null}
+                  </div>
+                  <pre className="whitespace-pre-wrap text-sm text-foreground font-mono bg-muted rounded-sm p-3 max-h-64 overflow-y-auto">
+                    {result.reviewed_output || "(no output captured)"}
+                  </pre>
+                </div>
+              ) : (
+                result.reviewed_output ? (
+                  <p className="mt-1 text-xs text-muted-foreground truncate max-w-2xl">
+                    {result.reviewed_output.slice(0, 200)}
+                    {result.reviewed_output.length > 200 ? "..." : ""}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground italic">
+                    (no output captured)
+                  </p>
+                )
+              )}
             </div>
 
             {/* Overall assessment */}

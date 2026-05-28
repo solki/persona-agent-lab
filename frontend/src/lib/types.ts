@@ -273,6 +273,10 @@ export interface ReviewerEvaluationResponse {
   reviewer_agent_id: number;
   evaluation: AgentEvaluation;
   proposed_memory: ProposedMemory | null;
+  reviewed_execution_id: number | null;
+  reviewed_output: string | null;
+  reviewed_target_agent_name: string | null;
+  reviewer_agent_name: string | null;
 }
 
 export interface AdminCleanupResponse {

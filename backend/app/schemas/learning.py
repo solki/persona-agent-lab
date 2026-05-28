@@ -143,3 +143,7 @@ class ReviewResponse(BaseModel):
     reviewer_agent_id: int
     evaluation: AgentEvaluationRead
     proposed_memory: Optional[ProposedMemoryRead] = None
+    reviewed_execution_id: Optional[int] = None
+    reviewed_output: Optional[str] = None
+    reviewed_target_agent_name: Optional[str] = None
+    reviewer_agent_name: Optional[str] = None

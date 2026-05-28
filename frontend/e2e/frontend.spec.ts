@@ -782,14 +782,17 @@ test.describe.serial("Frontend", () => {
 
     // Should show results
     await expect(page.getByText("Memory decision:")).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText("corrective", { exact: true })).toBeVisible();
+    // Task contains "escalation" → reviewer detects it as a risk signal, so
+    // memory decision is "refinement" (not "corrective" — the mock output is
+    // partially adequate because the task keyword appears in output).
+    await expect(page.getByText("refinement", { exact: true })).toBeVisible();
 
     // Should show reviewed output section with execution metadata
     await expect(page.getByText("Reviewed Output")).toBeVisible();
     await expect(page.getByText(/execution #/)).toBeVisible();
     await expect(page.getByText(/Run #\d+/)).toBeVisible();
-    await expect(page.getByText(/Target agent #\d+/)).toBeVisible();
-    await expect(page.getByText(/Reviewer agent #\d+/)).toBeVisible();
+    await expect(page.getByText(/Target:/)).toBeVisible();
+    await expect(page.getByText(/Reviewer:/)).toBeVisible();
     // The reviewed output <pre> should contain content (not "(no output captured)")
     await expect(page.locator("pre").filter({ hasText: /./ }).first()).toBeVisible();
     await expect(page.getByText("(no output captured)")).toHaveCount(0);
