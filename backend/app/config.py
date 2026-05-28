@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     qdrant_collection_prefix: str = "agent_swarm_lab"
     tavily_api_key: Optional[str] = None
     llm_provider: str = Field(default="mock", pattern="^(mock|openai_compatible|openai|anthropic|ollama)$")
+    llm_timeout_seconds: int = 120
     openai_compatible_api_key: Optional[str] = None
     openai_compatible_base_url: Optional[str] = None
     openai_compatible_model: Optional[str] = None

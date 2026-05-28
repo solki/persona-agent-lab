@@ -21,7 +21,11 @@ class WorkflowRunner:
 
     def run(self, workflow: Workflow, task: str) -> Run:
         run = self.start(workflow, task)
-        return self.execute_run(run.id)
+        try:
+            return self.execute_run(run.id)
+        except Exception as exc:
+            self.fail_run(run.id, str(exc))
+            raise
 
     def start(self, workflow: Workflow, task: str) -> Run:
         if workflow.workflow_type != "sequential":
@@ -141,16 +145,15 @@ class WorkflowRunner:
                 agent.id,
             )
             try:
-                provider_response = self.provider.generate(
-                    assembled.prompt,
-                    {
-                        "agent_name": agent.name,
-                        "task": current_task,
-                        "model": agent.model,
-                        "temperature": agent.temperature,
-                        "max_tokens": agent.max_tokens,
-                    },
-                )
+                provider_config: dict = {
+                    "agent_name": agent.name,
+                    "task": current_task,
+                }
+                if agent.llm_provider == self.settings.llm_provider:
+                    provider_config["model"] = agent.model
+                    provider_config["temperature"] = agent.temperature
+                    provider_config["max_tokens"] = agent.max_tokens
+                provider_response = self.provider.generate(assembled.prompt, provider_config)
             except Exception as exc:
                 observatory_service.fail_execution(self.db, execution, str(exc))
                 raise

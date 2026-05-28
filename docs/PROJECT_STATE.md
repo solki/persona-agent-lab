@@ -10,11 +10,19 @@ Milestone 9 status: implemented.
 
 Milestone 10 status: implemented.
 
+Phase 2 Milestone 1 (Real LLM Hardening): implemented.
+
+Phase 2 Milestone 2 (Frontend Learning Loop): implemented.
+
+Phase 2 Milestone 3 (LLM Reflection): implemented.
+
+Phase 2 Milestone 4 (Customer Escalation Learning Demo): implemented.
+
 ## Current Architecture
 
 - Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
 - Frontend: Vite, React, TypeScript, Tailwind CSS, shadcn/ui primitives, typed API client with Vite dev proxy, dashboard, and complete configuration management for souls, agents, tools, workflows, runs, experiments, agent-tool assignment, and policy-aware CRUD lifecycle actions. Playwright E2E coverage.
-- Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`.
+- Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`. The `/demo` page provides one-click idempotent seeding and cleanup. The `POST /demo/seed` and `DELETE /demo/seed` API endpoints support programmatic seed and cleanup.
 - Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
 - Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
 
@@ -25,8 +33,8 @@ Milestone 10 status: implemented.
 - `app/database.py`: SQLAlchemy base, engine/session setup, local table initialization, and `postgresql://` to `postgresql+psycopg://` normalization.
 - `app/api/`: Routers for health, agents, souls, tools, contexts, memories, workflows, runs, experiments, learning, and observatory.
 - `app/models/`: SQLAlchemy models for agents, souls, tools, contexts, memories, learning feedback/evaluations/proposed memories/events, observatory execution records/events/token usage, workflows, runs, trace events, experiments, and experiment runs.
-- `app/schemas/`: Pydantic request/response schemas and policy schemas.
-- `app/services/`: Persistence and scoped access services for agents, souls, tools, contexts, memories, learning, observatory, workflows, runs, trace events, and experiments.
+- `app/schemas/`: Pydantic request/response schemas and policy schemas, including demo seed/cleanup response schemas.
+- `app/services/`: Persistence and scoped access services for agents, souls, tools, contexts, memories, learning, observatory, workflows, runs, trace events, experiments, and demo (idempotent seed and cleanup).
 - `app/runtime/`: Context assembler, workflow runner, handoff policy evaluator, mock provider, OpenAI-compatible provider, provider placeholders, provider factory, and provider interface.
 - `app/memory/`: Vector store schemas, disabled vector store, and Qdrant adapter shell.
 - `app/tools/`: Tool Gateway, local tool registry, and Tavily search wrapper.
@@ -41,13 +49,14 @@ Milestone 10 status: implemented.
 - `src/pages/WorkflowsPage.tsx`: Workflow list (`WorkflowsPage`), create/edit form with agent picker (`WorkflowFormPage`), and workflow run panel with confirmed delete and sequence removal.
 - `src/pages/RunsPage.tsx`: Run list (`RunsPage`) with active/archived/status/workflow filters, archiving, activation, guarded permanent delete; run detail viewer (`RunDetailPage`) with collapsible input/output/config, trace events, learning feedback panel, token usage, and execution detail; live monitor page (`RunMonitorPage`) with polling-based status updates, agent execution cards, event stream, and token summary.
 - `src/pages/ExperimentsPage.tsx`: Experiment list (`ExperimentsPage`), create/edit form (`ExperimentFormPage`) with comparison view, archive/activate, and guarded delete with force-delete fallback for experiments with runs.
+- `src/pages/DemoPage.tsx`: Phase 2 acceptance demo page with idempotent seed, created/reused summary grid, acceptance checklist with checkboxes, complaint text blocks with copy buttons, suggested feedback, quick links, and cleanup. (`DemoPage`).
 - `src/components/shared/`: AppLayout (sidebar navigation shell), PageHeader, StatusBadge, ConfirmDialog, NoticeDialog, FormField, EmptyState, JsonCollapse, Alert, and reusable collapsed JSON/event viewers.
 - `src/components/ui/`: shadcn/ui-style primitives (button, card, input, label, select, textarea).
 - `src/lib/api.ts`: Typed backend API wrapper using `VITE_API_BASE_URL` with Vite `/api` dev proxy.
 - `src/lib/types.ts`: Frontend TypeScript interfaces matching backend schemas.
 - `src/lib/NotificationContext.tsx`: React context providing shared notification state with `totalCount` and `refresh()` across the app.
 - `src/index.css`: Tailwind CSS with custom dark lab theme tokens, dot-grid utility, and live-pulse animation.
-- `e2e/frontend.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, and agent isolation assertions.
+- `e2e/frontend.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, agent isolation assertions, demo page seed/cleanup, and Phase 2 acceptance learning loop.
 
 ## Current Data Models
 
@@ -87,6 +96,7 @@ Milestone 10 status: implemented.
 - Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `POST /runs/{run_id}/activate`, `DELETE /runs/{run_id}/hard-delete`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
 - Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
 - Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `DELETE /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/archive`, `POST /experiments/{experiment_id}/activate`, `POST /experiments/{experiment_id}/run`
+- Demo: `POST /demo/seed` (idempotent seed), `DELETE /demo/seed` (cleanup all demo data)
 
 ## Current Runtime Flow
 
@@ -186,4 +196,4 @@ Milestone 10 status: implemented.
 - No Alembic migrations; local startup can create tables automatically for MVP development.
 - No authentication, authorization, multi-user isolation, or production deployment setup.
 - Frontend E2E tests require a running backend and local services; they are not yet wired into a containerized one-command stack.
-- Seed data scripts are not present.
+- The `/demo` page and `POST /demo/seed` API provide one-click seeding. No containerized one-command stack yet.

@@ -17,6 +17,8 @@ from app.schemas.learning import (
     ReflectionRequest,
     ReflectionResponse,
 )
+from app.config import get_settings
+from app.runtime.provider_factory import create_provider
 from app.services import agent_service, learning_service, run_service
 
 router = APIRouter(tags=["learning"])
@@ -159,7 +161,9 @@ def reflect_on_feedback(
     run = require_run(db, run_id)
     agent = require_agent(db, agent_id)
     try:
-        reflection, proposed_memory = learning_service.ReflectionService(db).reflect(run, agent, payload)
+        settings = get_settings()
+        provider = create_provider(settings)
+        reflection, proposed_memory = learning_service.ReflectionService(db, provider).reflect(run, agent, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return {"run_id": run.id, "agent_id": agent.id, "reflection": reflection, "proposed_memory": proposed_memory}

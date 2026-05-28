@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -8,6 +9,7 @@ from app.models.agent import Agent
 from app.models.learning import AgentEvaluation, AgentFeedback, ProposedMemory
 from app.models.memory import AgentMemory
 from app.models.run import Run, TraceEvent
+from app.runtime.provider_interface import ProviderInterface
 from app.schemas.learning import (
     AgentEvaluationCreate,
     AgentFeedbackCreate,
@@ -192,8 +194,9 @@ def reject_proposed_memory(db: Session, proposed_memory: ProposedMemory) -> Prop
 
 
 class ReflectionService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, provider: Optional[ProviderInterface] = None) -> None:
         self.db = db
+        self.provider = provider
 
     def reflect(self, run: Run, agent: Agent, payload: ReflectionRequest) -> tuple[str, ProposedMemory]:
         _validate_agent_participated(self.db, run, agent.id)
@@ -202,7 +205,10 @@ class ReflectionService:
         if feedback is None and evaluation is None:
             raise ValueError("Reflection requires feedback_id or evaluation_id.")
 
-        reflection = self._mock_reflection(feedback, evaluation)
+        if self._use_real_llm():
+            reflection = self._llm_reflection(feedback, evaluation)
+        else:
+            reflection = self._mock_reflection(feedback, evaluation)
         proposed = create_proposed_memory(
             self.db,
             agent,
@@ -244,6 +250,71 @@ class ReflectionService:
         if evaluation is None or evaluation.run_id != run_id or evaluation.agent_id != agent_id:
             raise ValueError("Evaluation does not belong to this agent.")
         return evaluation
+
+    def _use_real_llm(self) -> bool:
+        if self.provider is None:
+            return False
+        from app.runtime.mock_llm_runner import MockProvider
+
+        return not isinstance(self.provider, MockProvider)
+
+    def _llm_reflection(self, feedback: Optional[AgentFeedback], evaluation: Optional[AgentEvaluation]) -> str:
+        prompt = self._build_reflection_prompt(feedback, evaluation)
+        try:
+            response = self.provider.generate(prompt, {"temperature": 0.3, "max_tokens": 500})
+            return self._parse_reflection_output(response.content)
+        except Exception:
+            return self._mock_reflection(feedback, evaluation)
+
+    def _build_reflection_prompt(self, feedback: Optional[AgentFeedback], evaluation: Optional[AgentEvaluation]) -> str:
+        parts = [
+            "You are a learning reflection assistant for an AI agent platform.",
+            "Analyze the feedback and/or evaluation below and produce a concise proposed memory entry for the agent.",
+            "",
+        ]
+        if feedback:
+            parts.append(f"Feedback type: {feedback.feedback_type}")
+            if feedback.rating:
+                parts.append(f"Rating: {feedback.rating}/5")
+            parts.append(f"Feedback: {feedback.feedback_text}")
+            parts.append("")
+        if evaluation:
+            parts.append(f"Evaluation scores: {evaluation.scores}")
+            if evaluation.issues:
+                parts.append(f"Issues identified: {evaluation.issues}")
+            if evaluation.recommendations:
+                rec_text = "; ".join(str(v) for v in evaluation.recommendations.values())
+                parts.append(f"Recommendations: {rec_text}")
+            parts.append("")
+        parts.extend(
+            [
+                "Produce a JSON object with exactly these fields:",
+                '  "content": A reusable, behavior-oriented lesson for the agent. Write in second person. '
+                "Do not reference this specific run, customer names, or file names. 2-4 sentences.",
+                '  "rationale": A short explanation (1 sentence) of why this lesson matters.',
+                "",
+                "Output ONLY valid JSON, no other text:",
+            ]
+        )
+        return "\n".join(parts)
+
+    @staticmethod
+    def _parse_reflection_output(raw: str) -> str:
+        text = raw.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise ValueError("Reflection output is not a JSON object")
+        content = parsed.get("content", "").strip()
+        if not content:
+            raise ValueError("Reflection output missing 'content' field")
+        return content
 
     def _mock_reflection(self, feedback: Optional[AgentFeedback], evaluation: Optional[AgentEvaluation]) -> str:
         source_text = " ".join(

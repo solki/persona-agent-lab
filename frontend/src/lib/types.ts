@@ -209,3 +209,51 @@ export interface ReflectionResponse {
   reflection: string;
   proposed_memory: ProposedMemory;
 }
+
+export interface DemoEntityRef {
+  id: number;
+  name: string;
+  created: boolean;
+}
+
+export interface DemoSeedResponse {
+  souls: DemoEntityRef[];
+  agents: DemoEntityRef[];
+  contexts: DemoEntityRef[];
+  memories: DemoEntityRef[];
+  workflow: DemoEntityRef | null;
+  first_complaint: string;
+  second_complaint: string;
+  feedback_text: string;
+  acceptance_checklist: string[];
+}
+
+export interface DemoCleanupResponse {
+  deleted_souls: number;
+  deleted_agents: number;
+  deleted_workflows: number;
+  deleted_runs: number;
+  deleted_contexts: number;
+  deleted_memories: number;
+}
+
+export interface AdminCleanupResponse {
+  deleted_feedback: number;
+  deleted_evaluations: number;
+  deleted_proposed_memories: number;
+  deleted_learning_events: number;
+  deleted_memories: number;
+  deleted_contexts: number;
+  deleted_agent_tool_assignments: number;
+  deleted_trace_events: number;
+  deleted_agent_execution_events: number;
+  deleted_token_usage: number;
+  deleted_agent_executions: number;
+  deleted_runs: number;
+  deleted_experiment_runs: number;
+  deleted_experiments: number;
+  deleted_workflows: number;
+  deleted_tools: number;
+  deleted_agents: number;
+  deleted_souls: number;
+}
