@@ -115,10 +115,11 @@ export function DemoPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Seeds 3 agents (Escalation Triage, Policy Guardrail, Customer Response Writer) with souls,
-            initial contexts, active memories, and a sequential workflow. Uses the
+            Seeds 4 agents (Escalation Triage, Policy Guardrail, Customer Response Writer, Escalation Quality Reviewer)
+            with souls, initial contexts, active memories, and a sequential workflow. Uses the
             {existingDemo ? " current LLM provider" : " configured LLM provider"}
-            {" "}for realistic agent behavior.
+            {" "}for realistic agent behavior. The reviewer agent is not in the workflow — use it from the
+            Reviewer Feedback section on the run detail page.
           </p>
 
           <div className="flex gap-3">
@@ -341,11 +342,12 @@ export function DemoPage() {
                 </li>
                 <li>Wait for the 3-agent sequential run to complete (watch the monitor page).</li>
                 <li>
-                  On the completed run detail page, select the <strong>Escalation Triage Agent</strong>{" "}
-                  execution, paste the <strong>Suggested Feedback</strong>, set type to{" "}
-                  <strong>Correction</strong>, and submit.
+                  On the completed run detail page, open the <strong>Reviewer Feedback</strong> section,
+                  select the <strong>Escalation Triage Agent</strong> as target and
+                  <strong>Escalation Quality Reviewer</strong> as reviewer.
                 </li>
-                <li>Click <strong>Generate Proposed Memory from Feedback</strong> to trigger LLM reflection.</li>
+                <li>Click <strong>Generate Reviewer Feedback</strong> to evaluate the triage output.</li>
+                <li>Review the derived criteria, quality checks, risk flags, and proposed corrective memory.</li>
                 <li>
                   {triageAgent ? (
                     <Link to={`/agents/${triageAgent.id}`} className="text-primary hover:underline">
@@ -357,7 +359,7 @@ export function DemoPage() {
                   , find the pending proposed memory, and <strong>Approve</strong> it.
                 </li>
                 <li>Return to the demo workflow and re-run it with the <strong>Second Run Complaint</strong>.</li>
-                <li>Compare the second run output: the agent should not ask for already-provided information.</li>
+                <li>Compare the second run output: the agent should incorporate the approved memory.</li>
               </ol>
             </CardContent>
           </Card>

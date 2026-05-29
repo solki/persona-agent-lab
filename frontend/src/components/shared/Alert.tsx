@@ -12,7 +12,7 @@ export function Alert({ title, children, tone = "info" }: { title: string; child
       )}
     >
       <strong className="block font-mono text-xs font-medium uppercase tracking-wider">{title}</strong>
-      <div className="mt-1">{children}</div>
+      <div className="mt-1 break-all">{children}</div>
     </div>
   );
 }

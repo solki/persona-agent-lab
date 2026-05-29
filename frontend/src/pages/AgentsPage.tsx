@@ -1,8 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit, Power, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Power, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
 import { Alert } from "@/components/shared/Alert";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -230,12 +230,23 @@ export function AgentDetailPage() {
 
 function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: number }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [souls, setSouls] = useState<Soul[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [agent, setAgent] = useState<Agent | null>(null);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const form = useForm<AgentFormValues>({ resolver: zodResolver(agentSchema), defaultValues: defaultAgent });
+
+  // Scroll to proposed memories section when navigated via hash link
+  useEffect(() => {
+    if (location.hash === "#proposed-memories") {
+      const el = document.getElementById("proposed-memories");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }, [location.hash]);
 
   const load = useCallback(async () => {
     setError("");
@@ -731,8 +742,12 @@ function ProposedMemoryManager({ agentId, onMemoryChanged }: { agentId: number; 
   const [items, setItems] = useState<ProposedMemory[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const { refresh: refreshNotifications } = useNotification();
-  const notificationCount = items.filter((item) => item.status === "pending" && (item.source_feedback_id || item.source_evaluation_id)).length;
+
+  const pendingItems = items.filter((item) => item.status === "pending");
+  const historyItems = items.filter((item) => item.status === "approved" || item.status === "rejected");
+  const notificationCount = pendingItems.filter((item) => item.source_feedback_id || item.source_evaluation_id).length;
 
   const load = useCallback(async () => {
     setItems(await api.listProposedMemories(agentId));
@@ -747,7 +762,7 @@ function ProposedMemoryManager({ agentId, onMemoryChanged }: { agentId: number; 
     try {
       if (action === "approve") {
         await api.approveProposedMemory(agentId, item.id);
-        setMessage("Proposed memory approved.");
+        setMessage("Proposed memory approved and added as active memory.");
       } else {
         await api.rejectProposedMemory(agentId, item.id);
         setMessage("Proposed memory rejected.");
@@ -760,44 +775,67 @@ function ProposedMemoryManager({ agentId, onMemoryChanged }: { agentId: number; 
     }
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold">Proposed Memories</h2>
-          {notificationCount > 0 ? <span aria-label="Pending feedback memory approval" className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">{notificationCount}</span> : null}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {message ? <Alert title="Proposed memory" tone="success">{message}</Alert> : null}
-        {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
-        {items.length === 0 ? <EmptyState title="No proposed memories" body="Feedback-derived memories will appear here for manual approval." /> : null}
-        {items.map((item) => (
-          <div key={item.id} className="rounded-md border border-border p-3">
-            <div className="flex flex-wrap justify-between gap-2">
-              <div>
-                <strong>{item.memory_type}</strong> <StatusBadge status={item.status} />
-                {item.source_type ? (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    from {item.source_type}
-                    {item.source_run_id ? (
-                      <Link to={`/runs/${item.source_run_id}`} className="ml-1 text-amber-400 hover:underline">(run {item.source_run_id})</Link>
-                    ) : null}
-                  </span>
+  function renderItem(item: ProposedMemory) {
+    const isPending = item.status === "pending";
+    return (
+      <div key={item.id} className="rounded-md border border-border p-3">
+        <div className="flex flex-wrap justify-between gap-2">
+          <div>
+            <strong>{item.memory_type}</strong> <StatusBadge status={item.status} />
+            {item.source_type ? (
+              <span className="ml-2 text-xs text-muted-foreground">
+                from {item.source_type}
+                {item.source_run_id ? (
+                  <Link to={`/runs/${item.source_run_id}`} className="ml-1 text-amber-400 hover:underline">(run {item.source_run_id})</Link>
                 ) : null}
-              </div>
-              {item.status === "pending" ? (
-                <div className="flex gap-2"><Button type="button" size="sm" onClick={() => void review(item, "approve")}>Approve</Button><Button type="button" size="sm" variant="outline" onClick={() => void review(item, "reject")}>Reject</Button></div>
-              ) : null}
-            </div>
-            {item.source_summary ? (
-              <p className="mt-1 text-xs text-muted-foreground italic line-clamp-2">"{item.source_summary}"</p>
+              </span>
             ) : null}
-            <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          {isPending ? (
+            <div className="flex gap-2"><Button type="button" size="sm" onClick={() => void review(item, "approve")}>Approve</Button><Button type="button" size="sm" variant="outline" onClick={() => void review(item, "reject")}>Reject</Button></div>
+          ) : null}
+        </div>
+        {item.source_summary ? (
+          <p className="mt-1 text-xs text-muted-foreground italic line-clamp-2">"{item.source_summary}"</p>
+        ) : null}
+        <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div id="proposed-memories">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">Proposed Memories</h2>
+            {notificationCount > 0 ? <span aria-label="Pending feedback memory approval" className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30">{notificationCount}</span> : null}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {message ? <Alert title="Proposed memory" tone="success">{message}</Alert> : null}
+          {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
+          {pendingItems.length === 0 ? <EmptyState title="No pending proposed memories" body="Feedback-derived and reviewer-proposed memories that need approval will appear here." /> : null}
+          {pendingItems.map(renderItem)}
+        </CardContent>
+      </Card>
+
+      {historyItems.length > 0 ? (
+        <Card className="mt-4">
+          <CardHeader>
+            <button type="button" onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-2 text-base font-semibold hover:text-violet-400 transition-colors">
+              {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              Proposed Memory History ({historyItems.length})
+            </button>
+          </CardHeader>
+          {showHistory ? (
+            <CardContent className="space-y-3">
+              {historyItems.map(renderItem)}
+            </CardContent>
+          ) : null}
+        </Card>
+      ) : null}
+    </div>
   );
 }
 

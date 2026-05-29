@@ -39,6 +39,7 @@ MISC/
 
 # E2E test artifacts
 docs/evidence/*.png
+docs/REVIEWER_FEEDBACK_MANUAL_TEST.md
 frontend/playwright-report/
 frontend/test-results/
 frontend/playwright-report/

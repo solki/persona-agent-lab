@@ -1,4 +1,4 @@
-import { Activity, Archive, MessageSquare, RefreshCw, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { Activity, Archive, Bot, ChevronDown, ChevronRight, MessageSquare, RefreshCw, RotateCcw, Search, Shield, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Alert } from "@/components/shared/Alert";
@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useNotification } from "@/lib/NotificationContext";
-import type { AgentFeedback, AgentExecution, ReflectionResponse, Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
+import type { Agent, AgentFeedback, AgentExecution, QualityCheckItem, ReflectionResponse, ReviewerChecklistItem, ReviewerEvaluationResponse, RiskFlag, Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 type RunFilter = "active" | "archived" | "all";
@@ -290,6 +290,7 @@ export function RunDetailPage() {
           </CardContent>
         </Card>
         {monitor?.agent_executions?.length ? <LearningFeedbackSection runId={run.id} executions={monitor.agent_executions} /> : null}
+        {monitor?.agent_executions?.length ? <ReviewerFeedbackSection runId={run.id} executions={monitor.agent_executions} /> : null}
       </div>
     </>
   );
@@ -489,6 +490,377 @@ function LearningFeedbackSection({ runId, executions }: { runId: number; executi
                 )}
               </>
             )}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewerFeedbackSection({ runId, executions }: { runId: number; executions: AgentExecution[] }) {
+  const [targetAgentId, setTargetAgentId] = useState<number | null>(null);
+  const [reviewerAgentId, setReviewerAgentId] = useState<number | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [result, setResult] = useState<ReviewerEvaluationResponse | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    reviewedOutput: true,
+    criteria: true,
+    quality: false,
+    risk: false,
+  });
+
+  const { refresh: refreshNotifications } = useNotification();
+
+  useEffect(() => {
+    api.listAgents().then(setAgents).catch(() => {});
+  }, []);
+
+  const selectedExec = executions.find((e) => e.agent_id === targetAgentId);
+  const reviewerAgent = agents.find((a) => a.id === reviewerAgentId);
+
+  function resetForm() {
+    setResult(null);
+    setMessage("");
+    setError("");
+  }
+
+  function selectTarget(agentId: number) {
+    if (targetAgentId === agentId) return;
+    setTargetAgentId(agentId);
+    resetForm();
+  }
+
+  async function generateReview() {
+    if (!targetAgentId || !reviewerAgentId) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    setResult(null);
+    try {
+      const r = await api.reviewAgentOutput(runId, targetAgentId, {
+        reviewer_agent_id: reviewerAgentId
+      });
+      setResult(r);
+      refreshNotifications();
+      const decision = (r.evaluation.issues as Record<string, unknown>)?._meta as Record<string, unknown> | undefined;
+      const md = (decision?.memory_decision as string) || "none";
+      if (r.proposed_memory) {
+        setMessage("Review complete. A proposed memory has been created for the target agent.");
+      } else if (md === "refinement") {
+        setMessage("Review complete. Refinement noted, but no durable lesson warranted a proposed memory.");
+      } else {
+        setMessage("Review complete. No memory needed — the agent performed well.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate reviewer feedback.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggleSection(key: string) {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  const issues = result?.evaluation.issues as Record<string, unknown> | undefined;
+  const derivedCriteria = (issues?.derived_criteria as ReviewerChecklistItem[]) || [];
+  const qualityChecks = (issues?.quality_checks as QualityCheckItem[]) || [];
+  const riskChecks = (issues?.risk_flags as RiskFlag[]) || [];
+  const meta = (issues?._meta as Record<string, unknown>) || {};
+  const memoryDecision = (meta.memory_decision as string) || "none";
+
+  const criteriaPass = derivedCriteria.filter((c) => c.result === "PASS").length;
+  const criteriaFail = derivedCriteria.filter((c) => c.result === "FAIL").length;
+  const qualityPass = qualityChecks.filter((c) => c.result === "PASS").length;
+  const qualityFail = qualityChecks.filter((c) => c.result === "FAIL").length;
+  const riskPass = riskChecks.filter((c) => c.result === "PASS").length;
+  const riskFail = riskChecks.filter((c) => c.result === "FAIL" || c.result === "FLAG").length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Bot size={18} className="text-violet-400" />
+          <h2 className="text-base font-semibold">Reviewer Feedback</h2>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          An AI reviewer agent evaluates the target agent's real run output using criteria derived from the target's own role, system prompt, soul, contexts, and tools. Proposed memories require human approval before becoming active.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {message ? <Alert title="Success" tone="success">{message}</Alert> : null}
+        {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
+
+        {/* Target agent selection */}
+        <div>
+          <p className="mb-2 text-sm font-medium text-muted-foreground">Target agent (whose output to review):</p>
+          <div className="flex flex-wrap gap-2">
+            {executions.map((exec) => (
+              <button
+                key={exec.agent_id}
+                type="button"
+                onClick={() => selectTarget(exec.agent_id)}
+                className={`rounded-sm border px-3 py-2 text-left text-sm transition-colors ${
+                  targetAgentId === exec.agent_id
+                    ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                    : "border-border bg-card hover:border-violet-500/20"
+                }`}
+              >
+                <span className="font-medium">{exec.agent_name_snapshot}</span>
+                <span className="ml-2 text-xs text-muted-foreground">step {exec.sequence_index}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Reviewer agent selection */}
+        {selectedExec ? (
+          <div>
+            <p className="mb-2 text-sm font-medium text-muted-foreground">Reviewer agent:</p>
+            <Select
+              value={reviewerAgentId ?? ""}
+              onChange={(e) => {
+                setReviewerAgentId(e.target.value ? Number(e.target.value) : null);
+                resetForm();
+              }}
+              aria-label="Select reviewer agent"
+            >
+              <option value="">-- Select a reviewer agent --</option>
+              {agents
+                .filter((a) => a.id !== targetAgentId)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.role})
+                  </option>
+                ))}
+            </Select>
+          </div>
+        ) : null}
+
+        {/* Generate button */}
+        {targetAgentId && reviewerAgentId ? (
+          <Button
+            type="button"
+            onClick={() => void generateReview()}
+            disabled={loading}
+          >
+            <Search size={14} /> {loading ? "Generating..." : "Generate Reviewer Feedback"}
+          </Button>
+        ) : null}
+
+        {/* Results */}
+        {result ? (
+          <div className="space-y-3 rounded-sm border border-violet-500/20 bg-violet-500/5 p-4">
+            {/* Memory decision badge */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Memory decision:</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                memoryDecision === "corrective"
+                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                  : memoryDecision === "refinement"
+                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                    : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              }`}>
+                {memoryDecision}
+              </span>
+              {reviewerAgent ? (
+                <span className="text-xs text-muted-foreground">
+                  Reviewed by <span className="font-medium text-foreground">{reviewerAgent.name}</span>
+                </span>
+              ) : null}
+            </div>
+
+            {/* Reviewed output */}
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("reviewedOutput")}
+                className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-violet-400 transition-colors"
+              >
+                {expandedSections.reviewedOutput ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                Reviewed Output
+                {result.reviewed_execution_id != null ? (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    (execution #{result.reviewed_execution_id})
+                  </span>
+                ) : null}
+              </button>
+              {expandedSections.reviewedOutput ? (
+                <div className="mt-2 rounded-sm border border-border bg-background p-3">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mb-2">
+                    <span>Run #{result.run_id}</span>
+                    <span>Target: {result.reviewed_target_agent_name || `Agent #${result.target_agent_id}`}</span>
+                    <span>Reviewer: {result.reviewer_agent_name || `Agent #${result.reviewer_agent_id}`}</span>
+                    {result.reviewed_execution_id != null ? (
+                      <span>Execution #{result.reviewed_execution_id}</span>
+                    ) : null}
+                  </div>
+                  <pre className="whitespace-pre-wrap text-sm text-foreground font-mono bg-muted rounded-sm p-3 max-h-64 overflow-y-auto">
+                    {result.reviewed_output || "(no output captured)"}
+                  </pre>
+                </div>
+              ) : (
+                result.reviewed_output ? (
+                  <p className="mt-1 text-xs text-muted-foreground truncate max-w-2xl">
+                    {result.reviewed_output.slice(0, 200)}
+                    {result.reviewed_output.length > 200 ? "..." : ""}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground italic">
+                    (no output captured)
+                  </p>
+                )
+              )}
+            </div>
+
+            {/* Overall assessment */}
+            {issues?.overall_assessment ? (
+              <p className="text-sm text-muted-foreground italic">
+                {String(issues.overall_assessment)}
+              </p>
+            ) : null}
+
+            {/* Derived criteria */}
+            {derivedCriteria.length > 0 ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("criteria")}
+                  className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-violet-400 transition-colors"
+                >
+                  {expandedSections.criteria ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Derived Criteria ({criteriaPass} PASS / {criteriaFail} FAIL)
+                </button>
+                {expandedSections.criteria ? (
+                  <div className="mt-2 space-y-1.5 ml-5">
+                    {derivedCriteria.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="mt-0.5 shrink-0">
+                          {item.result === "PASS"
+                            ? <span className="text-emerald-400">✓</span>
+                            : <span className="text-red-400">✗</span>}
+                        </span>
+                        <div>
+                          <span className="font-medium">{item.criterion}</span>
+                          <span className="ml-1.5 text-muted-foreground">[{item.source}]</span>
+                          <p className="text-muted-foreground mt-0.5">{item.explanation}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Quality checks */}
+            {qualityChecks.length > 0 ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("quality")}
+                  className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-violet-400 transition-colors"
+                >
+                  {expandedSections.quality ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Quality Checks ({qualityPass} PASS / {qualityFail} FAIL)
+                </button>
+                {expandedSections.quality ? (
+                  <div className="mt-2 space-y-1.5 ml-5">
+                    {qualityChecks.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="mt-0.5 shrink-0">
+                          {item.result === "PASS"
+                            ? <span className="text-emerald-400">✓</span>
+                            : <span className="text-red-400">✗</span>}
+                        </span>
+                        <div>
+                          <span className="font-medium">{item.check}</span>
+                          <p className="text-muted-foreground mt-0.5">{item.explanation}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Risk checks */}
+            {riskChecks.length > 0 ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => toggleSection("risk")}
+                  className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-violet-400 transition-colors"
+                >
+                  {expandedSections.risk ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Risk Checks ({riskPass} PASS / {riskFail} FLAGGED)
+                </button>
+                {expandedSections.risk ? (
+                  <div className="mt-2 space-y-1.5 ml-5">
+                    {riskChecks.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs">
+                        <span className="mt-0.5 shrink-0">
+                          {item.result === "PASS"
+                            ? <span className="text-emerald-400">✓</span>
+                            : item.result === "FLAG"
+                              ? <span className="text-amber-400">⚠</span>
+                              : <span className="text-red-400">✗</span>}
+                        </span>
+                        <div>
+                          <span className="font-medium">{item.check}</span>
+                          <p className="text-muted-foreground mt-0.5">{item.explanation}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Proposed memory card */}
+            {result.proposed_memory ? (
+              <div className="rounded-sm border border-amber-500/20 bg-amber-500/5 p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-medium text-amber-400">Proposed Memory</span>
+                  <StatusBadge status={result.proposed_memory.status} />
+                  <span className="text-xs text-muted-foreground">importance {result.proposed_memory.importance}</span>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{result.proposed_memory.content}</p>
+                <p className="mt-2 text-xs text-amber-400/80">
+                  This memory is pending approval. Go to the target agent's page to approve or reject it.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Link
+                    to={`/agents/${targetAgentId}#proposed-memories`}
+                    className="inline-flex items-center gap-1 text-xs text-violet-400 hover:underline"
+                  >
+                    Review proposed memory on agent page →
+                  </Link>
+                </div>
+              </div>
+            ) : memoryDecision === "none" ? (
+              <div className="rounded-sm border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Shield size={14} className="text-emerald-400" />
+                  <span className="text-emerald-300 font-medium">No memory needed</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The reviewer determined this agent performed well and no learning intervention is required.
+                </p>
+              </div>
+            ) : memoryDecision === "refinement" ? (
+              <div className="rounded-sm border border-blue-500/20 bg-blue-500/5 p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Shield size={14} className="text-blue-400" />
+                  <span className="text-blue-300 font-medium">Refinement noted — no memory proposed</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The reviewer noted a minor improvement opportunity, but the agent's output already shows awareness of the relevant expectations. No durable lesson to encode as a memory.
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </CardContent>

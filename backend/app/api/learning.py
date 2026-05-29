@@ -16,10 +16,12 @@ from app.schemas.learning import (
     ProposedMemoryRejectResponse,
     ReflectionRequest,
     ReflectionResponse,
+    ReviewRequest,
+    ReviewResponse,
 )
 from app.config import get_settings
 from app.runtime.provider_factory import create_provider
-from app.services import agent_service, learning_service, run_service
+from app.services import agent_service, learning_service, review_service, run_service
 
 router = APIRouter(tags=["learning"])
 
@@ -167,3 +169,31 @@ def reflect_on_feedback(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return {"run_id": run.id, "agent_id": agent.id, "reflection": reflection, "proposed_memory": proposed_memory}
+
+
+@router.post(
+    "/runs/{run_id}/agents/{target_agent_id}/review",
+    response_model=ReviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def review_agent_output(
+    run_id: int,
+    target_agent_id: int,
+    payload: ReviewRequest,
+    db: Session = Depends(get_db),
+):
+    run = require_run(db, run_id)
+    target_agent = require_agent(db, target_agent_id)
+    reviewer_agent = require_agent(db, payload.reviewer_agent_id)
+    try:
+        settings = get_settings()
+        provider = create_provider(settings)
+        result = review_service.ReviewService(db, provider).review(
+            run=run,
+            target_agent=target_agent,
+            reviewer_agent=reviewer_agent,
+            trace_event_id=payload.trace_event_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return result

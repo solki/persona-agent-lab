@@ -237,6 +237,48 @@ export interface DemoCleanupResponse {
   deleted_memories: number;
 }
 
+export interface AgentEvaluation {
+  id: number;
+  run_id: number;
+  agent_id: number;
+  evaluator_type: string;
+  scores: Record<string, number>;
+  issues: Record<string, unknown>;
+  recommendations: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ReviewerChecklistItem {
+  criterion: string;
+  source: string;
+  result: "PASS" | "FAIL";
+  explanation: string;
+}
+
+export interface QualityCheckItem {
+  check: string;
+  result: "PASS" | "FAIL";
+  explanation: string;
+}
+
+export interface RiskFlag {
+  check: string;
+  result: "PASS" | "FAIL" | "FLAG";
+  explanation: string;
+}
+
+export interface ReviewerEvaluationResponse {
+  run_id: number;
+  target_agent_id: number;
+  reviewer_agent_id: number;
+  evaluation: AgentEvaluation;
+  proposed_memory: ProposedMemory | null;
+  reviewed_execution_id: number | null;
+  reviewed_output: string | null;
+  reviewed_target_agent_name: string | null;
+  reviewer_agent_name: string | null;
+}
+
 export interface AdminCleanupResponse {
   deleted_feedback: number;
   deleted_evaluations: number;
