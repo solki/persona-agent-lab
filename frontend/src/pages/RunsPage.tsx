@@ -545,10 +545,14 @@ function ReviewerFeedbackSection({ runId, executions }: { runId: number; executi
       });
       setResult(r);
       refreshNotifications();
+      const decision = (r.evaluation.issues as Record<string, unknown>)?._meta as Record<string, unknown> | undefined;
+      const md = (decision?.memory_decision as string) || "none";
       if (r.proposed_memory) {
-        setMessage("Reviewer feedback generated with proposed memory.");
+        setMessage("Review complete. A proposed memory has been created for the target agent.");
+      } else if (md === "refinement") {
+        setMessage("Review complete. Refinement noted, but no durable lesson warranted a proposed memory.");
       } else {
-        setMessage("Reviewer feedback generated. No corrective memory needed.");
+        setMessage("Review complete. No memory needed — the agent performed well.");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate reviewer feedback.");
@@ -824,12 +828,15 @@ function ReviewerFeedbackSection({ runId, executions }: { runId: number; executi
                   <span className="text-xs text-muted-foreground">importance {result.proposed_memory.importance}</span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-muted-foreground">{result.proposed_memory.content}</p>
+                <p className="mt-2 text-xs text-amber-400/80">
+                  This memory is pending approval. Go to the target agent's page to approve or reject it.
+                </p>
                 <div className="mt-2 flex items-center gap-2">
                   <Link
-                    to={`/agents/${targetAgentId}`}
+                    to={`/agents/${targetAgentId}#proposed-memories`}
                     className="inline-flex items-center gap-1 text-xs text-violet-400 hover:underline"
                   >
-                    View agent proposed memories →
+                    Review proposed memory on agent page →
                   </Link>
                 </div>
               </div>
@@ -837,10 +844,20 @@ function ReviewerFeedbackSection({ runId, executions }: { runId: number; executi
               <div className="rounded-sm border border-emerald-500/20 bg-emerald-500/5 p-3">
                 <div className="flex items-center gap-2 text-sm">
                   <Shield size={14} className="text-emerald-400" />
-                  <span className="text-emerald-300 font-medium">No corrective memory needed</span>
+                  <span className="text-emerald-300 font-medium">No memory needed</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   The reviewer determined this agent performed well and no learning intervention is required.
+                </p>
+              </div>
+            ) : memoryDecision === "refinement" ? (
+              <div className="rounded-sm border border-blue-500/20 bg-blue-500/5 p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Shield size={14} className="text-blue-400" />
+                  <span className="text-blue-300 font-medium">Refinement noted — no memory proposed</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The reviewer noted a minor improvement opportunity, but the agent's output already shows awareness of the relevant expectations. No durable lesson to encode as a memory.
                 </p>
               </div>
             ) : null}

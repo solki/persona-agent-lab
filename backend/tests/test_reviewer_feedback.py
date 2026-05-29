@@ -1,3 +1,6 @@
+import json
+
+
 def create_agent(client, name, role="worker", system_prompt="Do work.", soul_id=None):
     payload = {
         "name": name,
@@ -472,3 +475,275 @@ def test_existing_learning_flow_still_works(client):
     )
     assert app_response.status_code == 200
     assert app_response.json()["agent_memory"]["status"] == "active"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _parse_review_output and _repair_truncated_json
+# ---------------------------------------------------------------------------
+
+from unittest.mock import MagicMock
+
+from app.services.review_service import ReviewService
+
+
+def _make_service():
+    """Create a ReviewService with a mock db session for unit testing parse/repair."""
+    return ReviewService(db=MagicMock())
+
+
+def test_parse_valid_review_output():
+    svc = _make_service()
+    valid = json.dumps({
+        "derived_criteria": [],
+        "quality_checks": [],
+        "risk_checks": [],
+        "memory_decision": "none",
+        "overall_assessment": "Good.",
+        "summary_scores": {"overall_quality": 5, "overall_safety": 5},
+    })
+    result = svc._parse_review_output(valid)
+    assert result["memory_decision"] == "none"
+
+
+def test_parse_strips_markdown_fence():
+    svc = _make_service()
+    raw = '```json\n{"derived_criteria":[],"quality_checks":[],"risk_checks":[],"memory_decision":"none","overall_assessment":"OK","summary_scores":{"overall_quality":5,"overall_safety":5}}\n```'
+    result = svc._parse_review_output(raw)
+    assert result["memory_decision"] == "none"
+
+
+def test_parse_empty_string_raises():
+    svc = _make_service()
+    try:
+        svc._parse_review_output("")
+        assert False, "Should have raised"
+    except ValueError as e:
+        assert "empty" in str(e).lower()
+
+
+def test_repair_truncated_mid_string_closes_and_parses():
+    svc = _make_service()
+    truncated = '{"derived_criteria":[{"criterion":"Check facts","source":"system_prompt","result":"PASS","explanation":"Output references ORD-'
+    result = svc._parse_review_output(truncated)
+    assert result["memory_decision"] in ("corrective", "refinement", "none")
+    assert "derived_criteria" in result
+
+
+def test_repair_truncated_mid_structure_fills_defaults():
+    svc = _make_service()
+    truncated = '{"derived_criteria":[{"criterion":"A","source":"s","result":"PASS","explanation":"ok"}],"quality_checks":[{"check":"Q","result":"PASS","explanation":"ok"}],"risk_checks":[{"check":"R","result":"PASS","explanation":"ok"}],"memory_decision":"none","overall_assessment":"All good.","summary_scores":{"overall_quality":5,"overall_safety":5}'
+    result = svc._parse_review_output(truncated)
+    assert result["memory_decision"] == "none"
+    assert result["overall_assessment"] == "All good."
+
+
+def test_repair_truncated_sets_defaults_for_missing_fields():
+    svc = _make_service()
+    truncated = '{"derived_criteria":[{"criterion":"X","source":"s","result":"PASS","explanation":"x"}]'
+    result = svc._parse_review_output(truncated)
+    assert result["derived_criteria"][0]["criterion"] == "X"
+    assert result["memory_decision"] == "refinement"
+    assert "overall_assessment" in result
+    assert "summary_scores" in result
+
+
+# ---------------------------------------------------------------------------
+# Proposed memory lifecycle tests
+# ---------------------------------------------------------------------------
+
+
+def test_refinement_no_memory_when_output_has_specifics(client):
+    """When output contains specifics, refinement should NOT force a proposed memory."""
+    target = create_agent(client, "Specific Agent", role="analyst")
+    reviewer = create_agent(
+        client, "Refinement Reviewer", role="quality-reviewer",
+        system_prompt="Evaluate agents.",
+    )
+    # Task includes specific details so mock output will contain them
+    workflow = client.post(
+        "/workflows",
+        json={
+            "name": "refinement no memory workflow",
+            "workflow_type": "sequential",
+            "graph_config": {"agent_sequence": [target["id"]]},
+        },
+    ).json()
+    run_response = client.post(
+        f"/workflows/{workflow['id']}/run",
+        json={"task": "Analyze order ORD-12345 with chargeback threat."},
+    )
+    assert run_response.status_code == 201
+    run = run_response.json()
+
+    response = client.post(
+        f"/runs/{run['id']}/agents/{target['id']}/review",
+        json={"reviewer_agent_id": reviewer["id"]},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    # With specifics in output, mock should give memory_decision "none" or
+    # "refinement" with null proposed_memory
+    memory_decision = data["evaluation"]["issues"]["_meta"]["memory_decision"]
+    if memory_decision == "refinement":
+        assert data["proposed_memory"] is None, (
+            "Refinement with specific output should not force a proposed memory"
+        )
+
+
+def test_reviewer_corrective_creates_pending_proposed_memory(client):
+    """A corrective review creates a pending ProposedMemory for the target agent."""
+    target = create_agent(client, "Error Prone Agent 2")
+    reviewer = create_agent(
+        client, "Strict Reviewer 3", role="quality-reviewer",
+        system_prompt="Evaluate strictly.",
+    )
+    run = create_run(client, target)
+
+    response = client.post(
+        f"/runs/{run['id']}/agents/{target['id']}/review",
+        json={"reviewer_agent_id": reviewer["id"]},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    proposed = data["proposed_memory"]
+    assert proposed is not None
+    assert proposed["status"] == "pending"
+    assert proposed["agent_id"] == target["id"]
+
+
+def test_approve_proposed_memory_creates_active_agent_memory(client):
+    """Approving a pending ProposedMemory creates an active AgentMemory."""
+    target = create_agent(client, "Approval Target")
+    reviewer = create_agent(
+        client, "Approval Reviewer", role="quality-reviewer",
+        system_prompt="Evaluate strictly.",
+    )
+    run = create_run(client, target)
+
+    review_response = client.post(
+        f"/runs/{run['id']}/agents/{target['id']}/review",
+        json={"reviewer_agent_id": reviewer["id"]},
+    )
+    assert review_response.status_code == 201
+    proposed = review_response.json()["proposed_memory"]
+    assert proposed is not None
+
+    # Approve the proposed memory
+    approve_response = client.post(
+        f"/agents/{target['id']}/proposed-memories/{proposed['id']}/approve",
+    )
+    assert approve_response.status_code == 200
+    result = approve_response.json()
+
+    # Proposed memory should now be "approved"
+    assert result["proposed_memory"]["status"] == "approved"
+    # AgentMemory should be created with "active" status
+    assert result["agent_memory"]["status"] == "active"
+    assert result["agent_memory"]["agent_id"] == target["id"]
+    assert result["agent_memory"]["content"] == proposed["content"]
+
+
+def test_reject_proposed_memory_removes_from_pending_and_creates_no_agent_memory(client):
+    """Rejecting a pending ProposedMemory sets it to rejected and creates no AgentMemory."""
+    target = create_agent(client, "Rejection Target")
+    reviewer = create_agent(
+        client, "Rejection Reviewer", role="quality-reviewer",
+        system_prompt="Evaluate strictly.",
+    )
+    run = create_run(client, target)
+
+    review_response = client.post(
+        f"/runs/{run['id']}/agents/{target['id']}/review",
+        json={"reviewer_agent_id": reviewer["id"]},
+    )
+    assert review_response.status_code == 201
+    proposed = review_response.json()["proposed_memory"]
+    assert proposed is not None
+
+    # Reject the proposed memory
+    reject_response = client.post(
+        f"/agents/{target['id']}/proposed-memories/{proposed['id']}/reject",
+    )
+    assert reject_response.status_code == 200
+    result = reject_response.json()
+    assert result["proposed_memory"]["status"] == "rejected"
+
+    # Verify no active AgentMemory was created for this content
+    memories_response = client.get(f"/agents/{target['id']}/memories")
+    assert memories_response.status_code == 200
+    memories = memories_response.json()
+    matching = [m for m in memories if m["content"] == proposed["content"]]
+    assert len(matching) == 0
+
+
+def test_rejected_proposed_memory_not_in_active_context(client):
+    """A rejected ProposedMemory must never appear as an active AgentMemory."""
+    target = create_agent(client, "Rejected Context Agent")
+    reviewer = create_agent(
+        client, "Rejected Context Reviewer", role="quality-reviewer",
+        system_prompt="Evaluate strictly.",
+    )
+    run = create_run(client, target)
+
+    review_response = client.post(
+        f"/runs/{run['id']}/agents/{target['id']}/review",
+        json={"reviewer_agent_id": reviewer["id"]},
+    )
+    assert review_response.status_code == 201
+    proposed = review_response.json()["proposed_memory"]
+    assert proposed is not None
+
+    # Reject it
+    client.post(f"/agents/{target['id']}/proposed-memories/{proposed['id']}/reject")
+
+    # Verify the proposed memory is listed as rejected (not pending)
+    pm_response = client.get(f"/agents/{target['id']}/proposed-memories")
+    assert pm_response.status_code == 200
+    pm_list = pm_response.json()
+    pm_match = [p for p in pm_list if p["id"] == proposed["id"]]
+    assert len(pm_match) == 1
+    assert pm_match[0]["status"] == "rejected"
+
+    # Verify no active memory with this content exists
+    mem_response = client.get(f"/agents/{target['id']}/memories")
+    assert mem_response.status_code == 200
+    active_memories = [m for m in mem_response.json() if m["status"] == "active"]
+    matching = [m for m in active_memories if m["content"] == proposed["content"]]
+    assert len(matching) == 0, "Rejected proposed memory content must not appear as active AgentMemory"
+
+
+def test_approved_proposed_memory_history_preserved_but_not_pending(client):
+    """After approval, the proposed memory is preserved as 'approved' but not 'pending'."""
+    target = create_agent(client, "History Target")
+    reviewer = create_agent(
+        client, "History Reviewer", role="quality-reviewer",
+        system_prompt="Evaluate strictly.",
+    )
+    run = create_run(client, target)
+
+    review_response = client.post(
+        f"/runs/{run['id']}/agents/{target['id']}/review",
+        json={"reviewer_agent_id": reviewer["id"]},
+    )
+    assert review_response.status_code == 201
+    proposed = review_response.json()["proposed_memory"]
+    assert proposed is not None
+
+    # Approve
+    client.post(f"/agents/{target['id']}/proposed-memories/{proposed['id']}/approve")
+
+    # List proposed memories — the record should exist with status "approved"
+    pm_response = client.get(f"/agents/{target['id']}/proposed-memories")
+    assert pm_response.status_code == 200
+    pm_list = pm_response.json()
+    pm_match = [p for p in pm_list if p["id"] == proposed["id"]]
+    assert len(pm_match) == 1
+    assert pm_match[0]["status"] == "approved", (
+        "Approved proposed memory should be preserved as history with 'approved' status"
+    )
+
+    # The active memory should exist separately
+    mem_response = client.get(f"/agents/{target['id']}/memories")
+    assert mem_response.status_code == 200
+    active = [m for m in mem_response.json() if m["status"] == "active" and m["content"] == proposed["content"]]
+    assert len(active) == 1, "Approval should create exactly one active AgentMemory"

@@ -274,13 +274,42 @@ class ReviewService:
 
     def _llm_review(self, prompt: str) -> dict[str, Any]:
         try:
-            response = self.provider.generate(prompt, {"temperature": 0.15, "max_tokens": 1500})
+            response = self.provider.generate(prompt, {"temperature": 0.15, "max_tokens": 3000})
             return self._parse_review_output(response.content)
+        except ValueError:
+            raise
         except Exception as exc:
-            raise ValueError(f"Reviewer LLM call failed: {exc}") from exc
+            pass  # fall through to retry
+
+        # Retry once with a shorter prompt and explicit JSON instruction
+        try:
+            retry_prompt = self._build_retry_prompt(prompt)
+            response = self.provider.generate(retry_prompt, {"temperature": 0.1, "max_tokens": 3000})
+            return self._parse_review_output(response.content)
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError(f"Reviewer LLM call failed after retry: {exc}") from exc
+
+    def _build_retry_prompt(self, original_prompt: str) -> str:
+        marker = "## Evaluation Instructions"
+        idx = original_prompt.find(marker)
+        if idx < 0:
+            idx = original_prompt.find("## Task Given to Agent")
+        if idx < 0:
+            idx = len(original_prompt) // 2
+        instructions = original_prompt[idx:]
+        return (
+            "You are a quality reviewer. Return ONLY valid, complete JSON following the format below. "
+            "Do not omit any fields. Ensure all strings are properly closed. "
+            "Keep explanations concise (one short sentence each) so the output fits within token limits.\n\n"
+            + instructions
+        )
 
     def _parse_review_output(self, raw: str) -> dict[str, Any]:
         text = raw.strip()
+        if not text:
+            raise ValueError("Review output is empty — LLM returned no content.")
         if text.startswith("```"):
             lines = text.split("\n")
             if lines[0].startswith("```"):
@@ -288,7 +317,18 @@ class ReviewService:
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             text = "\n".join(lines).strip()
-        parsed = json.loads(text)
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as orig_err:
+            repaired = self._repair_truncated_json(text)
+            if repaired is None:
+                raise ValueError(
+                    f"Failed to parse review output: {orig_err}. Raw (first 1000 chars): {raw[:1000]}"
+                ) from orig_err
+            parsed = repaired
+        return self._validate_parsed_review(parsed)
+
+    def _validate_parsed_review(self, parsed: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(parsed, dict):
             raise ValueError("Review output is not a JSON object")
         required = ["derived_criteria", "quality_checks", "risk_checks", "memory_decision", "overall_assessment"]
@@ -298,6 +338,119 @@ class ReviewService:
         if parsed["memory_decision"] not in ("corrective", "refinement", "none"):
             raise ValueError(f"Invalid memory_decision: {parsed['memory_decision']}")
         return parsed
+
+    @staticmethod
+    def _track_stack(text: str) -> list[str]:
+        """Track open {/[ structures in text, ignoring string contents."""
+        in_string = False
+        escape_next = False
+        stack: list[str] = []
+        for ch in text:
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == "\\":
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch in "{[":
+                stack.append(ch)
+            elif ch == "}":
+                if stack and stack[-1] == "{":
+                    stack.pop()
+            elif ch == "]":
+                if stack and stack[-1] == "[":
+                    stack.pop()
+        return stack
+
+    @staticmethod
+    def _closing_for_stack(stack: list[str]) -> str:
+        return "".join("}" if ch == "{" else "]" for ch in reversed(stack))
+
+    def _repair_truncated_json(self, text: str) -> Optional[dict[str, Any]]:
+        """Attempt to repair truncated or malformed JSON from LLM output."""
+        if not text or text[0] != "{":
+            return None
+
+        # Close any unclosed string
+        in_string = False
+        escape_next = False
+        for ch in text:
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == "\\":
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+        if in_string:
+            text = text + '"'
+
+        # Attempt 1: close open structures via stack
+        stack = self._track_stack(text)
+        repaired = text + self._closing_for_stack(stack)
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict):
+                parsed.setdefault("derived_criteria", [])
+                parsed.setdefault("quality_checks", [])
+                parsed.setdefault("risk_checks", [])
+                parsed.setdefault("memory_decision", "refinement")
+                parsed.setdefault("overall_assessment", "Review output was partially recovered from truncated LLM response.")
+                parsed.setdefault("summary_scores", {"overall_quality": 3, "overall_safety": 3})
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        # Attempt 2: iteratively strip trailing incomplete content
+        # Walk backwards from the end, removing one character at a time,
+        # trying to close structures and parse at each step.
+        for trim in range(1, min(len(text), 500)):
+            candidate = text[:-trim]
+            if not candidate or candidate[-1] == '{':
+                continue
+            # Re-track stack on trimmed candidate
+            cand_stack = self._track_stack(candidate)
+            cand_repaired = candidate + self._closing_for_stack(cand_stack)
+            try:
+                parsed = json.loads(cand_repaired)
+                if isinstance(parsed, dict):
+                    parsed.setdefault("derived_criteria", [])
+                    parsed.setdefault("quality_checks", [])
+                    parsed.setdefault("risk_checks", [])
+                    parsed.setdefault("memory_decision", "refinement")
+                    parsed.setdefault("overall_assessment", "Review output was partially recovered from truncated LLM response.")
+                    parsed.setdefault("summary_scores", {"overall_quality": 3, "overall_safety": 3})
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+
+        # Attempt 3: find last structurally-complete field by walking commas
+        for comma_pos in range(len(text) - 1, 0, -1):
+            if text[comma_pos] != ',':
+                continue
+            prefix = text[:comma_pos]
+            prefix_stack = self._track_stack(prefix)
+            prefix_repaired = prefix + self._closing_for_stack(prefix_stack)
+            try:
+                parsed = json.loads(prefix_repaired)
+                if isinstance(parsed, dict):
+                    parsed.setdefault("derived_criteria", [])
+                    parsed.setdefault("quality_checks", [])
+                    parsed.setdefault("risk_checks", [])
+                    parsed.setdefault("memory_decision", "refinement")
+                    parsed.setdefault("overall_assessment", "Review output was partially recovered from truncated LLM response.")
+                    parsed.setdefault("summary_scores", {"overall_quality": 3, "overall_safety": 3})
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+
+        return None
 
     def _mock_review(self, target_agent: Agent, target_output: Optional[str]) -> dict[str, Any]:
         output_text = target_output or ""
@@ -449,16 +602,22 @@ class ReviewService:
             overall = "The agent addressed all criteria correctly. No corrective memory is needed."
         elif passed_criteria >= total_criteria - 1 and not has_risk_fail:
             memory_decision = "refinement"
-            proposed_memory = {
-                "memory_type": "lesson",
-                "content": (
-                    "Consider cross-referencing every provided fact in the task input against the output "
-                    "to ensure nothing is missed. When risk signals like chargeback or repeated contacts "
-                    "are present, call them out explicitly in the triage summary."
-                ),
-                "importance": 50,
-            }
-            overall = "The agent performed adequately but could improve on one or two points. A refinement memory is suggested."
+            # Only propose a memory if the lesson is durable — the agent missed
+            # something concrete that a memory can help with in future runs.
+            if has_specifics:
+                proposed_memory = None
+                overall = "The agent performed adequately. A minor improvement was noted but the output already demonstrates awareness of most expectations. No durable lesson to encode as a memory."
+            else:
+                proposed_memory = {
+                    "memory_type": "lesson",
+                    "content": (
+                        "Consider cross-referencing every provided fact in the task input against the output "
+                        "to ensure nothing is missed. When risk signals like chargeback or repeated contacts "
+                        "are present, call them out explicitly in the triage summary."
+                    ),
+                    "importance": 50,
+                }
+                overall = "The agent performed adequately but could improve on specificity. A refinement memory is suggested."
         else:
             memory_decision = "corrective"
             proposed_memory = {

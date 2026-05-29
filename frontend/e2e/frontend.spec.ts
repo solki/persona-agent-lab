@@ -240,7 +240,7 @@ test.describe.serial("Frontend", () => {
 
     // Approve via UI → detail section badge cleared
     await page.getByRole("button", { name: "Approve" }).click();
-    await expect(page.getByText("Proposed memory approved.")).toBeVisible();
+    await expect(page.getByText("Proposed memory approved and added as active memory.")).toBeVisible();
     await expect(page.locator("main").getByLabel("Pending feedback memory approval")).toHaveCount(0);
 
     // Sidebar badge returns to baseline
@@ -397,9 +397,10 @@ test.describe.serial("Frontend", () => {
 
     // Approve it
     await page.getByRole("button", { name: "Approve" }).click();
-    await expect(page.getByText("Proposed memory approved.")).toBeVisible();
+    await expect(page.getByText("Proposed memory approved and added as active memory.")).toBeVisible();
 
-    // Step 4: Verify approved memory is visible in the agent detail
+    // Step 4: Verify approved memory is in the history section
+    await page.getByRole("button", { name: /Proposed Memory History/ }).click();
     await expect(page.getByText(/lesson.*approved/)).toBeVisible();
 
     // Step 5: Go back to run detail and re-run
@@ -459,6 +460,9 @@ test.describe.serial("Frontend", () => {
     // Verify the proposed memory shows rejected status, no longer has Approve/Reject buttons
     await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+
+    // Expand the Proposed Memory History section to see the rejected item
+    await page.getByRole("button", { name: /Proposed Memory History/ }).click();
     // Scope to the proposed memory card to avoid matching the status dropdown option and alert message
     const rejectedCard = page.locator(".rounded-md.border.border-border.p-3").filter({ hasText: "Proposed memory that will be rejected" });
     await expect(rejectedCard.locator("span").filter({ hasText: /^rejected$/ })).toBeVisible();
@@ -611,7 +615,8 @@ test.describe.serial("Frontend", () => {
     await expect(page.getByText(/from feedback/).last()).toBeVisible();
 
     await page.getByRole("button", { name: "Approve" }).click();
-    await expect(page.getByText("Proposed memory approved.")).toBeVisible();
+    await expect(page.getByText("Proposed memory approved and added as active memory.")).toBeVisible();
+    await page.getByRole("button", { name: /Proposed Memory History/ }).click();
     await expect(page.getByText(/lesson.*approved/)).toBeVisible();
 
     // Step 6: Re-run the workflow (re-uses original task automatically)
@@ -850,8 +855,8 @@ test.describe.serial("Frontend", () => {
     // Generate reviewer feedback
     await page.getByRole("button", { name: "Generate Reviewer Feedback" }).click();
 
-    // Should show "No corrective memory needed" (use exact to avoid matching the success alert)
-    await expect(page.getByText("No corrective memory needed", { exact: true })).toBeVisible({ timeout: 15000 });
+    // Should show "No memory needed" (use exact to avoid matching the success alert)
+    await expect(page.getByText("No memory needed", { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText("The reviewer determined this agent performed well")).toBeVisible();
 
     // Should show reviewed output section
