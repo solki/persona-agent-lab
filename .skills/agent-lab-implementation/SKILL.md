@@ -11,6 +11,13 @@ Use this skill when writing, modifying, or wiring code for Agent Swarm Lab.
 
 The implementation goal is to build a maintainable platform for configuring and composing isolated AI agents. Every implementation must preserve the rule that agents do not share memory, context, tools, settings, prompts, or runtime state unless explicitly authorized by workflow configuration or handoff policy.
 
+## Before Coding
+
+- **Inspect current files and existing patterns** before writing. Match the surrounding code style, naming, and structure.
+- **Summarize the implementation plan** before making broad changes. Confirm the scope with the user.
+- **Use existing services, schemas, and components** where possible. Reuse, don't reinvent.
+- **Prefer minimal changes.** Do not refactor unrelated code. Scope each change to the feature at hand.
+
 ## When to Use
 
 Use this skill when implementing:
@@ -34,8 +41,6 @@ Do not use this skill for:
 
 - Pure planning where no code changes are requested
 - Review-only tasks where implementation should not be modified
-- Legacy business-analysis workflow implementation
-- Mandatory search-vendor integration, template-report generation, or business-report features unless the user explicitly adds those requirements
 
 ## Core Principles
 
@@ -82,19 +87,6 @@ If model or tool output fails validation, persist the validation error, retry on
 
 Persist durable state in PostgreSQL unless the project has already established a different store.
 
-Minimum durable concepts:
-
-- Agents
-- Agent versions or config snapshots
-- Workflows
-- Workflow runs
-- Trace events
-- Context entries
-- Memory metadata and writeback review state
-- Tool permissions
-- Handoff policies
-- Artifacts or run outputs
-
 ### 5. Scoped memory and vector abstraction
 
 Use Qdrant or a vector memory abstraction for semantic memory. Agent code should not depend directly on a raw vector database client.
@@ -106,14 +98,6 @@ Memory writeback should support manual review mode before durable memory inserti
 ### 6. Scoped context assembly
 
 Context retrieval must be scoped by `agent_id`. Context assembly must be deterministic and inspectable.
-
-Persist or expose enough metadata to answer:
-
-- Which context entries were eligible?
-- Which entries were selected?
-- In what order were they assembled?
-- Which token or size limits were applied?
-- Which run and config snapshot used the assembled context?
 
 ### 7. Explicit handoff
 
@@ -132,16 +116,49 @@ It must not receive private memory, private context, prompts, or hidden state fr
 
 Every run must persist trace events. Every run should persist config snapshots for reproducibility.
 
-Snapshot:
+## Reviewer Feedback & Memory Lifecycle
 
-- Agent definitions and versions
-- Provider, model, temperature, and model parameters
-- Soul/persona and system prompt
-- Tool permissions
-- Handoff policy
-- Workflow definition
-- Context assembly metadata
-- Memory retrieval metadata
+When implementing reviewer feedback or proposed-memory flows:
+
+| Review Outcome | Action |
+|---------------|--------|
+| **corrective** + valid `proposed_memory` | Create pending `ProposedMemory` |
+| **refinement** + valid `proposed_memory` | May create pending `ProposedMemory` |
+| **refinement** without durable learning | Show a clear no-memory-created message |
+| **none** | Create no `ProposedMemory` |
+| **approved** `ProposedMemory` | Create active `AgentMemory` |
+| **rejected** `ProposedMemory` | Create no `AgentMemory` |
+
+- Approved/rejected `ProposedMemory` items should appear in **history/archive**, not as default action content.
+- Agent detail default view should show **active memories** and **pending proposed memories requiring action**, not rejected history.
+- Run-scoped purge/delete must delete only run-scoped dependencies. Never delete unrelated user-created or demo seed data.
+
+## Frontend Quality
+
+Frontend is Vite + React + TypeScript + Tailwind CSS + shadcn/ui. Every UI change must:
+
+- Show **loading**, **success**, **error**, **empty**, and **confirmation** states. Never fail silently.
+- Use polished, user-friendly interaction design consistent with the existing UI style.
+- Use existing shared components (`AppLayout`, `PageHeader`, `StatusBadge`, `ConfirmDialog`, `NoticeDialog`, `FormField`, `EmptyState`, `JsonCollapse`, `Alert`, `FieldHelp`) and shadcn/ui primitives.
+- Use react-hook-form + zod for forms. JSON policy/config fields stored as strings and parsed before submit.
+- Notification badges for pending proposed memories use amber pill styling from `NotificationContext`.
+
+## Test Data Hygiene
+
+- **Test-created records must use TEST or E2E prefixes** in names to distinguish from user-created or demo seed data.
+- **Clean up only records created during the task.** Do not delete user-created or demo seed data.
+- **Never use broad cleanup, table truncation, or admin cleanup** (`POST /admin/cleanup-lab-data`) unless the task explicitly asks for it.
+- Run-scoped delete operations must target only run-scoped dependencies.
+
+## Scope Discipline
+
+- **Do not add new backend APIs** if existing APIs already support the frontend need.
+- **Do not add new database fields or schema changes** unless clearly necessary.
+- **Do not add new agent form fields** unless clearly justified.
+- **Do not add `agent_type`** — use role convention + context_type.
+- **Do not auto-rewrite soul/persona** — explicit user action only.
+- **Do not add** RAG, file upload, image input, multimodal, auth, or production deployment unless explicitly requested.
+- **Backend changes should be avoided** when the requirement can be satisfied by frontend or existing APIs.
 
 ## Workflow
 
@@ -149,19 +166,23 @@ For each implementation task:
 
 1. Read the relevant requirements and existing code.
 2. Identify affected files and existing local patterns.
-3. Define the isolation invariant the change must preserve.
-4. Add or update focused tests first where practical.
-5. Implement the smallest working change.
-6. Use Pydantic schemas at API, persistence, tool, memory, context, and handoff boundaries.
-7. Route tool access through Tool Gateway only.
-8. Scope memory and context operations by `agent_id`.
-9. Persist trace events and config snapshots where run behavior changes.
-10. Run relevant tests, formatting, and linting.
-11. Update documentation when setup, architecture, API behavior, or policy behavior changes.
-12. Summarize changed files and verification results.
+3. Summarize the implementation plan before making broad changes.
+4. Define the isolation invariant the change must preserve.
+5. Add or update focused tests first where practical.
+6. Implement the smallest working change.
+7. Use Pydantic schemas at API, persistence, tool, memory, context, and handoff boundaries.
+8. Route tool access through Tool Gateway only.
+9. Scope memory and context operations by `agent_id`.
+10. Persist trace events and config snapshots where run behavior changes.
+11. Run relevant tests: `cd backend && .venv/bin/pytest -q`, `cd frontend && npm run lint && npm run typecheck && npm run build`.
+12. Update documentation when setup, architecture, API behavior, or policy behavior changes.
+13. Summarize changed files and verification results.
 
 ## Checklist
 
+- [ ] Current files inspected; implementation plan summarized.
+- [ ] No unnecessary new APIs, DB fields, schema changes, or agent_type added.
+- [ ] No auto-rewrite of soul/persona.
 - [ ] No direct tool calls from agent logic.
 - [ ] Tool Gateway validates tool name, `agent_id`, and permissions.
 - [ ] Memory retrieval and writeback are scoped by `agent_id`.
@@ -172,16 +193,18 @@ For each implementation task:
 - [ ] Soul/persona and system prompt remain separate fields.
 - [ ] Pydantic validates important inputs and outputs.
 - [ ] PostgreSQL stores durable configuration, run, trace, and review state.
-- [ ] Qdrant/vector access is wrapped behind a service or gateway.
-- [ ] Every run writes trace events.
-- [ ] Runs save config snapshots where reproducibility matters.
+- [ ] Every run writes trace events and config snapshots.
 - [ ] Memory writeback supports manual review mode when enabled.
 - [ ] Context assembly is deterministic and inspectable.
-- [ ] Docker Compose supports local PostgreSQL and vector memory services where needed.
+- [ ] Proposed-memory lifecycle respects corrective/refinement/none rules.
+- [ ] Frontend shows loading, success, error, empty, confirmation states where applicable.
+- [ ] Test-created records use TEST or E2E prefixes.
+- [ ] Only task-created data cleaned up; user/demo data preserved.
+- [ ] No broad cleanup or admin cleanup unless explicitly asked.
 - [ ] Tests cover allowed and denied Tool Gateway access.
-- [ ] Tests cover memory isolation by `agent_id`.
-- [ ] Tests cover context isolation by `agent_id`.
+- [ ] Tests cover memory isolation and context isolation by `agent_id`.
 - [ ] Tests cover handoff payload limits and permission denial.
+- [ ] Backend tests pass (123), frontend lint/typecheck/build pass.
 - [ ] Documentation reflects new behavior.
 
 ## Expected Output

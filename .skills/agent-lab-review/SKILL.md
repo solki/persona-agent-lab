@@ -34,8 +34,20 @@ Do not use this skill for:
 
 - Implementing new features unless the review explicitly asks for fixes
 - Pure planning tasks before code exists
-- Legacy business-analysis workflow review or unrelated report-generation review
-- Generic style-only review with no architecture or behavior impact
+
+## Non-Essential Check
+
+Before reviewing correctness, check whether the change is minimal:
+
+- **Were new backend APIs added?** Could existing APIs have satisfied the need?
+- **Were new database fields or schema changes added?** Were they clearly necessary?
+- **Were new agent form fields added?** Were they clearly justified?
+- **Was `agent_type` added?** Should role convention + context_type have been used instead?
+- **Was soul/persona auto-rewritten?** Soul updates should require explicit user action.
+- **Were backend changes made** when the requirement could have been satisfied by frontend or existing APIs?
+- **Was unrelated code touched?** Scope should be limited to the feature at hand.
+
+Flag any of these as unnecessary scope creep.
 
 ## Core Principles
 
@@ -71,25 +83,76 @@ Any path that leaks private memory, private context, tool permissions, model set
 
 Every run must save trace events. Every run should save config snapshots for reproducibility. Review whether a developer can inspect what happened, which config was used, which tools ran, which context was assembled, which memory was retrieved, and why a handoff was allowed or denied.
 
+## UI Workflow Coherence
+
+For frontend changes, review the user workflow:
+
+- **Are actions presented as a coherent workflow** rather than disconnected buttons?
+- **Are there silent failures** — mutations without loading, success, or error feedback?
+- **Are lifecycle states clear?** Users should understand pending/approved/rejected/active/archived status.
+- **Are there missing direct links?** Users should navigate from related views (e.g., run → agent → proposed memory → approve).
+- **Does agent detail default view** show active memories and pending proposed memories requiring action?
+- **Is the UI style consistent** with the existing Vite + React + TypeScript + Tailwind + shadcn/ui patterns?
+
+## Proposed-Memory Lifecycle Review
+
+Verify the proposed-memory lifecycle is correctly implemented:
+
+- [ ] **Pending items require action** — shown prominently, not buried.
+- [ ] **Approved items** become active `AgentMemory` and are retrieved by `ContextAssembler`.
+- [ ] **Rejected items** are hidden from default action areas (shown only in history/archive).
+- [ ] **Rejected items are never retrieved** into context during workflow runs.
+- [ ] **Approved/rejected history** is viewable but does not clutter the default action view.
+- [ ] **Run-scoped delete** does not touch unrelated user or demo data.
+
+## Reviewer Feedback Quality Review
+
+Verify the reviewer feedback implementation:
+
+- [ ] **Reviewer evaluates the actual selected output** — the correct execution/trace event is targeted.
+- [ ] **Reviewed output is traceable** — the response includes `reviewed_execution_id`, `reviewed_output`, `reviewed_target_agent_name`, `reviewer_agent_name`.
+- [ ] **Reviewer does not invent failures** — a good output should be able to return `memory_decision: "none"`.
+- [ ] **Memory decision rules are correct**:
+  - `corrective` + valid `proposed_memory` → creates pending `ProposedMemory`
+  - `refinement` + valid `proposed_memory` → may create pending `ProposedMemory`
+  - `refinement` without durable learning → clear message that no memory was created
+  - `none` → no `ProposedMemory` created
+- [ ] **Proposed memory is durable, reusable, and target-agent-aware** — not ephemeral or cross-agent.
+- [ ] **Mock reviewer signal-detection** does not produce false positives or false negatives.
+
+## Test Data Hygiene Check
+
+- [ ] **Test-created records use TEST or E2E prefixes** in names.
+- [ ] **Only task-created data was cleaned up** — user-created and demo seed data are untouched.
+- [ ] **No broad cleanup, table truncation, or admin cleanup** was used unless explicitly requested.
+- [ ] **Existing tests still pass** — the change did not break unrelated tests.
+
 ## Workflow
 
 For each review:
 
 1. Identify the intended behavior and affected architecture areas.
 2. Inspect diffs or relevant files before judging.
-3. Check the isolation model.
-4. Check Tool Gateway enforcement.
-5. Check memory and context scoping by `agent_id`.
-6. Check handoff authorization and payload boundaries.
-7. Check Pydantic validation at API, tool, memory, context, workflow, and run boundaries.
-8. Check PostgreSQL persistence and trace/config snapshot behavior.
-9. Check Qdrant/vector abstraction boundaries if memory retrieval is involved.
-10. Check tests for allowed and denied cases.
-11. Check Docker Compose, Git hygiene, and documentation where relevant.
-12. Report findings in severity order with file and line references when available.
+3. Check non-essential additions (APIs, fields, schema changes, agent_type, auto-rewrites).
+4. Check the isolation model.
+5. Check Tool Gateway enforcement.
+6. Check memory and context scoping by `agent_id`.
+7. Check handoff authorization and payload boundaries.
+8. Check Pydantic validation at API, tool, memory, context, workflow, and run boundaries.
+9. Check PostgreSQL persistence and trace/config snapshot behavior.
+10. Check Qdrant/vector abstraction boundaries if memory retrieval is involved.
+11. Check proposed-memory lifecycle (pending/approved/rejected flow).
+12. Check reviewer feedback quality (correct output targeting, memory decisions).
+13. Check UI workflow coherence (loading/success/error/empty states, navigation).
+14. Check test data hygiene (prefixes, cleanup scope).
+15. Check tests for allowed and denied cases.
+16. Check Docker Compose, Git hygiene, and documentation where relevant.
+17. Report findings in severity order with file and line references when available.
 
 ## Checklist
 
+- [ ] Non-essential APIs, DB fields, schema changes, agent_type, or auto-rewrites are absent.
+- [ ] Backend changes were truly necessary (could frontend/existing APIs have sufficed?).
 - [ ] Agent definitions do not include hidden workflow state.
 - [ ] Workflow definitions do not mutate agent identity or private config unexpectedly.
 - [ ] Soul/persona and system prompt are stored and handled separately.
@@ -104,11 +167,12 @@ For each review:
 - [ ] Handoff policy is explicit, persisted, and permission checked.
 - [ ] Handoff payloads are validated.
 - [ ] Receiving agents receive only explicit handoff payloads plus their own authorized inputs.
-- [ ] Runs persist trace events.
-- [ ] Runs persist config snapshots where reproducibility matters.
+- [ ] Runs persist trace events and config snapshots.
 - [ ] Pydantic validates important inputs and outputs.
-- [ ] PostgreSQL stores durable state that should survive process restarts.
-- [ ] Vector database access is behind a service or gateway abstraction.
+- [ ] Proposed-memory lifecycle: pending→action, approved→active, rejected→hidden.
+- [ ] Reviewer feedback: correct output targeted, traceable, no invented failures.
+- [ ] UI workflow is coherent: no silent failures, clear states, consistent style.
+- [ ] Test-created records use TEST/E2E prefixes; only task data cleaned up.
 - [ ] Tests cover permission allowed and denied paths.
 - [ ] Tests cover memory isolation and context isolation.
 - [ ] Tests cover handoff denial and payload boundaries.
@@ -123,22 +187,27 @@ When reviewing, use this structure:
 1. Overall Assessment
    - Ready / Not Ready
    - Summary
-2. Critical Issues
+2. Non-Essential Check
+   - Unnecessary additions flagged
+3. Critical Issues
    - Issue
    - Impact
    - Recommended fix
-3. Important Improvements
+4. Important Improvements
    - Issue
    - Why it matters
    - Suggested change
-4. Minor Suggestions
+5. Minor Suggestions
    - Optional improvements
-5. Requirement Coverage
+6. Proposed-Memory & Reviewer Feedback Audit
+7. UI Workflow Coherence
+8. Test Data Hygiene
+9. Requirement Coverage
    - Passed requirements
    - Missing requirements
    - Partially implemented requirements
-6. Test Coverage Assessment
-7. Recommended Next Actions
+10. Test Coverage Assessment
+11. Recommended Next Actions
 
 Use severity levels:
 
@@ -152,7 +221,10 @@ Use severity levels:
 A review is complete when:
 
 - It clearly states whether the implementation is ready.
+- It checks for non-essential additions.
 - It identifies isolation, permission, memory, context, handoff, or reproducibility violations.
+- It audits proposed-memory lifecycle and reviewer feedback quality.
+- It checks UI workflow coherence and test data hygiene.
 - It checks Tool Gateway, Pydantic, PostgreSQL, vector abstraction, Docker Compose, tests, Git hygiene, and documentation where relevant.
 - It provides actionable next steps.
 - It avoids vague or purely stylistic comments.
