@@ -5,19 +5,20 @@ from sqlalchemy.orm import Session
 from app.models.agent import Agent
 from app.models.workflow import Workflow
 from app.models.run import Run
-from app.config import get_settings
 from app.runtime.context_assembler import ContextAssembler
-from app.runtime.provider_factory import create_provider
+from app.runtime.provider_interface import ProviderInterface
 from app.services import observatory_service
 from app.services.trace_service import create_trace_event
 
 
-class WorkflowRunner:
-    def __init__(self, db: Session) -> None:
+class SequentialRunner:
+    """Execute agents in sequence, passing each agent's output as the next agent's task."""
+
+    def __init__(self, db: Session, provider: ProviderInterface, settings) -> None:
         self.db = db
         self.context_assembler = ContextAssembler(db)
-        self.settings = get_settings()
-        self.provider = create_provider(self.settings)
+        self.settings = settings
+        self.provider = provider
 
     def run(self, workflow: Workflow, task: str) -> Run:
         run = self.start(workflow, task)
@@ -28,9 +29,6 @@ class WorkflowRunner:
             raise
 
     def start(self, workflow: Workflow, task: str) -> Run:
-        if workflow.workflow_type != "sequential":
-            raise ValueError(f"Workflow type {workflow.workflow_type} is a placeholder in the MVP runtime.")
-
         agents = self._workflow_agents(workflow)
         run = Run(
             workflow_id=workflow.id,

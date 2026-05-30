@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, get_db
-from app.runtime.workflow_runner import WorkflowRunner
+from app.runtime.runner_factory import create_runner
 from app.schemas.runs import RunRead, WorkflowRunRequest
 from app.schemas.workflows import WorkflowCreate, WorkflowRead, WorkflowUpdate
 from app.services import workflow_service
@@ -52,7 +52,8 @@ def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
 def run_workflow(workflow_id: int, payload: WorkflowRunRequest, db: Session = Depends(get_db)):
     workflow = require_workflow(db, workflow_id)
     try:
-        return WorkflowRunner(db).run(workflow, payload.task)
+        runner = create_runner(db, workflow)
+        return runner.run(workflow, payload.task)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
@@ -68,7 +69,8 @@ def start_workflow_run(
 ):
     workflow = require_workflow(db, workflow_id)
     try:
-        run = WorkflowRunner(db).start(workflow, payload.task)
+        runner = create_runner(db, workflow)
+        run = runner.start(workflow, payload.task)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     background_tasks.add_task(_execute_workflow_run, run.id)
@@ -77,11 +79,31 @@ def start_workflow_run(
 
 def _execute_workflow_run(run_id: int) -> None:
     db = SessionLocal()
-    runner = WorkflowRunner(db)
     try:
+        from app.models.run import Run as RunModel
+        from app.models.workflow import Workflow as WorkflowModel
+
+        run = db.get(RunModel, run_id)
+        if run is None:
+            return
+        workflow = db.get(WorkflowModel, run.workflow_id)
+        if workflow is None:
+            return
+        runner = create_runner(db, workflow)
         runner.execute_run(run_id)
     except Exception as exc:
         db.rollback()
-        runner.fail_run(run_id, str(exc))
+        try:
+            from app.models.run import Run as RunModel
+            from app.models.workflow import Workflow as WorkflowModel
+
+            run = db.get(RunModel, run_id)
+            if run is not None:
+                workflow = db.get(WorkflowModel, run.workflow_id)
+                if workflow is not None:
+                    runner = create_runner(db, workflow)
+                    runner.fail_run(run_id, str(exc))
+        except Exception:
+            pass
     finally:
         db.close()

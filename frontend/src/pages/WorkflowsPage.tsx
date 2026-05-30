@@ -165,6 +165,9 @@ export function WorkflowFormPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [supervisorId, setSupervisorId] = useState<number | null>(null);
+  const [workerIds, setWorkerIds] = useState<number[]>([]);
+  const [maxIterations, setMaxIterations] = useState(10);
   const [task, setTask] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -182,6 +185,10 @@ export function WorkflowFormPage() {
           setWorkflow(workflowData);
           form.reset(toWorkflowFormValues(workflowData));
           setSelectedAgentIds(agentSequence(workflowData.graph_config));
+          setSupervisorId(supervisorAgentId(workflowData.graph_config));
+          setWorkerIds(workerAgentIds(workflowData.graph_config));
+          const maxIter = workflowData.graph_config.max_iterations;
+          if (typeof maxIter === "number") setMaxIterations(maxIter);
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load workflow.");
@@ -193,10 +200,36 @@ export function WorkflowFormPage() {
   const agentById = useMemo(() => Object.fromEntries(agents.map((agent) => [agent.id, agent.name])), [agents]);
 
   function toggleAgent(agentId: number) {
-    setSelectedAgentIds((current) => {
+    const wfType = form.getValues("workflow_type");
+    if (wfType === "supervisor") {
+      // Toggle supervisor selection
+      setSupervisorId((current) => {
+        const next = current === agentId ? null : agentId;
+        const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "supervisor");
+        config.supervisor_agent_id = next;
+        config.worker_agent_ids = workerIds.filter((id) => id !== next);
+        if (next !== null && workerIds.includes(next)) {
+          setWorkerIds(workerIds.filter((id) => id !== next));
+        }
+        form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true });
+        return next;
+      });
+    } else {
+      setSelectedAgentIds((current) => {
+        const next = current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId];
+        const config = parseConfigOrDefault(form.getValues("graphConfigJson"));
+        config.agent_sequence = next;
+        form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true });
+        return next;
+      });
+    }
+  }
+
+  function toggleWorker(agentId: number) {
+    setWorkerIds((current) => {
       const next = current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId];
-      const config = parseConfigOrDefault(form.getValues("graphConfigJson"));
-      config.agent_sequence = next;
+      const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "supervisor");
+      config.worker_agent_ids = next;
       form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true });
       return next;
     });
@@ -212,7 +245,11 @@ export function WorkflowFormPage() {
       setError(parseError instanceof Error ? parseError.message : "Invalid graph config JSON.");
       return;
     }
-    if (selectedAgentIds.length > 0) {
+    if (values.workflow_type === "supervisor") {
+      if (supervisorId !== null) graphConfig.supervisor_agent_id = supervisorId;
+      graphConfig.worker_agent_ids = workerIds;
+      if (!graphConfig.max_iterations) graphConfig.max_iterations = maxIterations;
+    } else if (selectedAgentIds.length > 0) {
       graphConfig.agent_sequence = selectedAgentIds;
     }
     const payload = {
@@ -277,18 +314,62 @@ export function WorkflowFormPage() {
               <FormField label="Description"><Textarea {...form.register("description")} /></FormField>
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...form.register("is_active")} /> Active</label>
               <div className="lg:col-span-2">
-                <FormField label="Agent sequence">
-                  <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
-                    {agents.map((agent) => (
-                      <label key={agent.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} onChange={() => toggleAgent(agent.id)} />
-                        <span>{agent.name}</span>
-                        <StatusBadge status={agent.is_active ? "active" : "inactive"} />
-                      </label>
-                    ))}
-                  </div>
-                </FormField>
-                {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Order: {selectedAgentIds.map((id) => agentById[id] ?? `Agent ${id}`).join(" -> ")}</p> : null}
+                {form.watch("workflow_type") === "supervisor" ? (
+                  <>
+                    <FormField label="Supervisor agent" help={<FieldHelp pattern="tooltip" content="The agent that coordinates workers. It decides which worker to delegate to and when to finish." />}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {agents.map((agent) => (
+                          <label key={agent.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="radio"
+                              name="supervisor_agent"
+                              checked={supervisorId === agent.id}
+                              onChange={() => toggleAgent(agent.id)}
+                            />
+                            <span>{agent.name}</span>
+                            <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {supervisorId ? <p className="mt-1 text-xs text-muted-foreground">Supervisor: {agentById[supervisorId] ?? `Agent ${supervisorId}`}</p> : null}
+                    <FormField label="Worker agents" help={<FieldHelp pattern="tooltip" content="Agents the supervisor can delegate tasks to. Select one or more." />}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {agents.filter((a) => a.id !== supervisorId).map((agent) => (
+                          <label key={agent.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={workerIds.includes(agent.id)}
+                              onChange={() => toggleWorker(agent.id)}
+                              disabled={agent.id === supervisorId}
+                            />
+                            <span>{agent.name}</span>
+                            <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {workerIds.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">Workers: {workerIds.map((id) => agentById[id] ?? `Agent ${id}`).join(", ")}</p> : null}
+                    <FormField label="Max iterations" help={<FieldHelp pattern="tooltip" content="Maximum number of delegation rounds before the run is failed. Default: 10." />}>
+                      <Input type="number" min={1} max={50} value={maxIterations} onChange={(e) => { const v = Number(e.target.value); if (v >= 1) { setMaxIterations(v); const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "supervisor"); config.max_iterations = v; form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true }); } }} />
+                    </FormField>
+                  </>
+                ) : (
+                  <>
+                    <FormField label="Agent sequence" help={form.watch("workflow_type") === "handoff_swarm" ? <FieldHelp pattern="tooltip" content="Entry agent + participants for handoff swarm. Configure handoff policies per agent." /> : undefined}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {agents.map((agent) => (
+                          <label key={agent.id} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} onChange={() => toggleAgent(agent.id)} />
+                            <span>{agent.name}</span>
+                            <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Order: {selectedAgentIds.map((id) => agentById[id] ?? `Agent ${id}`).join(" -> ")}</p> : null}
+                  </>
+                )}
               </div>
               <div className="lg:col-span-2"><FormField label="Graph config JSON" help={<FieldHelp pattern="popover" title="Graph config" content="Raw graph configuration sent to the workflow engine. The agent picker above is a convenience — the JSON is the source of truth. Edit directly for advanced configurations not supported by the picker." />}><Textarea className="font-mono" rows={8} {...form.register("graphConfigJson")} /></FormField></div>
               <div className="flex items-end gap-2">
@@ -330,10 +411,24 @@ function agentSequence(config: Record<string, unknown>) {
   return Array.isArray(sequence) ? sequence.filter((id): id is number => typeof id === "number") : [];
 }
 
-function parseConfigOrDefault(value: string) {
+function supervisorAgentId(config: Record<string, unknown>): number | null {
+  const id = config.supervisor_agent_id;
+  return typeof id === "number" ? id : null;
+}
+
+function workerAgentIds(config: Record<string, unknown>): number[] {
+  const ids = config.worker_agent_ids;
+  return Array.isArray(ids) ? ids.filter((id): id is number => typeof id === "number") : [];
+}
+
+function parseConfigOrDefault(value: string, workflowType?: string) {
   try {
-    return parseJsonObject(value, "Graph config");
+    const parsed = parseJsonObject(value, "Graph config");
+    if (workflowType === "supervisor" && !parsed.worker_agent_ids) {
+      parsed.worker_agent_ids = [];
+    }
+    return parsed;
   } catch {
-    return { agent_sequence: [] };
+    return workflowType === "supervisor" ? { supervisor_agent_id: null, worker_agent_ids: [], max_iterations: 10 } : { agent_sequence: [] };
   }
 }
