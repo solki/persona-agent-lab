@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class RunCreate(BaseModel):
@@ -59,3 +59,48 @@ class TraceEventRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Collaboration Graph
+# ---------------------------------------------------------------------------
+
+
+class CollaborationNode(BaseModel):
+    agent_id: int
+    agent_name: str
+    role: str
+    execution_count: int
+    execution_ids: list[int]
+    status_summary: dict[str, int]
+
+
+class CollaborationEdge(BaseModel):
+    from_agent_id: int
+    to_agent_id: int
+    type: Literal["delegation", "response"]
+    iteration: Optional[int] = None
+    instruction: Optional[str] = None
+    full_instruction: Optional[str] = None
+    content_preview: Optional[str] = None
+    full_content: Optional[str] = None
+    elapsed_ms: Optional[int] = None
+    source_trace_event_id: Optional[int] = None
+
+
+class CollaborationChainSummary(BaseModel):
+    supervisor_agent_id: Optional[int] = None
+    supervisor_agent_name: Optional[str] = None
+    supervisor_iterations: int = 0
+    worker_count: int = 0
+    delegation_count: int = 0
+    final_decision: Optional[str] = None
+    status: str = "unknown"
+
+
+class CollaborationGraphResponse(BaseModel):
+    run_id: int
+    workflow_type: str
+    nodes: list[CollaborationNode] = Field(default_factory=list)
+    edges: list[CollaborationEdge] = Field(default_factory=list)
+    chain_summary: CollaborationChainSummary

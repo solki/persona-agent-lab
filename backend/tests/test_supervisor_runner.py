@@ -413,3 +413,83 @@ class TestSequentialUnchanged:
         assert "run_started" in event_types
         assert "agent_completed" in event_types
         assert "run_completed" in event_types
+
+
+# ---------------------------------------------------------------------------
+# Collaboration Graph
+# ---------------------------------------------------------------------------
+
+
+class TestCollaborationGraph:
+    def test_supervisor_run_returns_collaboration_graph(self, client):
+        supervisor = _create_agent(client, "TEST-Collab-Supv", role="coordinator", system_prompt="Coordinate.")
+        worker = _create_agent(client, "TEST-Collab-Work", role="worker", system_prompt="Work.")
+        workflow = _create_supervisor_workflow(client, supervisor["id"], [worker["id"]])
+        run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Collaboration test."}).json()
+
+        resp = client.get(f"/runs/{run['id']}/collaboration-graph")
+        assert resp.status_code == 200
+        graph = resp.json()
+        assert graph["run_id"] == run["id"]
+        assert graph["workflow_type"] == "supervisor"
+        assert len(graph["nodes"]) >= 1  # at minimum the supervisor ran
+
+    def test_collaboration_graph_has_nodes_for_supervisor_run(self, client):
+        supervisor = _create_agent(client, "TEST-CGNode-Supv", role="coordinator", system_prompt="Coordinate.")
+        worker = _create_agent(client, "TEST-CGNode-Work", role="worker", system_prompt="Work.")
+        workflow = _create_supervisor_workflow(client, supervisor["id"], [worker["id"]])
+        run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Node test."}).json()
+
+        graph = client.get(f"/runs/{run['id']}/collaboration-graph").json()
+        agent_ids = [n["agent_id"] for n in graph["nodes"]]
+        assert supervisor["id"] in agent_ids
+
+    def test_collaboration_graph_chain_summary_for_supervisor(self, client):
+        supervisor = _create_agent(client, "TEST-CGSum-Supv", role="coordinator", system_prompt="Coordinate.")
+        worker = _create_agent(client, "TEST-CGSum-Work", role="worker", system_prompt="Work.")
+        workflow = _create_supervisor_workflow(client, supervisor["id"], [worker["id"]])
+        run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Summary test."}).json()
+
+        graph = client.get(f"/runs/{run['id']}/collaboration-graph").json()
+        summary = graph["chain_summary"]
+        assert summary["supervisor_agent_id"] is not None
+        assert summary["worker_count"] >= 0
+        assert "supervisor_iterations" in summary
+
+    def test_sequential_run_returns_graceful_collaboration_graph(self, client):
+        agent = _create_agent(client, "TEST-CGSeq", role="worker", system_prompt="Work.")
+        resp = client.post(
+            "/workflows",
+            json={
+                "name": "TEST-CG-Sequential",
+                "workflow_type": "sequential",
+                "graph_config": {"agent_sequence": [agent["id"]]},
+            },
+        )
+        workflow = resp.json()
+        run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Seq test."}).json()
+
+        resp = client.get(f"/runs/{run['id']}/collaboration-graph")
+        assert resp.status_code == 200
+        graph = resp.json()
+        assert graph["workflow_type"] == "sequential"
+        assert len(graph["edges"]) == 0  # sequential has no delegation edges
+
+    def test_collaboration_graph_does_not_expose_supervisor_private_context(self, client):
+        """Isolation: graph response should not include private context or memory content."""
+        supervisor = _create_agent(client, "TEST-CGPriv-Supv", role="coordinator", system_prompt="Coordinate.")
+        worker = _create_agent(client, "TEST-CGPriv-Work", role="worker", system_prompt="Work.")
+        client.post(
+            f"/agents/{supervisor['id']}/contexts",
+            json={"title": "Supv Secret", "context_type": "note", "content": "PRIVATE_SUPERVISOR_KEY", "priority": 10},
+        )
+        workflow = _create_supervisor_workflow(client, supervisor["id"], [worker["id"]])
+        run = client.post(f"/workflows/{workflow['id']}/run", json={"task": "Privacy test."}).json()
+
+        graph = client.get(f"/runs/{run['id']}/collaboration-graph").json()
+        graph_str = str(graph)
+        assert "PRIVATE_SUPERVISOR_KEY" not in graph_str
+
+    def test_collaboration_graph_for_missing_run_returns_404(self, client):
+        resp = client.get("/runs/99999/collaboration-graph")
+        assert resp.status_code == 404

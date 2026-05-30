@@ -299,3 +299,43 @@ export interface AdminCleanupResponse {
   deleted_agents: number;
   deleted_souls: number;
 }
+
+export interface CollaborationNode {
+  agent_id: number;
+  agent_name: string;
+  role: string;
+  execution_count: number;
+  execution_ids: number[];
+  status_summary: Record<string, number>;
+}
+
+export interface CollaborationEdge {
+  from_agent_id: number;
+  to_agent_id: number;
+  type: "delegation" | "response";
+  iteration?: number | null;
+  instruction?: string | null;
+  full_instruction?: string | null;
+  content_preview?: string | null;
+  full_content?: string | null;
+  elapsed_ms?: number | null;
+  source_trace_event_id?: number | null;
+}
+
+export interface CollaborationChainSummary {
+  supervisor_agent_id?: number | null;
+  supervisor_agent_name?: string | null;
+  supervisor_iterations: number;
+  worker_count: number;
+  delegation_count: number;
+  final_decision?: string | null;
+  status: string;
+}
+
+export interface CollaborationGraph {
+  run_id: number;
+  workflow_type: string;
+  nodes: CollaborationNode[];
+  edges: CollaborationEdge[];
+  chain_summary: CollaborationChainSummary;
+}

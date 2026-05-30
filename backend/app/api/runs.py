@@ -2,8 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.runs import RunActivateResponse, RunArchiveResponse, RunDeleteResponse, RunRead, TraceEventRead
-from app.services import run_service, trace_service
+from app.schemas.runs import (
+    CollaborationGraphResponse,
+    RunActivateResponse,
+    RunArchiveResponse,
+    RunDeleteResponse,
+    RunRead,
+    TraceEventRead,
+)
+from app.services import collaboration_service, run_service, trace_service
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -57,6 +64,15 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
 def get_run_trace(run_id: int, db: Session = Depends(get_db)):
     require_run(db, run_id)
     return trace_service.list_trace_events(db, run_id)
+
+
+@router.get("/{run_id}/collaboration-graph", response_model=CollaborationGraphResponse)
+def get_collaboration_graph(run_id: int, db: Session = Depends(get_db)):
+    require_run(db, run_id)
+    try:
+        return collaboration_service.build_collaboration_graph(db, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post("/{run_id}/archive", response_model=RunArchiveResponse)

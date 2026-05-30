@@ -1,4 +1,4 @@
-import { Activity, Archive, Bot, ChevronDown, ChevronRight, MessageSquare, RefreshCw, RotateCcw, Search, Shield, Sparkles, Trash2 } from "lucide-react";
+import { Activity, Archive, Bot, ChevronDown, ChevronRight, GitBranch, MessageSquare, RefreshCw, RotateCcw, Search, Shield, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Alert } from "@/components/shared/Alert";
@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useNotification } from "@/lib/NotificationContext";
-import type { Agent, AgentFeedback, AgentExecution, QualityCheckItem, ReflectionResponse, ReviewerChecklistItem, ReviewerEvaluationResponse, RiskFlag, Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
+import type { Agent, AgentFeedback, AgentExecution, CollaborationGraph, QualityCheckItem, ReflectionResponse, ReviewerChecklistItem, ReviewerEvaluationResponse, RiskFlag, Run, RunMonitor, TraceEvent, Workflow } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 type RunFilter = "active" | "archived" | "all";
@@ -203,6 +203,9 @@ export function RunDetailPage() {
   const [run, setRun] = useState<Run | null>(null);
   const [trace, setTrace] = useState<TraceEvent[]>([]);
   const [monitor, setMonitor] = useState<RunMonitor | null>(null);
+  const [collabGraph, setCollabGraph] = useState<CollaborationGraph | null>(null);
+  const [collabLoading, setCollabLoading] = useState(false);
+  const [collabError, setCollabError] = useState("");
   const [error, setError] = useState("");
   const [rerunning, setRerunning] = useState(false);
 
@@ -213,6 +216,17 @@ export function RunDetailPage() {
         setRun(runData);
         setTrace(traceData);
         setMonitor(monitorData);
+        // Load collaboration graph separately (not on critical path)
+        setCollabLoading(true);
+        setCollabError("");
+        try {
+          const graph = await api.getCollaborationGraph(runId);
+          setCollabGraph(graph);
+        } catch (graphError) {
+          setCollabError(graphError instanceof Error ? graphError.message : "Unable to load collaboration data.");
+        } finally {
+          setCollabLoading(false);
+        }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load run details.");
       }
@@ -289,10 +303,163 @@ export function RunDetailPage() {
             ) : <EmptyState title="No monitor data" body="Monitor data is unavailable for this run." />}
           </CardContent>
         </Card>
+        <CollaborationSection graph={collabGraph} loading={collabLoading} error={collabError} />
         {monitor?.agent_executions?.length ? <LearningFeedbackSection runId={run.id} executions={monitor.agent_executions} /> : null}
         {monitor?.agent_executions?.length ? <ReviewerFeedbackSection runId={run.id} executions={monitor.agent_executions} /> : null}
       </div>
     </>
+  );
+}
+
+function CollaborationSection({ graph, loading, error }: { graph: CollaborationGraph | null; loading: boolean; error: string }) {
+  const [expandedInstructions, setExpandedInstructions] = useState<Record<string, boolean>>({});
+  const [expandedResponses, setExpandedResponses] = useState<Record<string, boolean>>({});
+
+  function toggleInstruction(key: string) {
+    setExpandedInstructions((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+  function toggleResponse(key: string) {
+    setExpandedResponses((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader><h2 className="text-base font-semibold"><GitBranch size={16} className="inline mr-1" /> Collaboration</h2></CardHeader>
+        <CardContent><Alert title="Loading">Loading collaboration data.</Alert></CardContent>
+      </Card>
+    );
+  }
+  if (error) {
+    return (
+      <Card>
+        <CardHeader><h2 className="text-base font-semibold"><GitBranch size={16} className="inline mr-1" /> Collaboration</h2></CardHeader>
+        <CardContent><Alert title="Notice" tone="info">{error}</Alert></CardContent>
+      </Card>
+    );
+  }
+  if (!graph || graph.nodes.length === 0) {
+    return (
+      <Card>
+        <CardHeader><h2 className="text-base font-semibold"><GitBranch size={16} className="inline mr-1" /> Collaboration</h2></CardHeader>
+        <CardContent>
+          <EmptyState
+            title={graph?.workflow_type === "sequential" ? "Sequential workflow" : "No collaboration data"}
+            body={graph?.workflow_type === "sequential" ? "Sequential workflows run agents in order without delegation. Collaboration view is for supervisor and handoff workflows." : "No collaboration data is available for this run."}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { chain_summary: summary, nodes, edges } = graph;
+  const isSupervisor = graph.workflow_type === "supervisor";
+  const delegationEdges = edges.filter((e) => e.type === "delegation");
+  const responseEdges = edges.filter((e) => e.type === "response");
+  const nodeName = (id: number) => nodes.find((n) => n.agent_id === id)?.agent_name ?? `Agent ${id}`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold"><GitBranch size={16} className="inline mr-1" /> Collaboration</h2>
+          {isSupervisor ? <StatusBadge status="supervisor" /> : <StatusBadge status={graph.workflow_type} />}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Summary */}
+        {isSupervisor && summary.supervisor_agent_name ? (
+          <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-4 md:grid-cols-4">
+            <div>
+              <span className="text-xs text-muted-foreground">Supervisor</span>
+              <p className="mt-1 text-sm font-semibold">{summary.supervisor_agent_name}</p>
+              <p className="text-xs text-muted-foreground">agent {summary.supervisor_agent_id}</p>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground">Iterations</span>
+              <p className="mt-1 text-lg font-semibold">{summary.supervisor_iterations}</p>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground">Delegations</span>
+              <p className="mt-1 text-lg font-semibold">{summary.delegation_count}</p>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground">Workers</span>
+              <p className="mt-1 text-lg font-semibold">{summary.worker_count}</p>
+              {summary.final_decision ? <span className="text-xs text-muted-foreground">Final: {summary.final_decision}</span> : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Delegation timeline */}
+        {delegationEdges.length > 0 ? (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Delegation Timeline</h3>
+            <div className="space-y-2">
+              {delegationEdges.map((edge, i) => {
+                const respEdge = responseEdges.find((r) => r.from_agent_id === edge.to_agent_id && r.iteration === edge.iteration);
+                const instKey = `inst-${i}`;
+                const respKey = `resp-${i}`;
+                const showInst = expandedInstructions[instKey] ?? false;
+                const showResp = expandedResponses[respKey] ?? false;
+                const workerName = nodeName(edge.to_agent_id);
+                return (
+                  <div key={i} className="rounded-md border border-border p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">Iter {edge.iteration ?? "?"}</span>
+                      <span className="text-xs text-muted-foreground">{nodeName(edge.from_agent_id)}</span>
+                      <span className="text-xs">→</span>
+                      <span className="text-sm font-semibold">{workerName}</span>
+                      <StatusBadge status="delegation" />
+                    </div>
+                    {edge.instruction ? (
+                      <div>
+                        <button type="button" className="text-xs text-primary hover:underline flex items-center gap-1" onClick={() => toggleInstruction(instKey)}>
+                          {showInst ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          Instruction: {(edge.instruction || "").slice(0, 100)}{(edge.instruction || "").length > 100 ? "..." : ""}
+                        </button>
+                        {showInst ? <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap border-l-2 border-primary/30 pl-3">{edge.full_instruction || edge.instruction}</p> : null}
+                      </div>
+                    ) : null}
+                    {respEdge?.content_preview ? (
+                      <div className="mt-1">
+                        <button type="button" className="text-xs text-primary hover:underline flex items-center gap-1" onClick={() => toggleResponse(respKey)}>
+                          {showResp ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          Response: {(respEdge.content_preview || "").slice(0, 100)}{(respEdge.content_preview || "").length > 100 ? "..." : ""}
+                          {respEdge.elapsed_ms ? <span className="text-muted-foreground ml-2">({formatElapsed(respEdge.elapsed_ms)})</span> : null}
+                        </button>
+                        {showResp ? <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap border-l-2 border-green-500/30 pl-3">{respEdge.full_content || respEdge.content_preview}</p> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : isSupervisor ? (
+          <EmptyState title="No delegations" body="The supervisor did not delegate to any workers (may have finished immediately)." />
+        ) : null}
+
+        {/* Agent nodes summary */}
+        <div>
+          <h3 className="mb-2 text-sm font-semibold">Agents</h3>
+          <div className="grid gap-2 md:grid-cols-2">
+            {nodes.map((node) => (
+              <div key={node.agent_id} className="flex items-center justify-between rounded-md border border-border p-2">
+                <div>
+                  <Link to={`/agents/${node.agent_id}`} className="text-sm font-medium hover:underline">{node.agent_name}</Link>
+                  <p className="text-xs text-muted-foreground">{node.role} · {node.execution_count} execution(s)</p>
+                </div>
+                <div className="flex gap-1">
+                  {node.status_summary.completed > 0 ? <StatusBadge status="completed" /> : null}
+                  {node.status_summary.failed > 0 ? <StatusBadge status="failed" /> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
