@@ -134,7 +134,8 @@ class HandoffSwarmRunner:
                 self._emit_agent_completed(run.id, current_agent)
                 create_trace_event(
                     self.db, run.id, "handoff_completed",
-                    {"final_agent_id": current_agent.id, "chain_agent_ids": [h["agent_id"] for h in handoff_chain] + [current_agent.id],
+                    {"final_agent_id": current_agent.id,
+                     "chain_agent_ids": [h["from_agent_id"] for h in handoff_chain] + [current_agent.id],
                      "total_handoffs": len(handoff_chain)},
                     current_agent.id,
                 )

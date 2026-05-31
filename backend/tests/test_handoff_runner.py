@@ -273,6 +273,20 @@ class TestHandoffValidation:
         run = client.post(f"/workflows/{wf['id']}/run", json={"task": "No self."}).json()
         assert run["status"] in ("completed", "failed")
 
+    def test_handoff_completed_event_does_not_crash_on_keyerror(self, client):
+        """Regression test for Run 342: 'agent_id' KeyError in handoff_completed trace."""
+        a = self._agent(client, "TEST-V-Regr-A", allowed_ids=[])
+        wf = _create_handoff_workflow(client, a["id"], [a["id"]])
+        run = client.post(f"/workflows/{wf['id']}/run", json={"task": "Regression test."}).json()
+        # Should complete without KeyError
+        assert run["status"] == "completed"
+        # handoff_completed event should have correct chain
+        trace = client.get(f"/runs/{run['id']}/trace").json()
+        completed_events = [e for e in trace if e["event_type"] == "handoff_completed"]
+        if completed_events:
+            payload = completed_events[0]["payload"]
+            assert "chain_agent_ids" in payload
+
     def test_supervisor_still_works_alongside_handoff(self, client):
         """Verify supervisor workflows still pass."""
         supervisor = _create_agent(client, "TEST-V-Supv", role="coordinator", system_prompt="Coordinate.")
