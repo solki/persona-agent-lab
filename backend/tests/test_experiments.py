@@ -193,6 +193,198 @@ def test_archive_and_activate_experiment_with_runs_preserves_related_runs(client
     assert experiment["id"] in [item["id"] for item in active_list]
 
 
+# ---------------------------------------------------------------------------
+# Soul Behavior Comparison
+# ---------------------------------------------------------------------------
+
+
+def _create_soul(client, name, decision_style="Decisive"):
+    resp = client.post("/souls", json={"name": name, "persona": f"{name} persona.", "decision_style": decision_style, "is_active": True})
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def _create_supervisor_workflow_for_test(client, supervisor_id, worker_ids):
+    resp = client.post(
+        "/workflows",
+        json={
+            "name": "TEST-SoulComp-Workflow",
+            "workflow_type": "supervisor",
+            "graph_config": {"supervisor_agent_id": supervisor_id, "worker_agent_ids": worker_ids, "max_iterations": 5},
+        },
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def test_soul_comparison_experiment_creates_variants(client):
+    """Run the same supervisor task with two different souls and compare results."""
+    soul_a = _create_soul(client, "TEST-Authoritative-Soul", decision_style="Decisive, fast, delegates with short instructions")
+    soul_b = _create_soul(client, "TEST-Collaborative-Soul", decision_style="Consensus-seeking, thorough, gives rich instructions")
+
+    supervisor = client.post(
+        "/agents",
+        json={"name": "TEST-SoulComp-Supervisor", "role": "coordinator", "system_prompt": "Coordinate.", "soul_id": soul_a["id"]},
+    ).json()
+    worker = client.post(
+        "/agents",
+        json={"name": "TEST-SoulComp-Worker", "role": "worker", "system_prompt": "Work."},
+    ).json()
+    workflow = _create_supervisor_workflow_for_test(client, supervisor["id"], [worker["id"]])
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "TEST Soul Comparison: Authoritative vs Collaborative",
+            "task_prompt": "Handle a complex customer complaint.",
+            "evaluation_config": {
+                "experiment_type": "soul_behavior_comparison",
+                "workflow_id": workflow["id"],
+                "supervisor_agent_id": supervisor["id"],
+                "soul_ids": [soul_a["id"], soul_b["id"]],
+            },
+        },
+    )
+    assert experiment.status_code == 201
+    exp = experiment.json()
+
+    run_resp = client.post(f"/experiments/{exp['id']}/run")
+    assert run_resp.status_code == 201
+    exp_run = run_resp.json()
+    assert len(exp_run["run_ids"]) == 2
+
+    comparison = exp_run["comparison_result"]
+    assert comparison["experiment_type"] == "soul_behavior_comparison"
+    assert comparison["supervisor_agent_id"] == supervisor["id"]
+    assert len(comparison["variants"]) == 2
+
+    variants = comparison["variants"]
+    soul_names = [v["soul_name"] for v in variants]
+    assert soul_a["name"] in soul_names
+    assert soul_b["name"] in soul_names
+
+    for v in variants:
+        assert "run_id" in v
+        assert "delegation_count" in v
+        assert "worker_order" in v
+        assert "total_tokens" in v
+        assert "final_output_preview" in v
+        assert "full_final_output" in v
+        assert "collaboration_graph_url" in v
+        assert v["collaboration_graph_url"].startswith("/runs/")
+
+    # Verify both runs exist and are accessible
+    for run_id in exp_run["run_ids"]:
+        run = client.get(f"/runs/{run_id}")
+        assert run.status_code == 200
+
+    # Verify collaboration graph works for both
+    for run_id in exp_run["run_ids"]:
+        graph = client.get(f"/runs/{run_id}/collaboration-graph")
+        assert graph.status_code == 200
+
+
+def test_soul_comparison_restores_original_supervisor_soul(client):
+    """After running soul comparison, the supervisor's original soul_id should be restored."""
+    soul_a = _create_soul(client, "TEST-Restore-Soul-A", decision_style="Decisive")
+    soul_b = _create_soul(client, "TEST-Restore-Soul-B", decision_style="Collaborative")
+
+    supervisor = client.post(
+        "/agents",
+        json={"name": "TEST-Restore-Supervisor", "role": "coordinator", "system_prompt": "Coordinate.", "soul_id": soul_a["id"]},
+    ).json()
+    worker = client.post(
+        "/agents",
+        json={"name": "TEST-Restore-Worker", "role": "worker", "system_prompt": "Work."},
+    ).json()
+    workflow = _create_supervisor_workflow_for_test(client, supervisor["id"], [worker["id"]])
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "TEST Soul Restore Check",
+            "task_prompt": "Test soul restoration.",
+            "evaluation_config": {
+                "experiment_type": "soul_behavior_comparison",
+                "workflow_id": workflow["id"],
+                "supervisor_agent_id": supervisor["id"],
+                "soul_ids": [soul_a["id"], soul_b["id"]],
+            },
+        },
+    ).json()
+
+    client.post(f"/experiments/{experiment['id']}/run")
+
+    # Verify supervisor soul is restored to original
+    supervisor_after = client.get(f"/agents/{supervisor['id']}").json()
+    assert supervisor_after["soul_id"] == soul_a["id"]
+
+
+def test_soul_comparison_requires_two_souls(client):
+    """Schema validation: soul_comparison needs at least 2 souls."""
+    soul = _create_soul(client, "TEST-Single-Soul")
+    supervisor = client.post(
+        "/agents",
+        json={"name": "TEST-Req-Supervisor", "role": "coordinator", "system_prompt": "Coordinate."},
+    ).json()
+    worker = client.post(
+        "/agents",
+        json={"name": "TEST-Req-Worker", "role": "worker", "system_prompt": "Work."},
+    ).json()
+    workflow = _create_supervisor_workflow_for_test(client, supervisor["id"], [worker["id"]])
+
+    resp = client.post(
+        "/experiments",
+        json={
+            "name": "TEST Bad Soul Comp",
+            "task_prompt": "Test.",
+            "evaluation_config": {
+                "experiment_type": "soul_behavior_comparison",
+                "workflow_id": workflow["id"],
+                "supervisor_agent_id": supervisor["id"],
+                "soul_ids": [soul["id"]],  # only 1 soul
+            },
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_soul_comparison_with_three_souls(client):
+    """Should work with 3 or more souls too."""
+    souls = [
+        _create_soul(client, "TEST-Triple-A", decision_style="A"),
+        _create_soul(client, "TEST-Triple-B", decision_style="B"),
+        _create_soul(client, "TEST-Triple-C", decision_style="C"),
+    ]
+    supervisor = client.post(
+        "/agents",
+        json={"name": "TEST-Triple-Supervisor", "role": "coordinator", "system_prompt": "Coordinate."},
+    ).json()
+    worker = client.post(
+        "/agents",
+        json={"name": "TEST-Triple-Worker", "role": "worker", "system_prompt": "Work."},
+    ).json()
+    workflow = _create_supervisor_workflow_for_test(client, supervisor["id"], [worker["id"]])
+
+    experiment = client.post(
+        "/experiments",
+        json={
+            "name": "TEST Triple Soul Comparison",
+            "task_prompt": "Triple comparison.",
+            "evaluation_config": {
+                "experiment_type": "soul_behavior_comparison",
+                "workflow_id": workflow["id"],
+                "supervisor_agent_id": supervisor["id"],
+                "soul_ids": [s["id"] for s in souls],
+            },
+        },
+    ).json()
+
+    exp_run = client.post(f"/experiments/{experiment['id']}/run").json()
+    assert len(exp_run["run_ids"]) == 3
+    assert len(exp_run["comparison_result"]["variants"]) == 3
+
+
 def test_force_delete_succeeds_for_experiment_with_runs(client):
     first_agent = create_agent(client, "Force Delete Agent A", "FORCE_A")
     second_agent = create_agent(client, "Force Delete Agent B", "FORCE_B")

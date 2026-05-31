@@ -332,6 +332,88 @@ export interface CollaborationChainSummary {
   status: string;
 }
 
+export interface FlowComparison {
+  variant_soul_name: string;
+  variant_soul_id: number;
+  delegation_pattern: string;
+  worker_coverage: string;
+  decision_style_observed: string;
+  instruction_style: string;
+  synthesis_approach: string;
+}
+
+export interface BehavioralDifference {
+  dimension: string;
+  observation: string;
+  variant_a_behavior: string;
+  variant_b_behavior: string;
+  significance: "clear_signal" | "suggestive" | "inconclusive";
+  confidence_rationale: string;
+}
+
+export interface ExpectedVsActual {
+  expected: string;
+  matched: string[];
+  unmatched: string[];
+  surprising: string[];
+}
+
+export interface Signals {
+  efficiency: Record<string, unknown>;
+  thoroughness: Record<string, unknown>;
+  safety: Record<string, unknown>;
+  overall_pattern: string;
+  caveat: string;
+}
+
+export interface AnalysisResult {
+  executive_summary: string;
+  flow_comparison: FlowComparison[];
+  behavioral_differences: BehavioralDifference[];
+  expected_vs_actual?: ExpectedVsActual | null;
+  signals: Signals;
+  limitations: string[];
+  recommended_next_steps: string[];
+}
+
+export interface ExperimentAnalysisResponse {
+  experiment_id: number;
+  analyzed_at: string;
+  provider: string;
+  model: string;
+  key_from_env: boolean;
+  analysis: AnalysisResult;
+}
+
+export interface SoulVariantResult {
+  soul_id: number;
+  soul_name: string;
+  run_id: number;
+  status: string;
+  delegation_count: number;
+  worker_order: number[];
+  unique_workers_used: number;
+  total_available_workers: number;
+  supervisor_iterations: number;
+  final_decision?: string | null;
+  total_tokens: number;
+  estimated_cost: number;
+  avg_instruction_length?: number | null;
+  final_output_preview: string;
+  full_final_output: string;
+  collaboration_graph_url: string;
+}
+
+export interface SoulComparisonResult {
+  experiment_type: "soul_behavior_comparison";
+  experiment_id: number;
+  workflow_id: number;
+  supervisor_agent_id: number;
+  supervisor_agent_name: string;
+  task_prompt: string;
+  variants: SoulVariantResult[];
+}
+
 export interface CollaborationGraph {
   run_id: number;
   workflow_type: string;

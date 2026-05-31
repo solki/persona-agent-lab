@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Archive, Edit, Play, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, Edit, Play, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import type { Agent, Experiment } from "@/lib/types";
+import type { Agent, AnalysisResult, Experiment, ExperimentAnalysisResponse, ExperimentRun, Soul, SoulComparisonResult, Workflow } from "@/lib/types";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
 const experimentSchema = z.object({
@@ -215,24 +215,85 @@ export function ExperimentFormPage() {
   const experimentId = id ? Number(id) : undefined;
   const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [souls, setSouls] = useState<Soul[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [experiment, setExperiment] = useState<Experiment | null>(null);
+  const [experimentRun, setExperimentRun] = useState<ExperimentRun | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [experimentType, setExperimentType] = useState<"standard" | "soul_behavior_comparison">("standard");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState<number | null>(null);
+  const [selectedSoulIds, setSelectedSoulIds] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<ExperimentAnalysisResponse | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
+  // Analysis model config
+  const [analysisProvider, setAnalysisProvider] = useState("openai_compatible");
+  const [analysisBaseUrl, setAnalysisBaseUrl] = useState("");
+  const [analysisModel, setAnalysisModel] = useState("deepseek-v4-flash");
+  const [analysisApiKey, setAnalysisApiKey] = useState("");
+  const [analysisTemperature, setAnalysisTemperature] = useState("0.1");
+  const [analysisMaxTokens, setAnalysisMaxTokens] = useState("8192");
+  const [analysisGuidance, setAnalysisGuidance] = useState("");
+  const [analysisSettingsOpen, setAnalysisSettingsOpen] = useState(false);
   const form = useForm<ExperimentFormValues>({ resolver: zodResolver(experimentSchema), defaultValues: emptyExperiment });
 
   useEffect(() => {
     async function load() {
       setError("");
       try {
-        const agentData = await api.listAgents();
+        const [agentData, soulData, workflowData] = await Promise.all([api.listAgents(), api.listSouls(), api.listWorkflows()]);
         setAgents(agentData);
+        setSouls(soulData);
+        setWorkflows(workflowData);
         if (experimentId) {
           const experimentData = await api.getExperiment(experimentId);
           setExperiment(experimentData);
           setSelectedAgentIds(experimentData.agent_ids);
           form.reset(toExperimentFormValues(experimentData));
+          const evalCfg = experimentData.evaluation_config as Record<string, unknown>;
+          if (evalCfg?.experiment_type === "soul_behavior_comparison") {
+            setExperimentType("soul_behavior_comparison");
+            setSelectedWorkflowId((evalCfg.workflow_id as number) ?? null);
+            setSelectedSupervisorId((evalCfg.supervisor_agent_id as number) ?? null);
+            setSelectedSoulIds((evalCfg.soul_ids as number[]) ?? []);
+          }
+          // Load latest experiment run for comparison display
+          try {
+            const runs = await api.listExperimentRuns(experimentId);
+            if (runs.length > 0) {
+              setExperimentRun(runs[0]);
+              // Check for existing analysis
+              const cmp = runs[0].comparison_result as Record<string, unknown> | null;
+              const aiAnalysis = cmp?.ai_analysis as Record<string, unknown> | null;
+              if (aiAnalysis?.result) {
+                setAnalysisResult({
+                  experiment_id: experimentId,
+                  analyzed_at: (aiAnalysis.analyzed_at as string) ?? "",
+                  provider: (aiAnalysis.provider as string) ?? "",
+                  model: (aiAnalysis.model as string) ?? "",
+                  key_from_env: false,
+                  analysis: aiAnalysis.result as AnalysisResult,
+                });
+              }
+            }
+          } catch {
+            // Experiment has no runs yet — that's fine
+          }
+          // Load saved analysis config
+          if (evalCfg?.analysis_config) {
+            const ac = evalCfg.analysis_config as Record<string, unknown>;
+            if (typeof ac.provider === "string") setAnalysisProvider(ac.provider);
+            if (typeof ac.base_url === "string") setAnalysisBaseUrl(ac.base_url);
+            if (typeof ac.model === "string") setAnalysisModel(ac.model);
+            if (typeof ac.temperature === "number") setAnalysisTemperature(String(ac.temperature));
+            if (typeof ac.max_tokens === "number") setAnalysisMaxTokens(String(ac.max_tokens));
+            if (typeof ac.analysis_guidance === "string") setAnalysisGuidance(ac.analysis_guidance);
+          }
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load experiment.");
@@ -242,16 +303,32 @@ export function ExperimentFormPage() {
   }, [experimentId, form]);
 
   const agentById = useMemo(() => Object.fromEntries(agents.map((agent) => [agent.id, agent.name])), [agents]);
+  const soulById = useMemo(() => Object.fromEntries(souls.map((s) => [s.id, s.name])), [souls]);
+
+  const selectedWorkflow = useMemo(
+    () => workflows.find((w) => w.id === selectedWorkflowId),
+    [workflows, selectedWorkflowId]
+  );
+  const workflowGraph = (selectedWorkflow?.graph_config ?? {}) as Record<string, unknown>;
+  const workflowSupervisorId = typeof workflowGraph.supervisor_agent_id === "number" ? workflowGraph.supervisor_agent_id : null;
+  const workflowWorkerIds: number[] = Array.isArray(workflowGraph.worker_agent_ids) ? workflowGraph.worker_agent_ids.filter((id): id is number => typeof id === "number") : [];
+
+  // Auto-populate supervisor from workflow config
+  useEffect(() => {
+    if (workflowSupervisorId !== null && selectedSupervisorId !== workflowSupervisorId && !experimentId) {
+      setSelectedSupervisorId(workflowSupervisorId);
+    }
+  }, [workflowSupervisorId, selectedSupervisorId, experimentId]);
 
   function toggleAgent(agentId: number) {
     setSelectedAgentIds((current) => current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId]);
   }
 
+  function toggleSoul(soulId: number) {
+    setSelectedSoulIds((current) => current.includes(soulId) ? current.filter((id) => id !== soulId) : [...current, soulId]);
+  }
+
   async function submit(values: ExperimentFormValues) {
-    if (selectedAgentIds.length < 2) {
-      setError("Select at least two agents for an experiment.");
-      return;
-    }
     setError("");
     setMessage("");
     let evaluationConfig: Record<string, unknown>;
@@ -261,12 +338,47 @@ export function ExperimentFormPage() {
       setError(parseError instanceof Error ? parseError.message : "Invalid evaluation config JSON.");
       return;
     }
+
+    if (experimentType === "soul_behavior_comparison") {
+      if (!selectedWorkflowId) { setError("Select a supervisor workflow."); return; }
+      if (!selectedSupervisorId) { setError("Select a supervisor agent."); return; }
+      if (selectedSoulIds.length < 2) { setError("Select at least two souls to compare."); return; }
+      evaluationConfig.experiment_type = "soul_behavior_comparison";
+      evaluationConfig.workflow_id = selectedWorkflowId;
+      evaluationConfig.supervisor_agent_id = selectedSupervisorId;
+      evaluationConfig.soul_ids = selectedSoulIds;
+    } else {
+      if (selectedAgentIds.length < 2) { setError("Select at least two agents for an experiment."); return; }
+    }
+
     try {
+      if (experimentId && editing) {
+        const updatePayload: Record<string, unknown> = {};
+        if (values.name !== experiment?.name) updatePayload.name = values.name;
+        if (values.description !== (experiment?.description ?? "")) updatePayload.description = values.description;
+        if (values.task_prompt !== experiment?.task_prompt) updatePayload.task_prompt = values.task_prompt;
+        if (evaluationConfig && JSON.stringify(evaluationConfig) !== JSON.stringify(experiment?.evaluation_config ?? {})) {
+          updatePayload.evaluation_config = evaluationConfig;
+        }
+        if (!isSoulComp) updatePayload.agent_ids = selectedAgentIds;
+        if (Object.keys(updatePayload).length > 0) {
+          await api.updateExperiment(experimentId, updatePayload);
+          setMessage("Experiment updated. Existing runs were preserved.");
+          setEditing(false);
+          // Reload
+          const updated = await api.getExperiment(experimentId);
+          setExperiment(updated);
+          form.reset(toExperimentFormValues(updated));
+        } else {
+          setEditing(false);
+        }
+        return;
+      }
       const created = await api.createExperiment({
         name: values.name,
         description: values.description,
         task_prompt: values.task_prompt,
-        agent_ids: selectedAgentIds,
+        agent_ids: experimentType === "soul_behavior_comparison" ? workflowWorkerIds : selectedAgentIds,
         evaluation_config: evaluationConfig
       });
       navigate(`/experiments/${created.id}`);
@@ -275,15 +387,43 @@ export function ExperimentFormPage() {
     }
   }
 
-  async function runExperiment() {
-    if (!experimentId) {
-      return;
+  async function runAnalysis() {
+    if (!experimentId) return;
+    setAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const payload: Record<string, unknown> = {};
+      if (analysisProvider) payload.provider = analysisProvider;
+      if (analysisBaseUrl) payload.base_url = analysisBaseUrl;
+      if (analysisModel) payload.model = analysisModel;
+      if (analysisApiKey) payload.api_key = analysisApiKey;
+      if (analysisGuidance) payload.analysis_guidance = analysisGuidance;
+      const t = parseFloat(analysisTemperature);
+      if (!isNaN(t)) payload.temperature = t;
+      const mt = parseInt(analysisMaxTokens, 10);
+      if (!isNaN(mt)) payload.max_tokens = mt;
+      const result = await api.analyzeExperiment(experimentId, payload);
+      setAnalysisResult(result);
+      // Refresh experiment run to get stored analysis
+      try {
+        const runs = await api.listExperimentRuns(experimentId);
+        if (runs.length > 0) setExperimentRun(runs[0]);
+      } catch { /* ok */ }
+    } catch (e) {
+      setAnalysisError(e instanceof Error ? e.message : "Analysis failed.");
+    } finally {
+      setAnalyzing(false);
     }
+  }
+
+  async function runExperiment() {
+    if (!experimentId) return;
     setRunning(true);
     setError("");
     try {
       const result = await api.runExperiment(experimentId);
-      setMessage(`Experiment run created with runs ${result.run_ids.join(", ")}.`);
+      setExperimentRun(result);
+      setMessage(`Experiment run completed — ${result.run_ids.length} variant(s).`);
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "Unable to run experiment.");
     } finally {
@@ -291,9 +431,11 @@ export function ExperimentFormPage() {
     }
   }
 
+  const isSoulComp = experimentType === "soul_behavior_comparison";
+
   return (
     <>
-      <PageHeader title={experimentId ? "Experiment Detail" : "New Experiment"} description="Select agents by name and preserve related workflow runs when archiving experiment history." />
+      <PageHeader title={experimentId ? "Experiment Detail" : "New Experiment"} description={isSoulComp ? "Compare how different supervisor souls affect coordination behavior on the same task." : "Select agents by name and preserve related workflow runs when archiving experiment history."} />
       <div className="space-y-4">
         {message ? <Alert title="Experiment" tone="success">{message}</Alert> : null}
         {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
@@ -301,26 +443,71 @@ export function ExperimentFormPage() {
           <CardHeader><h2 className="text-base font-semibold">Configuration</h2></CardHeader>
           <CardContent>
             <form className="grid gap-4 lg:grid-cols-2" onSubmit={form.handleSubmit(submit)}>
-              <FormField label="Name" error={form.formState.errors.name?.message}><Input {...form.register("name")} disabled={Boolean(experimentId)} /></FormField>
-              <FormField label="Description"><Textarea {...form.register("description")} disabled={Boolean(experimentId)} /></FormField>
-              <div className="lg:col-span-2">
-                <FormField label="Agents">
-                  <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
-                    {agents.map((agent) => (
-                      <label key={agent.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} disabled={Boolean(experimentId)} onChange={() => toggleAgent(agent.id)} />
-                        <span>{agent.name}</span>
-                        <StatusBadge status={agent.is_active ? "active" : "inactive"} />
-                      </label>
-                    ))}
+              <FormField label="Name" error={form.formState.errors.name?.message}><Input {...form.register("name")} disabled={Boolean(experimentId) && !editing} /></FormField>
+              <FormField label="Experiment type" help={<FieldHelp pattern="tooltip" content="Standard: compare individual agents on the same task. Soul Behavior Comparison: run the same supervisor workflow with different souls on the supervisor agent." />}>
+                <Select value={experimentType} onChange={(e) => setExperimentType(e.target.value as typeof experimentType)} disabled={Boolean(experimentId)}>
+                  <option value="standard">Standard (agent comparison)</option>
+                  <option value="soul_behavior_comparison">Soul Behavior Comparison</option>
+                </Select>
+              </FormField>
+              <FormField label="Description"><Textarea {...form.register("description")} disabled={Boolean(experimentId) && !editing} /></FormField>
+
+              {isSoulComp ? (
+                <>
+                  <div className="lg:col-span-2">
+                    <FormField label="Supervisor workflow" help={<FieldHelp pattern="tooltip" content="The supervisor workflow to run. Workers and task stay the same; only the supervisor's soul changes." />}>
+                      <Select value={selectedWorkflowId ?? ""} onChange={(e) => { const v = e.target.value; setSelectedWorkflowId(v ? Number(v) : null); setSelectedSupervisorId(null); }} disabled={Boolean(experimentId) && !editing}>
+                        <option value="">Select a workflow...</option>
+                        {workflows.filter((w) => w.workflow_type === "supervisor").map((w) => <option key={w.id} value={w.id}>{w.name} (id={w.id})</option>)}
+                      </Select>
+                    </FormField>
                   </div>
-                </FormField>
-                {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Selected: {selectedAgentIds.map((agentId) => agentById[agentId] ?? `Agent ${agentId}`).join(", ")}</p> : null}
-              </div>
-              <div className="lg:col-span-2"><FormField label="Task prompt" error={form.formState.errors.task_prompt?.message}><Textarea rows={7} {...form.register("task_prompt")} disabled={Boolean(experimentId)} /></FormField></div>
-              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation rubric" content="Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5. Additional keys may be added for custom evaluators." />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId)} /></FormField></div>
+                  {selectedWorkflowId && workflowSupervisorId ? (
+                    <div className="lg:col-span-2">
+                      <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1">
+                        <p><span className="text-muted-foreground">Supervisor:</span> {agentById[workflowSupervisorId] ?? `Agent ${workflowSupervisorId}`} (id={workflowSupervisorId})</p>
+                        <p><span className="text-muted-foreground">Workers:</span> {workflowWorkerIds.map((wid) => agentById[wid] ?? `Agent ${wid}`).join(", ")}</p>
+                        <p className="text-xs text-muted-foreground">Only the supervisor's soul will change between variants. Workers, task, and workflow stay constant.</p>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="lg:col-span-2">
+                    <FormField label="Souls to compare" help={<FieldHelp pattern="tooltip" content="Select 2 or more souls. The supervisor will be run once with each soul. Choose souls with different decision styles to see behavioral differences." />}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {souls.map((soul) => (
+                          <label key={soul.id} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={selectedSoulIds.includes(soul.id)} disabled={Boolean(experimentId) && !editing} onChange={() => toggleSoul(soul.id)} />
+                            <span>{soul.name}</span>
+                            <StatusBadge status={soul.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {selectedSoulIds.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">Selected: {selectedSoulIds.map((sid) => soulById[sid] ?? `Soul ${sid}`).join(", ")}</p> : null}
+                  </div>
+                </>
+              ) : (
+                <div className="lg:col-span-2">
+                  <FormField label="Agents">
+                    <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                      {agents.map((agent) => (
+                        <label key={agent.id} className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} disabled={Boolean(experimentId) && !editing} onChange={() => toggleAgent(agent.id)} />
+                          <span>{agent.name}</span>
+                          <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Selected: {selectedAgentIds.map((agentId) => agentById[agentId] ?? `Agent ${agentId}`).join(", ")}</p> : null}
+                </div>
+              )}
+              <div className="lg:col-span-2"><FormField label="Task prompt" error={form.formState.errors.task_prompt?.message}><Textarea rows={7} {...form.register("task_prompt")} disabled={Boolean(experimentId) && !editing} /></FormField></div>
+              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation config" content={isSoulComp ? "Auto-populated from the selections above. Contains experiment_type, workflow_id, supervisor_agent_id, and soul_ids." : "Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5."} />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId) && !editing} /></FormField></div>
               <div className="flex items-end gap-2">
-                {!experimentId ? <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : "Save experiment"}</Button> : null}
+                {!experimentId || editing ? <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : editing ? "Save changes" : "Save experiment"}</Button> : null}
+                {experimentId && !editing ? <Button type="button" variant="outline" onClick={() => setEditing(true)}>Edit experiment</Button> : null}
+                {editing ? <Button type="button" variant="outline" onClick={() => { setEditing(false); form.reset(experiment ? toExperimentFormValues(experiment) : emptyExperiment); }}>Cancel</Button> : null}
                 <Link to="/experiments"><Button type="button" variant="outline">Back to experiments</Button></Link>
               </div>
             </form>
@@ -337,10 +524,408 @@ export function ExperimentFormPage() {
                 </Button>
               </CardContent>
             </Card>
+            {experimentRun?.comparison_result ? (
+              <SoulComparisonView
+                comparison={experimentRun.comparison_result as unknown as SoulComparisonResult}
+                agentById={agentById}
+                hasAnalysis={analysisResult !== null || Boolean((experimentRun.comparison_result as Record<string, unknown>)?.ai_analysis)}
+              />
+            ) : null}
+            {/* ----- AI Analysis Section ----- */}
+            {experimentRun?.comparison_result && (experimentRun.comparison_result as Record<string, unknown>)?.experiment_type === "soul_behavior_comparison" ? (
+              <AnalysisSection
+                experimentId={experimentId}
+                analysisResult={analysisResult}
+                storedAnalysis={(experimentRun.comparison_result as Record<string, unknown>)?.ai_analysis as Record<string, unknown> | undefined}
+                analyzing={analyzing}
+                error={analysisError}
+                provider={analysisProvider}
+                baseUrl={analysisBaseUrl}
+                model={analysisModel}
+                apiKey={analysisApiKey}
+                temperature={analysisTemperature}
+                maxTokens={analysisMaxTokens}
+                guidance={analysisGuidance}
+                settingsOpen={analysisSettingsOpen}
+                onProviderChange={setAnalysisProvider}
+                onBaseUrlChange={setAnalysisBaseUrl}
+                onModelChange={setAnalysisModel}
+                onApiKeyChange={setAnalysisApiKey}
+                onTemperatureChange={setAnalysisTemperature}
+                onMaxTokensChange={setAnalysisMaxTokens}
+                onGuidanceChange={setAnalysisGuidance}
+                onSettingsToggle={() => setAnalysisSettingsOpen(!analysisSettingsOpen)}
+                onRunAnalysis={() => void runAnalysis()}
+              />
+            ) : null}
           </>
         ) : null}
       </div>
     </>
+  );
+}
+
+function SoulComparisonView({ comparison, agentById, hasAnalysis }: { comparison: SoulComparisonResult; agentById: Record<number, string>; hasAnalysis: boolean }) {
+  const [expandedOutputs, setExpandedOutputs] = useState<Record<number, boolean>>({});
+  if (comparison.experiment_type !== "soul_behavior_comparison") {
+    return null;
+  }
+  const variants = comparison.variants ?? [];
+
+  function toggleOutput(runId: number) {
+    setExpandedOutputs((prev) => ({ ...prev, [runId]: !prev[runId] }));
+  }
+
+  // --- deterministic behavior summary ---
+  type Summary = { fewerDelegations: string; fewerTokens: string; longerInstructions: string; workerCoverage: string; bothCompleted: string };
+  let behaviorSummary: Summary | null = null;
+  if (variants.length >= 2) {
+    const [a, b] = variants;
+    const aName = a.soul_name, bName = b.soul_name;
+    const totalAvail = Math.max(a.total_available_workers ?? 0, b.total_available_workers ?? 0, 0);
+    const aFull = totalAvail > 0 && a.unique_workers_used >= totalAvail;
+    const bFull = totalAvail > 0 && b.unique_workers_used >= totalAvail;
+    const coverageText = totalAvail > 0
+      ? (aFull && bFull ? "Both used all" : aFull ? `${aName} only used all` : bFull ? `${bName} only used all` : "Neither used all")
+      : "Worker count unknown";
+    behaviorSummary = {
+      fewerDelegations: a.delegation_count < b.delegation_count ? aName : b.delegation_count < a.delegation_count ? bName : "Same",
+      fewerTokens: a.total_tokens < b.total_tokens ? aName : b.total_tokens < a.total_tokens ? bName : "Same",
+      longerInstructions: (a.avg_instruction_length ?? 0) > (b.avg_instruction_length ?? 0) ? aName : (b.avg_instruction_length ?? 0) > (a.avg_instruction_length ?? 0) ? bName : "Similar",
+      workerCoverage: coverageText,
+      bothCompleted: [a, b].every((v) => v.status === "completed") ? "Both completed" : "One or more did not complete",
+    };
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-base font-semibold">Soul Comparison Results</h2>
+        <p className="text-sm text-muted-foreground">
+          Supervisor: {comparison.supervisor_agent_name} · {variants.length} soul variants compared
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {variants.length === 0 ? <EmptyState title="No variants" body="Run the experiment to see comparison data." /> : null}
+
+        {/* Behavior difference summary */}
+        {behaviorSummary ? (
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+            <p className="font-semibold mb-2">Behavior Signals</p>
+            <div className="grid gap-1 text-xs md:grid-cols-3">
+              <p><span className="text-muted-foreground">Fewer delegations:</span> {behaviorSummary.fewerDelegations}</p>
+              <p><span className="text-muted-foreground">Fewer tokens:</span> {behaviorSummary.fewerTokens}</p>
+              <p><span className="text-muted-foreground">Longer instructions:</span> {behaviorSummary.longerInstructions}</p>
+              <p><span className="text-muted-foreground">Worker coverage:</span> {behaviorSummary.workerCoverage} {variants.map((v) => `${v.soul_name}: ${v.unique_workers_used}/${v.total_available_workers ?? "?"}`).join(", ")}</p>
+              <p className="md:col-span-2"><span className="text-muted-foreground">Completion:</span> {behaviorSummary.bothCompleted}</p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground italic">
+              These are observable metrics, not quality judgments. {hasAnalysis ? "" : "Run AI analysis below for behavioral interpretation."}
+            </p>
+            {hasAnalysis ? <p className="text-xs"><a href="#ai-analysis" className="text-primary hover:underline">See AI analysis below for interpretation →</a></p> : null}
+          </div>
+        ) : null}
+
+        {/* Metrics table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Soul</th>
+                <th className="py-2 pr-3 font-medium">Run</th>
+                <th className="py-2 pr-3 font-medium">Status</th>
+                <th className="py-2 pr-3 font-medium">Deleg.</th>
+                <th className="py-2 pr-3 font-medium">Workers</th>
+                <th className="py-2 pr-3 font-medium">Iter.</th>
+                <th className="py-2 pr-3 font-medium">Tokens</th>
+                <th className="py-2 pr-3 font-medium">Decision</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.map((v) => (
+                <tr key={v.run_id} className="border-b border-border hover:bg-muted/30">
+                  <td className="py-2 pr-3 font-medium">{v.soul_name}</td>
+                  <td className="py-2 pr-3"><Link to={`/runs/${v.run_id}`} className="text-primary hover:underline">#{v.run_id}</Link></td>
+                  <td className="py-2 pr-3"><StatusBadge status={v.status} /></td>
+                  <td className="py-2 pr-3">{v.delegation_count}</td>
+                  <td className="py-2 pr-3">{v.unique_workers_used}</td>
+                  <td className="py-2 pr-3">{v.supervisor_iterations}</td>
+                  <td className="py-2 pr-3">{v.total_tokens}</td>
+                  <td className="py-2 pr-3">{v.final_decision ?? "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Expandable variant panels */}
+        <div className="grid gap-3 md:grid-cols-2">
+          {variants.map((v) => {
+            const isExpanded = expandedOutputs[v.run_id] ?? false;
+            const workerList = v.worker_order.length > 0 ? v.worker_order : [];
+            // Numbered step list with repeated-worker detection
+            const seen: Record<number, number> = {};
+            const numberedSteps: { id: number; name: string; occurrence: number }[] = [];
+            for (const wid of workerList) {
+              seen[wid] = (seen[wid] ?? 0) + 1;
+              numberedSteps.push({ id: wid, name: agentById[wid] ?? `Agent ${wid}`, occurrence: seen[wid] });
+            }
+
+            return (
+              <Card key={v.run_id}>
+                <CardHeader className="pb-1">
+                  <h3 className="text-sm font-semibold">{v.soul_name}<span className="ml-2 text-xs text-muted-foreground font-normal">Run #{v.run_id}</span></h3>
+                </CardHeader>
+                <CardContent className="text-xs space-y-2">
+                  {/* Worker delegation steps */}
+                  <div>
+                    <span className="text-muted-foreground font-medium">Delegation order:</span>
+                    {workerList.length === 0 ? (
+                      <p className="text-muted-foreground">None delegated</p>
+                    ) : (
+                      <ol className="mt-1 space-y-0.5 list-decimal pl-5">
+                        {numberedSteps.map((s, i) => (
+                          <li key={i}>
+                            {s.name}
+                            {s.occurrence > 1 ? <span className="ml-1 text-muted-foreground">(×{s.occurrence})</span> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                  {v.avg_instruction_length != null ? <p><span className="text-muted-foreground font-medium">Avg instruction length:</span> {Math.round(v.avg_instruction_length)} chars</p> : null}
+                  <p><span className="text-muted-foreground font-medium">Tokens:</span> {v.total_tokens} total</p>
+
+                  {/* Expandable final output */}
+                  <div>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                      onClick={() => toggleOutput(v.run_id)}
+                    >
+                      {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      Final output {isExpanded ? "" : `(${v.final_output_preview.slice(0, 60)}...)`}
+                    </button>
+                    {!isExpanded && v.final_output_preview ? (
+                      <p className="mt-1 text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">{v.final_output_preview}</p>
+                    ) : null}
+                    {isExpanded ? (
+                      <div className="mt-1 max-h-80 overflow-y-auto rounded border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
+                        {v.full_final_output || v.final_output_preview || "(no output available)"}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <Link to={`/runs/${v.run_id}`}><Button type="button" variant="outline" size="sm">Run Detail</Button></Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AnalysisSection(props: {
+  experimentId: number | undefined;
+  analysisResult: ExperimentAnalysisResponse | null;
+  storedAnalysis?: Record<string, unknown>;
+  analyzing: boolean;
+  error: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  temperature: string;
+  maxTokens: string;
+  guidance: string;
+  settingsOpen: boolean;
+  onProviderChange: (v: string) => void;
+  onBaseUrlChange: (v: string) => void;
+  onModelChange: (v: string) => void;
+  onApiKeyChange: (v: string) => void;
+  onTemperatureChange: (v: string) => void;
+  onMaxTokensChange: (v: string) => void;
+  onGuidanceChange: (v: string) => void;
+  onSettingsToggle: () => void;
+  onRunAnalysis: () => void;
+}) {
+  // Use storedAnalysis from experiment run as fallback (survives refresh)
+  const storedResult = props.storedAnalysis?.result as AnalysisResult | undefined;
+  const a = props.analysisResult?.analysis ?? storedResult;
+  const storedMeta = props.storedAnalysis;
+  const hasResult = Boolean(a);
+
+  return (
+    <Card id="ai-analysis">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">AI Experiment Analysis</h2>
+          <Button type="button" variant="outline" size="sm" onClick={props.onSettingsToggle}>
+            {props.settingsOpen ? "Hide Settings" : "Analysis Settings"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {props.settingsOpen ? (
+          <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-3 md:grid-cols-2">
+            <FormField label="Provider">
+              <Select value={props.provider} onChange={(e) => props.onProviderChange(e.target.value)}>
+                <option value="mock">mock</option>
+                <option value="openai_compatible">openai_compatible</option>
+              </Select>
+            </FormField>
+            <FormField label="Model"><Input value={props.model} onChange={(e) => props.onModelChange(e.target.value)} placeholder="deepseek-v4-flash" /></FormField>
+            <FormField label="Base URL"><Input value={props.baseUrl} onChange={(e) => props.onBaseUrlChange(e.target.value)} placeholder="https://api.deepseek.com" /></FormField>
+            <FormField label="API Key" help={<FieldHelp pattern="tooltip" content="Sent only for this analysis request. Never stored. Falls back to environment variable if empty." />}>
+              <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder={props.analysisResult?.key_from_env || props.storedAnalysis ? "(from environment)" : "sk-..."} />
+            </FormField>
+            <FormField label="Temperature"><Input value={props.temperature} onChange={(e) => props.onTemperatureChange(e.target.value)} placeholder="0.1" /></FormField>
+            <FormField label="Max Tokens"><Input value={props.maxTokens} onChange={(e) => props.onMaxTokensChange(e.target.value)} placeholder="8192" /></FormField>
+            <div className="md:col-span-2">
+              <FormField label="Analysis Guidance" help={<FieldHelp pattern="tooltip" content="Optional. Add extra focus areas for this analysis. Platform rules (structured JSON, no winner claims, task-goal-first evaluation) still apply." />}>
+                <Textarea rows={3} value={props.guidance} onChange={(e) => props.onGuidanceChange(e.target.value)} placeholder="e.g. Focus on whether outputs match the requested deliverable. Flag unsupported operational commitments or timeline promises." />
+              </FormField>
+            </div>
+          </div>
+        ) : null}
+        {props.error ? (
+          <div className="space-y-2">
+            <Alert title="Analysis Error" tone="error">
+              <div>
+                <p className="text-sm">{props.error.slice(0, 300)}{props.error.length > 300 ? "..." : ""}</p>
+                <p className="mt-2 text-xs text-muted-foreground">Try increasing max_tokens or using a model with stronger JSON output (e.g. deepseek-v4-pro or gpt-4o).</p>
+                {props.error.length > 300 ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-primary hover:underline">Show raw error</summary>
+                    <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">{props.error}</pre>
+                  </details>
+                ) : null}
+              </div>
+            </Alert>
+          </div>
+        ) : null}
+        {props.analyzing ? (
+          <div className="rounded-md border border-border bg-muted/30 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" style={{ animationDelay: "0ms" }} />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" style={{ animationDelay: "200ms" }} />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" style={{ animationDelay: "400ms" }} />
+              </div>
+              <p className="text-sm font-medium">Analyzing experiment data with {props.model || "LLM"}...</p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground animate-pulse">Comparing delegation patterns, worker sequences, token usage, and generating structured insights...</p>
+          </div>
+        ) : hasResult ? null : (
+          <Button type="button" onClick={props.onRunAnalysis} disabled={props.analyzing}>
+            {props.analyzing ? "Analyzing..." : "Run Analysis"}
+          </Button>
+        )}
+        {hasResult && a ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Analyzed with {props.analysisResult?.provider ?? (storedMeta?.provider as string) ?? "unknown"}/{props.analysisResult?.model ?? (storedMeta?.model as string) ?? "unknown"}</span>
+              <span>·</span>
+              <span>{new Date(props.analysisResult?.analyzed_at ?? (storedMeta?.analyzed_at as string) ?? "").toLocaleString()}</span>
+              <Button type="button" variant="outline" size="sm" onClick={props.onRunAnalysis} disabled={props.analyzing}>Re-run</Button>
+            </div>
+            {/* Executive Summary */}
+            <div className="rounded-md border border-border bg-muted/30 p-4">
+              <h3 className="text-sm font-semibold mb-1">Executive Summary</h3>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{a.executive_summary}</p>
+            </div>
+            {/* Flow Comparison */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Flow Comparison</h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {a.flow_comparison.map((fc, i) => (
+                  <div key={i} className="rounded-md border border-border p-3">
+                    <p className="text-sm font-semibold">{fc.variant_soul_name}</p>
+                    <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                      <p><span className="font-medium">Pattern:</span> {fc.delegation_pattern}</p>
+                      <p><span className="font-medium">Coverage:</span> {fc.worker_coverage}</p>
+                      <p><span className="font-medium">Decision style:</span> {fc.decision_style_observed}</p>
+                      <p><span className="font-medium">Instructions:</span> {fc.instruction_style}</p>
+                      <p><span className="font-medium">Synthesis:</span> {fc.synthesis_approach}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Behavioral Differences */}
+            {a.behavioral_differences.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Behavioral Differences</h3>
+                <div className="space-y-2">
+                  {a.behavioral_differences.map((bd, i) => (
+                    <div key={i} className="rounded-md border border-border p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-medium">{bd.dimension}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${bd.significance === "clear_signal" ? "bg-green-100 text-green-800" : bd.significance === "suggestive" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"}`}>{bd.significance}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{bd.observation}</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded bg-muted/50 p-2"><span className="font-medium">Variant A:</span> {bd.variant_a_behavior}</div>
+                        <div className="rounded bg-muted/50 p-2"><span className="font-medium">Variant B:</span> {bd.variant_b_behavior}</div>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground italic">{bd.confidence_rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {/* Expected vs Actual */}
+            {a.expected_vs_actual ? (
+              <div className="rounded-md border border-border p-3">
+                <h3 className="text-sm font-semibold mb-2">Expected vs Actual</h3>
+                <p className="text-xs text-muted-foreground mb-2">Expected: {a.expected_vs_actual.expected.slice(0, 200)}</p>
+                <div className="grid gap-2 md:grid-cols-3 text-xs">
+                  <div className="rounded bg-green-50 p-2"><span className="font-medium text-green-800">Matched:</span><ul className="list-disc pl-4 mt-1">{a.expected_vs_actual.matched.map((m, i) => <li key={i}>{m}</li>)}</ul></div>
+                  <div className="rounded bg-amber-50 p-2"><span className="font-medium text-amber-800">Unmatched:</span><ul className="list-disc pl-4 mt-1">{a.expected_vs_actual.unmatched.map((m, i) => <li key={i}>{m}</li>)}</ul></div>
+                  <div className="rounded bg-blue-50 p-2"><span className="font-medium text-blue-800">Surprising:</span><ul className="list-disc pl-4 mt-1">{a.expected_vs_actual.surprising.map((m, i) => <li key={i}>{m}</li>)}</ul></div>
+                </div>
+              </div>
+            ) : null}
+            {/* Signals */}
+            <div className="rounded-md border border-border p-3">
+              <h3 className="text-sm font-semibold mb-2">Signals</h3>
+              <div className="grid gap-2 md:grid-cols-3 text-sm">
+                {(["efficiency", "thoroughness", "safety"] as const).map((key) => {
+                  const s = a?.signals?.[key] as Record<string, unknown> | undefined;
+                  return (
+                    <div key={key} className="rounded bg-muted/30 p-2">
+                      <span className="font-medium capitalize">{key}</span>
+                      <p className="text-xs text-muted-foreground mt-1">{s?.observation ? String(s.observation) : "-"}</p>
+                      {s?.rationale ? <p className="text-xs text-muted-foreground italic mt-0.5">{String(s.rationale)}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-sm">{a?.signals?.overall_pattern ?? ""}</p>
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded p-2 italic">⚠️ {a?.signals?.caveat ? String(a.signals.caveat) : ""}</p>
+            </div>
+            {/* Limitations */}
+            {a.limitations.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Limitations</h3>
+                <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-0.5">{a.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul>
+              </div>
+            ) : null}
+            {/* Next Steps */}
+            {a.recommended_next_steps.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Recommended Next Steps</h3>
+                <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-0.5">{a.recommended_next_steps.map((s, i) => <li key={i}>{s}</li>)}</ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
