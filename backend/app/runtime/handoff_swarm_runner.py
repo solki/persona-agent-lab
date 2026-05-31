@@ -8,6 +8,7 @@ Reuses ActionParseResult pattern from action_decision_parser and the
 HandoffEngine for policy enforcement.
 """
 
+import json
 from datetime import datetime
 from typing import Any
 
