@@ -103,7 +103,7 @@ class HandoffSwarmRunner:
             observatory_service.start_execution(self.db, execution)
 
             assembled = self._assemble_handoff_context(
-                current_agent, current_task, handoff_chain, original_task,
+                current_agent, current_task, handoff_chain, original_task, participants,
             )
             self._emit_context_events(run.id, current_agent.id, execution, assembled)
 
@@ -275,21 +275,50 @@ class HandoffSwarmRunner:
             self.db, run.id, agent, sequence_index, input_payload, provider=self.settings.llm_provider,
         )
 
-    def _assemble_handoff_context(self, agent: Agent, task: str, chain: list[dict], original_task: str) -> Any:
+    def _assemble_handoff_context(self, agent: Agent, task: str, chain: list[dict], original_task: str, participants: list[Agent]) -> Any:
         chain_text = "No prior handoffs."
         if chain:
             lines = [f"{i+1}. {h['from_agent_name']} → {h['to_agent_name']}: {h['payload_summary']}" for i, h in enumerate(chain)]
             chain_text = "\n".join(lines)
 
+        # Calculate available handoff targets:
+        # participants ∩ handoff_policy.allowed_agent_ids, excluding self
+        handoff_policy = agent.handoff_policy or {}
+        allow_handoff = handoff_policy.get("allow_handoff", False)
+        sender_allowed = set(handoff_policy.get("allowed_agent_ids", []))
+        participant_ids = {p.id for p in participants}
+
+        targets_text = "No handoff targets are currently available. You must finish or explain why you cannot proceed."
+        if allow_handoff and sender_allowed:
+            available = []
+            for p in participants:
+                if p.id == agent.id:
+                    continue
+                if p.id in sender_allowed and p.id in participant_ids and p.is_active:
+                    available.append(
+                        f"- Agent ID: {p.id}\n"
+                        f"  Name: {p.name}\n"
+                        f"  Role: {p.role}\n"
+                        f"  Description: {p.description or 'No description.'}"
+                    )
+            if available:
+                targets_text = "\n".join(available)
+
         enriched_task = (
-            f"## Current task\n{task}\n\n"
+            f"{task}\n\n"
             f"## Original workflow task\n{original_task}\n\n"
             f"## Handoff chain so far\n{chain_text}\n\n"
+            f"## Available handoff targets\n{targets_text}\n\n"
             "## Output format instruction\n"
             "You MUST respond with a JSON object. Choose one of:\n"
-            '{"action": "handoff", "target_agent_id": <int>, "payload": {"summary": "...", "key_findings": [...], "requested_work": "..."}, "reasoning": "..."}\n'
+            '{"action": "handoff", "target_agent_id": <int from available targets above>, "payload": {"summary": "...", "key_findings": [...], "requested_work": "..."}, "reasoning": "..."}\n'
             '{"action": "finish", "final_response": "<your complete response>", "reasoning": "..."}\n'
-            "Do not include any text outside the JSON object."
+            "Rules:\n"
+            "- Choose target_agent_id ONLY from the available handoff targets listed above.\n"
+            "- Do not invent target_agent_id values.\n"
+            "- Do not use agent names instead of numeric target_agent_id.\n"
+            "- If the specialist you need is not available, finish with a clear explanation or choose the closest allowed target.\n"
+            "- Do not include any text outside the JSON object."
         )
         return self.context_assembler.assemble(agent.id, enriched_task)
 

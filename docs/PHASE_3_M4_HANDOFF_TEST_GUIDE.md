@@ -15,12 +15,12 @@ Create three agents with handoff policies. Use `openai_compatible` provider for 
 {
   "name": "TEST-Handoff-Triage",
   "role": "escalation-triage",
-  "system_prompt": "You are an escalation triage specialist. Analyze the task. If risk assessment is needed and not yet done, hand off to the Policy Guardrail Agent (target_agent_id). Once all checks are complete, finish with a final response. Output JSON only: {action: handoff|finish, target_agent_id, payload: {summary, key_findings, requested_work}, reasoning} or {action: finish, final_response, reasoning}.",
+  "system_prompt": "You are an escalation triage specialist. Analyze the task. If risk assessment is needed, hand off to the policy/compliance specialist. If a customer response is needed, hand off to the response writer. Once all checks are complete, finish with a final response. Output JSON only with action, target_agent_id (from the available targets provided in context), payload, and reasoning.",
   "llm_provider": "openai_compatible",
   "model": "deepseek-v4-flash",
   "handoff_policy": {
     "allow_handoff": true,
-    "allowed_agent_ids": [<policy_agent_id>]
+    "allowed_agent_ids": [<policy_agent_id>, <writer_agent_id>]
   }
 }
 ```
@@ -30,7 +30,7 @@ Create three agents with handoff policies. Use `openai_compatible` provider for 
 {
   "name": "TEST-Handoff-Policy",
   "role": "policy-guardrail",
-  "system_prompt": "You are a policy compliance guard. Review the handoff payload for policy risks. If a customer response is needed and not yet drafted, hand off to the Customer Response Writer. Otherwise finish with your compliance assessment. Output JSON only.",
+  "system_prompt": "You are a policy compliance guard. Review the handoff payload for policy risks. If a customer response is needed, hand off to the response/customer specialist. Otherwise finish with your compliance assessment. Output JSON only.",
   "llm_provider": "openai_compatible",
   "model": "deepseek-v4-flash",
   "handoff_policy": {
@@ -54,6 +54,26 @@ Create three agents with handoff policies. Use `openai_compatible` provider for 
   }
 }
 ```
+
+> **Important**: Do NOT hardcode numeric `target_agent_id` in system prompts. Use role-based language like "hand off to the policy specialist." The runtime automatically injects available handoff targets with their IDs into each agent's context.
+
+## Runtime-injected handoff targets
+
+The handoff runtime automatically injects available targets into each agent's context prompt. Agents see a section like:
+
+```
+## Available handoff targets
+- Agent ID: 626
+  Name: TEST-Handoff-Policy
+  Role: policy-guardrail
+  Description: Reviews refund, compliance, promise, legal, and safety risks.
+- Agent ID: 627
+  Name: TEST-Handoff-Writer
+  Role: customer-response-writer
+  Description: Drafts safe, empathetic customer responses.
+```
+
+Targets are computed as: `participant_agent_ids ∩ handoff_policy.allowed_agent_ids`, minus the current agent, filtered to active agents only. If no targets are available, agents see: "No handoff targets are currently available. You must finish or explain why you cannot proceed."
 
 ## Scenario A: Normal handoff chain
 
