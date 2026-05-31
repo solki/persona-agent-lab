@@ -393,6 +393,7 @@ export interface SoulVariantResult {
   delegation_count: number;
   worker_order: number[];
   unique_workers_used: number;
+  total_available_workers: number;
   supervisor_iterations: number;
   final_decision?: string | null;
   total_tokens: number;

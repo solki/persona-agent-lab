@@ -217,7 +217,8 @@ def _run_soul_comparison(db: Session, experiment: Experiment) -> ExperimentRun:
             db.refresh(supervisor)
 
         run_ids.append(run.id)
-        variant_data = _collect_variant_metrics(db, run, soul)
+        total_workers = len(workflow.graph_config.get("worker_agent_ids", []))
+        variant_data = _collect_variant_metrics(db, run, soul, total_workers)
         variants.append(variant_data)
 
     experiment_run = ExperimentRun(
@@ -239,7 +240,7 @@ def _run_soul_comparison(db: Session, experiment: Experiment) -> ExperimentRun:
     return experiment_run
 
 
-def _collect_variant_metrics(db: Session, run, soul) -> dict:
+def _collect_variant_metrics(db: Session, run, soul, total_available_workers: int = 0) -> dict:
     """Collect comparison metrics for one soul variant from run observatory data."""
     from app.services import collaboration_service, observatory_service
 
@@ -270,6 +271,7 @@ def _collect_variant_metrics(db: Session, run, soul) -> dict:
         "total_tokens": tokens.get("total_tokens", 0),
         "estimated_cost": tokens.get("estimated_cost", 0.0),
         "avg_instruction_length": avg_instruction_len,
+        "total_available_workers": total_available_workers,
         "final_output_preview": final_output[:300] if final_output else "",
         "full_final_output": final_output or "",
         "collaboration_graph_url": f"/runs/{run.id}/collaboration-graph",

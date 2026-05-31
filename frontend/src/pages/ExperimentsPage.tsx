@@ -238,6 +238,7 @@ export function ExperimentFormPage() {
   const [analysisApiKey, setAnalysisApiKey] = useState("");
   const [analysisTemperature, setAnalysisTemperature] = useState("0.1");
   const [analysisMaxTokens, setAnalysisMaxTokens] = useState("8192");
+  const [analysisGuidance, setAnalysisGuidance] = useState("");
   const [analysisSettingsOpen, setAnalysisSettingsOpen] = useState(false);
   const form = useForm<ExperimentFormValues>({ resolver: zodResolver(experimentSchema), defaultValues: emptyExperiment });
 
@@ -291,6 +292,7 @@ export function ExperimentFormPage() {
             if (typeof ac.model === "string") setAnalysisModel(ac.model);
             if (typeof ac.temperature === "number") setAnalysisTemperature(String(ac.temperature));
             if (typeof ac.max_tokens === "number") setAnalysisMaxTokens(String(ac.max_tokens));
+            if (typeof ac.analysis_guidance === "string") setAnalysisGuidance(ac.analysis_guidance);
           }
         }
       } catch (loadError) {
@@ -395,6 +397,7 @@ export function ExperimentFormPage() {
       if (analysisBaseUrl) payload.base_url = analysisBaseUrl;
       if (analysisModel) payload.model = analysisModel;
       if (analysisApiKey) payload.api_key = analysisApiKey;
+      if (analysisGuidance) payload.analysis_guidance = analysisGuidance;
       const t = parseFloat(analysisTemperature);
       if (!isNaN(t)) payload.temperature = t;
       const mt = parseInt(analysisMaxTokens, 10);
@@ -535,6 +538,7 @@ export function ExperimentFormPage() {
                 apiKey={analysisApiKey}
                 temperature={analysisTemperature}
                 maxTokens={analysisMaxTokens}
+                guidance={analysisGuidance}
                 settingsOpen={analysisSettingsOpen}
                 onProviderChange={setAnalysisProvider}
                 onBaseUrlChange={setAnalysisBaseUrl}
@@ -542,6 +546,7 @@ export function ExperimentFormPage() {
                 onApiKeyChange={setAnalysisApiKey}
                 onTemperatureChange={setAnalysisTemperature}
                 onMaxTokensChange={setAnalysisMaxTokens}
+                onGuidanceChange={setAnalysisGuidance}
                 onSettingsToggle={() => setAnalysisSettingsOpen(!analysisSettingsOpen)}
                 onRunAnalysis={() => void runAnalysis()}
               />
@@ -565,16 +570,22 @@ function SoulComparisonView({ comparison, agentById, hasAnalysis }: { comparison
   }
 
   // --- deterministic behavior summary ---
-  type Summary = { fewerDelegations: string; fewerTokens: string; longerInstructions: string; usedAllWorkers: string; bothCompleted: string };
+  type Summary = { fewerDelegations: string; fewerTokens: string; longerInstructions: string; workerCoverage: string; bothCompleted: string };
   let behaviorSummary: Summary | null = null;
   if (variants.length >= 2) {
     const [a, b] = variants;
     const aName = a.soul_name, bName = b.soul_name;
+    const totalAvail = Math.max(a.total_available_workers ?? 0, b.total_available_workers ?? 0, 0);
+    const aFull = totalAvail > 0 && a.unique_workers_used >= totalAvail;
+    const bFull = totalAvail > 0 && b.unique_workers_used >= totalAvail;
+    const coverageText = totalAvail > 0
+      ? (aFull && bFull ? "Both used all" : aFull ? `${aName} only used all` : bFull ? `${bName} only used all` : "Neither used all")
+      : "Worker count unknown";
     behaviorSummary = {
       fewerDelegations: a.delegation_count < b.delegation_count ? aName : b.delegation_count < a.delegation_count ? bName : "Same",
       fewerTokens: a.total_tokens < b.total_tokens ? aName : b.total_tokens < a.total_tokens ? bName : "Same",
       longerInstructions: (a.avg_instruction_length ?? 0) > (b.avg_instruction_length ?? 0) ? aName : (b.avg_instruction_length ?? 0) > (a.avg_instruction_length ?? 0) ? bName : "Similar",
-      usedAllWorkers: [a, b].every((v) => v.unique_workers_used === v.worker_order.length) ? "Both" : [a, b].filter((v) => v.unique_workers_used === v.worker_order.length).map((v) => v.soul_name).join(", ") || "Neither fully",
+      workerCoverage: coverageText,
       bothCompleted: [a, b].every((v) => v.status === "completed") ? "Both completed" : "One or more did not complete",
     };
   }
@@ -598,7 +609,7 @@ function SoulComparisonView({ comparison, agentById, hasAnalysis }: { comparison
               <p><span className="text-muted-foreground">Fewer delegations:</span> {behaviorSummary.fewerDelegations}</p>
               <p><span className="text-muted-foreground">Fewer tokens:</span> {behaviorSummary.fewerTokens}</p>
               <p><span className="text-muted-foreground">Longer instructions:</span> {behaviorSummary.longerInstructions}</p>
-              <p><span className="text-muted-foreground">All workers used:</span> {behaviorSummary.usedAllWorkers}</p>
+              <p><span className="text-muted-foreground">Worker coverage:</span> {behaviorSummary.workerCoverage} {variants.map((v) => `${v.soul_name}: ${v.unique_workers_used}/${v.total_available_workers ?? "?"}`).join(", ")}</p>
               <p className="md:col-span-2"><span className="text-muted-foreground">Completion:</span> {behaviorSummary.bothCompleted}</p>
             </div>
             <p className="mt-2 text-xs text-muted-foreground italic">
@@ -722,6 +733,7 @@ function AnalysisSection(props: {
   apiKey: string;
   temperature: string;
   maxTokens: string;
+  guidance: string;
   settingsOpen: boolean;
   onProviderChange: (v: string) => void;
   onBaseUrlChange: (v: string) => void;
@@ -729,6 +741,7 @@ function AnalysisSection(props: {
   onApiKeyChange: (v: string) => void;
   onTemperatureChange: (v: string) => void;
   onMaxTokensChange: (v: string) => void;
+  onGuidanceChange: (v: string) => void;
   onSettingsToggle: () => void;
   onRunAnalysis: () => void;
 }) {
@@ -760,7 +773,12 @@ function AnalysisSection(props: {
               <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder={props.analysisResult?.key_from_env ? "(from environment)" : "sk-..."} />
             </FormField>
             <FormField label="Temperature"><Input value={props.temperature} onChange={(e) => props.onTemperatureChange(e.target.value)} placeholder="0.1" /></FormField>
-            <FormField label="Max Tokens"><Input value={props.maxTokens} onChange={(e) => props.onMaxTokensChange(e.target.value)} placeholder="4096" /></FormField>
+            <FormField label="Max Tokens"><Input value={props.maxTokens} onChange={(e) => props.onMaxTokensChange(e.target.value)} placeholder="8192" /></FormField>
+            <div className="md:col-span-2">
+              <FormField label="Analysis Guidance" help={<FieldHelp pattern="tooltip" content="Optional. Add extra focus areas for this analysis. Platform rules (structured JSON, no winner claims, task-goal-first evaluation) still apply." />}>
+                <Textarea rows={3} value={props.guidance} onChange={(e) => props.onGuidanceChange(e.target.value)} placeholder="e.g. Focus on whether outputs match the requested deliverable. Flag unsupported operational commitments or timeline promises." />
+              </FormField>
+            </div>
           </div>
         ) : null}
         {props.error ? (
