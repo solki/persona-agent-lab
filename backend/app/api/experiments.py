@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.analysis import ExperimentAnalysisRequest, ExperimentAnalysisResponse
-from app.schemas.experiments import ExperimentArchiveResponse, ExperimentCreate, ExperimentRead, ExperimentRunRead
+from app.schemas.experiments import ExperimentArchiveResponse, ExperimentCreate, ExperimentRead, ExperimentRunRead, ExperimentUpdate
 from app.services import experiment_analysis_service, experiment_service
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -29,6 +29,12 @@ def create_experiment(payload: ExperimentCreate, db: Session = Depends(get_db)):
 @router.get("/{experiment_id}", response_model=ExperimentRead)
 def get_experiment(experiment_id: int, db: Session = Depends(get_db)):
     return require_experiment(db, experiment_id)
+
+
+@router.put("/{experiment_id}", response_model=ExperimentRead)
+def update_experiment(experiment_id: int, payload: ExperimentUpdate, db: Session = Depends(get_db)):
+    experiment = require_experiment(db, experiment_id)
+    return experiment_service.update_experiment(db, experiment, payload)
 
 
 @router.delete("/{experiment_id}")

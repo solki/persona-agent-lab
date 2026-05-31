@@ -137,6 +137,7 @@ export const api = {
   archiveExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/archive`, { method: "POST" }),
   activateExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/activate`, { method: "POST" }),
   runExperiment: (id: number) => request<ExperimentRun>(`/experiments/${id}/run`, { method: "POST" }),
+  updateExperiment: (id: number, payload: JsonBody) => request<Experiment>(`/experiments/${id}`, body("PUT", payload)),
   listExperimentRuns: (id: number) => request<ExperimentRun[]>(`/experiments/${id}/runs`),
   analyzeExperiment: (id: number, payload: Record<string, unknown>) =>
     request<ExperimentAnalysisResponse>(`/experiments/${id}/analyze`, body("POST", payload)),

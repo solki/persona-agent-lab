@@ -30,6 +30,14 @@ class ExperimentCreate(ExperimentBase):
         return self
 
 
+class ExperimentUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    task_prompt: Optional[str] = Field(default=None, min_length=1)
+    agent_ids: Optional[list[int]] = None
+    evaluation_config: Optional[dict[str, Any]] = None
+
+
 class ExperimentRead(ExperimentBase):
     id: int
     archived_at: Optional[datetime] = None

@@ -29,6 +29,15 @@ def list_experiment_runs(db: Session, experiment_id: int) -> list[ExperimentRun]
     return list(db.scalars(statement).all())
 
 
+def update_experiment(db: Session, experiment: Experiment, payload) -> Experiment:
+    updates = payload.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        setattr(experiment, key, value)
+    db.commit()
+    db.refresh(experiment)
+    return experiment
+
+
 def create_experiment(db: Session, payload: ExperimentCreate) -> Experiment:
     experiment = Experiment(**payload.model_dump())
     db.add(experiment)

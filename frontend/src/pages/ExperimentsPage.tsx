@@ -227,6 +227,7 @@ export function ExperimentFormPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<ExperimentAnalysisResponse | null>(null);
   const [analysisError, setAnalysisError] = useState("");
@@ -349,6 +350,28 @@ export function ExperimentFormPage() {
     }
 
     try {
+      if (experimentId && editing) {
+        const updatePayload: Record<string, unknown> = {};
+        if (values.name !== experiment?.name) updatePayload.name = values.name;
+        if (values.description !== (experiment?.description ?? "")) updatePayload.description = values.description;
+        if (values.task_prompt !== experiment?.task_prompt) updatePayload.task_prompt = values.task_prompt;
+        if (evaluationConfig && JSON.stringify(evaluationConfig) !== JSON.stringify(experiment?.evaluation_config ?? {})) {
+          updatePayload.evaluation_config = evaluationConfig;
+        }
+        if (!isSoulComp) updatePayload.agent_ids = selectedAgentIds;
+        if (Object.keys(updatePayload).length > 0) {
+          await api.updateExperiment(experimentId, updatePayload);
+          setMessage("Experiment updated. Existing runs were preserved.");
+          setEditing(false);
+          // Reload
+          const updated = await api.getExperiment(experimentId);
+          setExperiment(updated);
+          form.reset(toExperimentFormValues(updated));
+        } else {
+          setEditing(false);
+        }
+        return;
+      }
       const created = await api.createExperiment({
         name: values.name,
         description: values.description,
@@ -417,20 +440,20 @@ export function ExperimentFormPage() {
           <CardHeader><h2 className="text-base font-semibold">Configuration</h2></CardHeader>
           <CardContent>
             <form className="grid gap-4 lg:grid-cols-2" onSubmit={form.handleSubmit(submit)}>
-              <FormField label="Name" error={form.formState.errors.name?.message}><Input {...form.register("name")} disabled={Boolean(experimentId)} /></FormField>
+              <FormField label="Name" error={form.formState.errors.name?.message}><Input {...form.register("name")} disabled={Boolean(experimentId) && !editing} /></FormField>
               <FormField label="Experiment type" help={<FieldHelp pattern="tooltip" content="Standard: compare individual agents on the same task. Soul Behavior Comparison: run the same supervisor workflow with different souls on the supervisor agent." />}>
                 <Select value={experimentType} onChange={(e) => setExperimentType(e.target.value as typeof experimentType)} disabled={Boolean(experimentId)}>
                   <option value="standard">Standard (agent comparison)</option>
                   <option value="soul_behavior_comparison">Soul Behavior Comparison</option>
                 </Select>
               </FormField>
-              <FormField label="Description"><Textarea {...form.register("description")} disabled={Boolean(experimentId)} /></FormField>
+              <FormField label="Description"><Textarea {...form.register("description")} disabled={Boolean(experimentId) && !editing} /></FormField>
 
               {isSoulComp ? (
                 <>
                   <div className="lg:col-span-2">
                     <FormField label="Supervisor workflow" help={<FieldHelp pattern="tooltip" content="The supervisor workflow to run. Workers and task stay the same; only the supervisor's soul changes." />}>
-                      <Select value={selectedWorkflowId ?? ""} onChange={(e) => { const v = e.target.value; setSelectedWorkflowId(v ? Number(v) : null); setSelectedSupervisorId(null); }} disabled={Boolean(experimentId)}>
+                      <Select value={selectedWorkflowId ?? ""} onChange={(e) => { const v = e.target.value; setSelectedWorkflowId(v ? Number(v) : null); setSelectedSupervisorId(null); }} disabled={Boolean(experimentId) && !editing}>
                         <option value="">Select a workflow...</option>
                         {workflows.filter((w) => w.workflow_type === "supervisor").map((w) => <option key={w.id} value={w.id}>{w.name} (id={w.id})</option>)}
                       </Select>
@@ -450,7 +473,7 @@ export function ExperimentFormPage() {
                       <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
                         {souls.map((soul) => (
                           <label key={soul.id} className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={selectedSoulIds.includes(soul.id)} disabled={Boolean(experimentId)} onChange={() => toggleSoul(soul.id)} />
+                            <input type="checkbox" checked={selectedSoulIds.includes(soul.id)} disabled={Boolean(experimentId) && !editing} onChange={() => toggleSoul(soul.id)} />
                             <span>{soul.name}</span>
                             <StatusBadge status={soul.is_active ? "active" : "inactive"} />
                           </label>
@@ -466,7 +489,7 @@ export function ExperimentFormPage() {
                     <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
                       {agents.map((agent) => (
                         <label key={agent.id} className="flex items-center gap-2 text-sm">
-                          <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} disabled={Boolean(experimentId)} onChange={() => toggleAgent(agent.id)} />
+                          <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} disabled={Boolean(experimentId) && !editing} onChange={() => toggleAgent(agent.id)} />
                           <span>{agent.name}</span>
                           <StatusBadge status={agent.is_active ? "active" : "inactive"} />
                         </label>
@@ -476,10 +499,12 @@ export function ExperimentFormPage() {
                   {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Selected: {selectedAgentIds.map((agentId) => agentById[agentId] ?? `Agent ${agentId}`).join(", ")}</p> : null}
                 </div>
               )}
-              <div className="lg:col-span-2"><FormField label="Task prompt" error={form.formState.errors.task_prompt?.message}><Textarea rows={7} {...form.register("task_prompt")} disabled={Boolean(experimentId)} /></FormField></div>
-              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation config" content={isSoulComp ? "Auto-populated from the selections above. Contains experiment_type, workflow_id, supervisor_agent_id, and soul_ids." : "Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5."} />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId)} /></FormField></div>
+              <div className="lg:col-span-2"><FormField label="Task prompt" error={form.formState.errors.task_prompt?.message}><Textarea rows={7} {...form.register("task_prompt")} disabled={Boolean(experimentId) && !editing} /></FormField></div>
+              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation config" content={isSoulComp ? "Auto-populated from the selections above. Contains experiment_type, workflow_id, supervisor_agent_id, and soul_ids." : "Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5."} />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId) && !editing} /></FormField></div>
               <div className="flex items-end gap-2">
-                {!experimentId ? <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : "Save experiment"}</Button> : null}
+                {!experimentId || editing ? <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : editing ? "Save changes" : "Save experiment"}</Button> : null}
+                {experimentId && !editing ? <Button type="button" variant="outline" onClick={() => setEditing(true)}>Edit experiment</Button> : null}
+                {editing ? <Button type="button" variant="outline" onClick={() => { setEditing(false); form.reset(experiment ? toExperimentFormValues(experiment) : emptyExperiment); }}>Cancel</Button> : null}
                 <Link to="/experiments"><Button type="button" variant="outline">Back to experiments</Button></Link>
               </div>
             </form>
@@ -496,7 +521,7 @@ export function ExperimentFormPage() {
                 </Button>
               </CardContent>
             </Card>
-            {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} runIds={experimentRun.run_ids} agentById={agentById} hasAnalysis={analysisResult !== null} /> : null}
+            {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} agentById={agentById} hasAnalysis={analysisResult !== null} /> : null}
             {/* ----- AI Analysis Section ----- */}
             {experimentRun?.comparison_result && (experimentRun.comparison_result as Record<string, unknown>)?.experiment_type === "soul_behavior_comparison" ? (
               <AnalysisSection
@@ -528,7 +553,7 @@ export function ExperimentFormPage() {
   );
 }
 
-function SoulComparisonView({ comparison, runIds, agentById, hasAnalysis }: { comparison: SoulComparisonResult; runIds: number[]; agentById: Record<number, string>; hasAnalysis: boolean }) {
+function SoulComparisonView({ comparison, agentById, hasAnalysis }: { comparison: SoulComparisonResult; agentById: Record<number, string>; hasAnalysis: boolean }) {
   const [expandedOutputs, setExpandedOutputs] = useState<Record<number, boolean>>({});
   if (comparison.experiment_type !== "soul_behavior_comparison") {
     return null;
@@ -559,7 +584,7 @@ function SoulComparisonView({ comparison, runIds, agentById, hasAnalysis }: { co
       <CardHeader>
         <h2 className="text-base font-semibold">Soul Comparison Results</h2>
         <p className="text-sm text-muted-foreground">
-          Supervisor: {comparison.supervisor_agent_name} · {variants.length} variants · <Link to={`/runs/${runIds[0]}`} className="text-primary hover:underline">View first run</Link>
+          Supervisor: {comparison.supervisor_agent_name} · {variants.length} soul variants compared
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -755,7 +780,17 @@ function AnalysisSection(props: {
           </div>
         ) : null}
         {props.analyzing ? (
-          <Alert title="Analyzing">Analyzing experiment data with {props.model || "LLM"}...</Alert>
+          <div className="rounded-md border border-border bg-muted/30 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" style={{ animationDelay: "0ms" }} />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" style={{ animationDelay: "200ms" }} />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" style={{ animationDelay: "400ms" }} />
+              </div>
+              <p className="text-sm font-medium">Analyzing experiment data with {props.model || "LLM"}...</p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground animate-pulse">Comparing delegation patterns, worker sequences, token usage, and generating structured insights...</p>
+          </div>
         ) : hasResult ? null : (
           <Button type="button" onClick={props.onRunAnalysis} disabled={props.analyzing}>
             {props.analyzing ? "Analyzing..." : "Run Analysis"}
