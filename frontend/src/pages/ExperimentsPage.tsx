@@ -236,7 +236,7 @@ export function ExperimentFormPage() {
   const [analysisModel, setAnalysisModel] = useState("deepseek-v4-flash");
   const [analysisApiKey, setAnalysisApiKey] = useState("");
   const [analysisTemperature, setAnalysisTemperature] = useState("0.1");
-  const [analysisMaxTokens, setAnalysisMaxTokens] = useState("4096");
+  const [analysisMaxTokens, setAnalysisMaxTokens] = useState("8192");
   const [analysisSettingsOpen, setAnalysisSettingsOpen] = useState(false);
   const form = useForm<ExperimentFormValues>({ resolver: zodResolver(experimentSchema), defaultValues: emptyExperiment });
 

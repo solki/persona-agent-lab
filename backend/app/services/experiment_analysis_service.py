@@ -71,7 +71,7 @@ def analyze_experiment(
     model = request_config.get("model") or saved_cfg.get("model") or settings.openai_compatible_model or "deepseek-v4-flash"
     base_url = request_config.get("base_url") or saved_cfg.get("base_url") or settings.openai_compatible_base_url
     temperature = float(request_config.get("temperature") or saved_cfg.get("temperature") or 0.1)
-    max_tokens = int(request_config.get("max_tokens") or saved_cfg.get("max_tokens") or 4096)
+    max_tokens = int(request_config.get("max_tokens") or saved_cfg.get("max_tokens") or 8192)
     api_key, key_from_env = _resolve_api_key(request_config, settings)
 
     # Gather data
@@ -255,6 +255,7 @@ def _call_provider(
 def _parse_response(raw: str) -> AnalysisResult:
     json_text = _extract_json(raw)
 
+    # Try parsing the extracted JSON
     if json_text:
         result, error = _parse_and_validate(json_text)
         if result is not None:
@@ -265,7 +266,31 @@ def _parse_response(raw: str) -> AnalysisResult:
             if result is not None:
                 return result
 
+    # If no complete JSON was found (truncated output), try to repair
+    # the raw text directly — the LLM may have hit max_tokens mid-output
+    if not json_text:
+        json_text = _extract_partial_json(raw)
+    if json_text:
+        repaired = _repair_json(json_text)
+        if repaired:
+            result, error = _parse_and_validate(repaired)
+            if result is not None:
+                return result
+
     raise ExperimentAnalysisError(f"Could not parse analysis LLM output. Raw preview: {raw[:500]}")
+
+
+def _extract_partial_json(raw: str) -> str | None:
+    """Extract a JSON object that starts but may not be complete (truncated).
+
+    Returns the text from the first '{' to the end, which _repair_json
+    can then attempt to close and validate.
+    """
+    start = raw.find("{")
+    if start == -1:
+        return None
+    # Take everything from the first brace to the end
+    return raw[start:]
 
 
 # ---------------------------------------------------------------------------
