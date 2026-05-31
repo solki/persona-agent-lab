@@ -24,6 +24,11 @@ def get_experiment(db: Session, experiment_id: int) -> Experiment:
     return db.get(Experiment, experiment_id)
 
 
+def list_experiment_runs(db: Session, experiment_id: int) -> list[ExperimentRun]:
+    statement = select(ExperimentRun).where(ExperimentRun.experiment_id == experiment_id).order_by(ExperimentRun.id.desc())
+    return list(db.scalars(statement).all())
+
+
 def create_experiment(db: Session, payload: ExperimentCreate) -> Experiment:
     experiment = Experiment(**payload.model_dump())
     db.add(experiment)

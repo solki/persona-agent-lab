@@ -136,6 +136,7 @@ export const api = {
   archiveExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/archive`, { method: "POST" }),
   activateExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/activate`, { method: "POST" }),
   runExperiment: (id: number) => request<ExperimentRun>(`/experiments/${id}/run`, { method: "POST" }),
+  listExperimentRuns: (id: number) => request<ExperimentRun[]>(`/experiments/${id}/runs`),
 
   listRuns: (includeArchived = false) => request<Run[]>(`/runs${includeArchived ? "?include_archived=true" : ""}`),
   getRun: (id: number) => request<Run>(`/runs/${id}`),

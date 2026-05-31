@@ -249,6 +249,15 @@ export function ExperimentFormPage() {
             setSelectedSupervisorId((evalCfg.supervisor_agent_id as number) ?? null);
             setSelectedSoulIds((evalCfg.soul_ids as number[]) ?? []);
           }
+          // Load latest experiment run for comparison display
+          try {
+            const runs = await api.listExperimentRuns(experimentId);
+            if (runs.length > 0) {
+              setExperimentRun(runs[0]);
+            }
+          } catch {
+            // Experiment has no runs yet — that's fine
+          }
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load experiment.");

@@ -63,6 +63,12 @@ def activate_experiment(experiment_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/{experiment_id}/runs", response_model=list[ExperimentRunRead])
+def list_experiment_runs(experiment_id: int, db: Session = Depends(get_db)):
+    require_experiment(db, experiment_id)
+    return experiment_service.list_experiment_runs(db, experiment_id)
+
+
 @router.post("/{experiment_id}/run", response_model=ExperimentRunRead, status_code=status.HTTP_201_CREATED)
 def run_experiment(experiment_id: int, db: Session = Depends(get_db)):
     experiment = require_experiment(db, experiment_id)
