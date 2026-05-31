@@ -36,7 +36,6 @@ const agentSchema = z.object({
   max_tokens: z.coerce.number().int().min(1).max(200000),
   memoryPolicyJson: z.string().min(1),
   contextPolicyJson: z.string().min(1),
-  handoffPolicyJson: z.string().min(1),
   is_active: z.boolean()
 });
 
@@ -54,7 +53,6 @@ const defaultAgent: AgentFormValues = {
   max_tokens: 1024,
   memoryPolicyJson: prettyJson({ write_mode: "manual_review", retrieval_enabled: true }),
   contextPolicyJson: prettyJson({ include_active_context: true }),
-  handoffPolicyJson: prettyJson({ allow_handoff: false, allowed_agent_ids: [] }),
   is_active: true
 };
 
@@ -232,6 +230,9 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
   const navigate = useNavigate();
   const location = useLocation();
   const [souls, setSouls] = useState<Soul[]>([]);
+  const [allAgents, setAllAgents] = useState<Agent[]>([]);
+  const [allowHandoff, setAllowHandoff] = useState(false);
+  const [allowedAgentIds, setAllowedAgentIds] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -251,12 +252,21 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
   const load = useCallback(async () => {
     setError("");
     try {
-      const soulData = await api.listSouls();
+      const [soulData, agentListData] = await Promise.all([api.listSouls(), api.listAgents()]);
       setSouls(soulData);
+      setAllAgents(agentListData);
       if (mode === "edit" && agentId) {
         const agentData = await api.getAgent(agentId);
         setAgent(agentData);
         form.reset(toAgentFormValues(agentData));
+        // Parse existing handoff policy
+        const hp = agentData.handoff_policy as Record<string, unknown> | undefined;
+        setAllowHandoff(Boolean(hp?.allow_handoff));
+        const ids = hp?.allowed_agent_ids;
+        setAllowedAgentIds(Array.isArray(ids) ? ids.filter((id): id is number => typeof id === "number") : []);
+      } else {
+        setAllowHandoff(false);
+        setAllowedAgentIds([]);
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load agent form.");
@@ -272,15 +282,17 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
     setMessage("");
     let memoryPolicy: Record<string, unknown>;
     let contextPolicy: Record<string, unknown>;
-    let handoffPolicy: Record<string, unknown>;
     try {
       memoryPolicy = parseJsonObject(values.memoryPolicyJson, "Memory policy");
       contextPolicy = parseJsonObject(values.contextPolicyJson, "Context policy");
-      handoffPolicy = parseJsonObject(values.handoffPolicyJson, "Handoff policy");
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : "Invalid policy JSON.");
       return;
     }
+    const handoffPolicy = {
+      allow_handoff: allowHandoff,
+      allowed_agent_ids: allowHandoff ? allowedAgentIds.filter((id) => id !== agentId) : [],
+    };
     const payload = {
       name: values.name,
       description: values.description,
@@ -374,9 +386,43 @@ function AgentEditor({ mode, agentId }: { mode: "create" | "edit"; agentId?: num
               <FormField label="Context policy JSON" help={<FieldHelp pattern="popover" title="Context policy" content="Controls which context entries are assembled at runtime.\n\ninclude_active_context: when true, all active context entries for this agent are included in the prompt.\n\nFuture: filter by type, priority threshold, etc." />}>
                 <Textarea className="font-mono" rows={6} {...form.register("contextPolicyJson")} />
               </FormField>
-              <FormField label="Handoff policy JSON" help={<FieldHelp pattern="popover" title="Handoff policy" content="Controls whether and how this agent can hand off to other agents.\n\nallow_handoff: enable/disable handoffs.\n\nallowed_agent_ids: list of agent IDs this agent may transfer to. An empty list with allow_handoff: false means no handoffs are permitted." />}>
-                <Textarea className="font-mono" rows={6} {...form.register("handoffPolicyJson")} />
-              </FormField>
+              <div className="lg:col-span-2 space-y-3 rounded-md border border-border p-4">
+                <h3 className="text-sm font-semibold">Handoff policy</h3>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={allowHandoff} onChange={(e) => { setAllowHandoff(e.target.checked); if (!e.target.checked) setAllowedAgentIds([]); }} />
+                  Allow handoff
+                </label>
+                {allowHandoff ? (
+                  <FormField label="Allowed target agents" help={<FieldHelp pattern="tooltip" content="Select which agents this agent may hand off to. This is an allowed target pool, not an execution order. Current agent is excluded." />}>
+                    <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2 max-h-48 overflow-y-auto">
+                      {allAgents.filter((a) => mode !== "edit" || a.id !== agentId).map((a) => (
+                        <label key={a.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={allowedAgentIds.includes(a.id)}
+                            onChange={() => {
+                              setAllowedAgentIds((current) =>
+                                current.includes(a.id) ? current.filter((id) => id !== a.id) : [...current, a.id]
+                              );
+                            }}
+                          />
+                          <span>{a.name}</span>
+                          <span className="text-xs text-muted-foreground">{a.role}</span>
+                          <StatusBadge status={a.is_active ? "active" : "inactive"} />
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                ) : null}
+                {allowHandoff && allowedAgentIds.length > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Allowed targets: {allowedAgentIds.map((id) => allAgents.find((a) => a.id === id)?.name ?? `Agent ${id}`).join(", ")}
+                  </p>
+                ) : null}
+                {allowHandoff && allowedAgentIds.length === 0 ? (
+                  <p className="text-xs text-amber-600">No target agents selected. This agent will not be able to hand off to anyone even though handoff is enabled.</p>
+                ) : null}
+              </div>
               <div className="flex items-end gap-2">
                 <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : "Save agent"}</Button>
                 <Link to="/agents"><Button type="button" variant="outline">Back to agents</Button></Link>
@@ -852,7 +898,6 @@ function toAgentFormValues(agent: Agent): AgentFormValues {
     max_tokens: agent.max_tokens,
     memoryPolicyJson: prettyJson(agent.memory_policy),
     contextPolicyJson: prettyJson(agent.context_policy),
-    handoffPolicyJson: prettyJson(agent.handoff_policy),
     is_active: agent.is_active
   };
 }
