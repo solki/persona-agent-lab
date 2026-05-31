@@ -70,11 +70,6 @@ class SupervisorRunner:
             self.db, run.id, supervisor, 0,
             {"task": task}, provider=self.settings.llm_provider,
         )
-        for idx, worker in enumerate(workers):
-            observatory_service.create_execution(
-                self.db, run.id, worker, idx + 1,
-                {"task": None}, provider=self.settings.llm_provider,
-            )
 
         return run
 
@@ -160,7 +155,10 @@ class SupervisorRunner:
             self._emit_agent_selected(run.id, worker)
             observatory_service.start_execution(self.db, worker_execution)
 
-            worker_context = self.context_assembler.assemble(worker.id, instruction)
+            worker_task = self._build_worker_task(
+                supervisor.name, instruction, str(run.input.get("task", "")), accumulated_outputs,
+            )
+            worker_context = self.context_assembler.assemble(worker.id, worker_task)
             self._emit_context_events(run.id, worker.id, worker_execution, worker_context)
 
             worker_response = self._call_llm(worker, worker_context, worker_execution, run.id)
@@ -239,15 +237,43 @@ class SupervisorRunner:
         return supervisor, workers
 
     def _get_or_create_execution(self, run: Run, agent: Agent, sequence_index: int, input_payload: dict) -> Any:
+        """Return an existing queued/running execution for this agent, or create a new one.
+
+        For supervisor workflows, worker executions are created lazily on first delegation.
+        For the supervisor itself, the execution created in start() is reused.
+        Matching is by agent_id only — sequence_index is metadata, not identity.
+        """
         executions = observatory_service.list_executions_for_run(self.db, run.id)
         for ex in executions:
-            if ex.agent_id == agent.id and ex.sequence_index == sequence_index:
+            if ex.agent_id == agent.id and ex.status in ("queued", "running"):
                 ex.input_payload = input_payload
+                ex.sequence_index = sequence_index
                 self.db.commit()
                 self.db.refresh(ex)
                 return ex
         return observatory_service.create_execution(
             self.db, run.id, agent, sequence_index, input_payload, provider=self.settings.llm_provider,
+        )
+
+    def _build_worker_task(self, supervisor_name: str, instruction: str, original_task: str, accumulated_outputs: list[dict]) -> str:
+        """Build the task text a worker receives when delegated to.
+
+        Includes the supervisor's instruction, the original workflow task,
+        and outputs from workers who already ran. This ensures workers have
+        enough context to understand references like "case TK-7712" or
+        "based on triage output" without receiving private memory/context.
+        """
+        accumulated_text = "None yet."
+        if accumulated_outputs:
+            lines = []
+            for item in accumulated_outputs:
+                lines.append(f"[{item['agent_name']} (id={item['agent_id']})]: {item['content']}")
+            accumulated_text = "\n\n".join(lines)
+
+        return (
+            f"## Supervisor instruction from '{supervisor_name}'\n{instruction}\n\n"
+            f"## Original workflow task\n{original_task}\n\n"
+            f"## Outputs from workers who already ran\n{accumulated_text}"
         )
 
     def _assemble_supervisor_context(self, supervisor: Agent, task: str, accumulated: list[dict], iteration: int, max_iter: int, workers: list[Agent] | None = None) -> Any:
