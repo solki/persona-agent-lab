@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Archive, Edit, Play, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, Edit, Play, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -496,7 +496,7 @@ export function ExperimentFormPage() {
                 </Button>
               </CardContent>
             </Card>
-            {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} runIds={experimentRun.run_ids} agentById={agentById} /> : null}
+            {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} runIds={experimentRun.run_ids} agentById={agentById} hasAnalysis={analysisResult !== null} /> : null}
             {/* ----- AI Analysis Section ----- */}
             {experimentRun?.comparison_result && (experimentRun.comparison_result as Record<string, unknown>)?.experiment_type === "soul_behavior_comparison" ? (
               <AnalysisSection
@@ -528,11 +528,31 @@ export function ExperimentFormPage() {
   );
 }
 
-function SoulComparisonView({ comparison, runIds, agentById }: { comparison: SoulComparisonResult; runIds: number[]; agentById: Record<number, string> }) {
+function SoulComparisonView({ comparison, runIds, agentById, hasAnalysis }: { comparison: SoulComparisonResult; runIds: number[]; agentById: Record<number, string>; hasAnalysis: boolean }) {
+  const [expandedOutputs, setExpandedOutputs] = useState<Record<number, boolean>>({});
   if (comparison.experiment_type !== "soul_behavior_comparison") {
     return null;
   }
   const variants = comparison.variants ?? [];
+
+  function toggleOutput(runId: number) {
+    setExpandedOutputs((prev) => ({ ...prev, [runId]: !prev[runId] }));
+  }
+
+  // --- deterministic behavior summary ---
+  type Summary = { fewerDelegations: string; fewerTokens: string; longerInstructions: string; usedAllWorkers: string; bothCompleted: string };
+  let behaviorSummary: Summary | null = null;
+  if (variants.length >= 2) {
+    const [a, b] = variants;
+    const aName = a.soul_name, bName = b.soul_name;
+    behaviorSummary = {
+      fewerDelegations: a.delegation_count < b.delegation_count ? aName : b.delegation_count < a.delegation_count ? bName : "Same",
+      fewerTokens: a.total_tokens < b.total_tokens ? aName : b.total_tokens < a.total_tokens ? bName : "Same",
+      longerInstructions: (a.avg_instruction_length ?? 0) > (b.avg_instruction_length ?? 0) ? aName : (b.avg_instruction_length ?? 0) > (a.avg_instruction_length ?? 0) ? bName : "Similar",
+      usedAllWorkers: [a, b].every((v) => v.unique_workers_used === v.worker_order.length) ? "Both" : [a, b].filter((v) => v.unique_workers_used === v.worker_order.length).map((v) => v.soul_name).join(", ") || "Neither fully",
+      bothCompleted: [a, b].every((v) => v.status === "completed") ? "Both completed" : "One or more did not complete",
+    };
+  }
 
   return (
     <Card>
@@ -544,6 +564,26 @@ function SoulComparisonView({ comparison, runIds, agentById }: { comparison: Sou
       </CardHeader>
       <CardContent className="space-y-4">
         {variants.length === 0 ? <EmptyState title="No variants" body="Run the experiment to see comparison data." /> : null}
+
+        {/* Behavior difference summary */}
+        {behaviorSummary ? (
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+            <p className="font-semibold mb-2">Behavior Signals</p>
+            <div className="grid gap-1 text-xs md:grid-cols-3">
+              <p><span className="text-muted-foreground">Fewer delegations:</span> {behaviorSummary.fewerDelegations}</p>
+              <p><span className="text-muted-foreground">Fewer tokens:</span> {behaviorSummary.fewerTokens}</p>
+              <p><span className="text-muted-foreground">Longer instructions:</span> {behaviorSummary.longerInstructions}</p>
+              <p><span className="text-muted-foreground">All workers used:</span> {behaviorSummary.usedAllWorkers}</p>
+              <p className="md:col-span-2"><span className="text-muted-foreground">Completion:</span> {behaviorSummary.bothCompleted}</p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground italic">
+              These are observable metrics, not quality judgments. {hasAnalysis ? "" : "Run AI analysis below for behavioral interpretation."}
+            </p>
+            {hasAnalysis ? <p className="text-xs"><a href="#ai-analysis" className="text-primary hover:underline">See AI analysis below for interpretation →</a></p> : null}
+          </div>
+        ) : null}
+
+        {/* Metrics table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -551,12 +591,11 @@ function SoulComparisonView({ comparison, runIds, agentById }: { comparison: Sou
                 <th className="py-2 pr-3 font-medium">Soul</th>
                 <th className="py-2 pr-3 font-medium">Run</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 pr-3 font-medium">Delegations</th>
-                <th className="py-2 pr-3 font-medium">Workers Used</th>
-                <th className="py-2 pr-3 font-medium">Iterations</th>
+                <th className="py-2 pr-3 font-medium">Deleg.</th>
+                <th className="py-2 pr-3 font-medium">Workers</th>
+                <th className="py-2 pr-3 font-medium">Iter.</th>
                 <th className="py-2 pr-3 font-medium">Tokens</th>
                 <th className="py-2 pr-3 font-medium">Decision</th>
-                <th className="py-2 pr-3 font-medium">Output Preview</th>
               </tr>
             </thead>
             <tbody>
@@ -570,27 +609,78 @@ function SoulComparisonView({ comparison, runIds, agentById }: { comparison: Sou
                   <td className="py-2 pr-3">{v.supervisor_iterations}</td>
                   <td className="py-2 pr-3">{v.total_tokens}</td>
                   <td className="py-2 pr-3">{v.final_decision ?? "-"}</td>
-                  <td className="py-2 pr-3 max-w-[200px] truncate text-muted-foreground" title={v.final_output_preview}>{v.final_output_preview.slice(0, 80)}{v.final_output_preview.length > 80 ? "..." : ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {/* Expandable variant panels */}
         <div className="grid gap-3 md:grid-cols-2">
-          {variants.map((v) => (
-            <Card key={v.run_id}>
-              <CardHeader className="pb-1"><h3 className="text-sm font-semibold">{v.soul_name}<span className="ml-2 text-xs text-muted-foreground font-normal">Run #{v.run_id}</span></h3></CardHeader>
-              <CardContent className="text-xs space-y-1">
-                <p><span className="text-muted-foreground">Worker order:</span> {v.worker_order.length > 0 ? v.worker_order.map((id) => agentById[id] ?? `#${id}`).join(" → ") : "none delegated"}</p>
-                {v.avg_instruction_length != null ? <p><span className="text-muted-foreground">Avg instruction length:</span> {Math.round(v.avg_instruction_length)} chars</p> : null}
-                <p><span className="text-muted-foreground">Tokens:</span> {v.total_tokens} total</p>
-                <div className="flex gap-2 mt-2">
-                  <Link to={`/runs/${v.run_id}`}><Button type="button" variant="outline" size="sm">Run Detail</Button></Link>
-                  <Link to={`/runs/${v.run_id}/collaboration-graph`}><Button type="button" variant="outline" size="sm">Collaboration</Button></Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {variants.map((v) => {
+            const isExpanded = expandedOutputs[v.run_id] ?? false;
+            const workerList = v.worker_order.length > 0 ? v.worker_order : [];
+            // Numbered step list with repeated-worker detection
+            const seen: Record<number, number> = {};
+            const numberedSteps: { id: number; name: string; occurrence: number }[] = [];
+            for (const wid of workerList) {
+              seen[wid] = (seen[wid] ?? 0) + 1;
+              numberedSteps.push({ id: wid, name: agentById[wid] ?? `Agent ${wid}`, occurrence: seen[wid] });
+            }
+
+            return (
+              <Card key={v.run_id}>
+                <CardHeader className="pb-1">
+                  <h3 className="text-sm font-semibold">{v.soul_name}<span className="ml-2 text-xs text-muted-foreground font-normal">Run #{v.run_id}</span></h3>
+                </CardHeader>
+                <CardContent className="text-xs space-y-2">
+                  {/* Worker delegation steps */}
+                  <div>
+                    <span className="text-muted-foreground font-medium">Delegation order:</span>
+                    {workerList.length === 0 ? (
+                      <p className="text-muted-foreground">None delegated</p>
+                    ) : (
+                      <ol className="mt-1 space-y-0.5 list-decimal pl-5">
+                        {numberedSteps.map((s, i) => (
+                          <li key={i}>
+                            {s.name}
+                            {s.occurrence > 1 ? <span className="ml-1 text-muted-foreground">(×{s.occurrence})</span> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                  {v.avg_instruction_length != null ? <p><span className="text-muted-foreground font-medium">Avg instruction length:</span> {Math.round(v.avg_instruction_length)} chars</p> : null}
+                  <p><span className="text-muted-foreground font-medium">Tokens:</span> {v.total_tokens} total</p>
+
+                  {/* Expandable final output */}
+                  <div>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                      onClick={() => toggleOutput(v.run_id)}
+                    >
+                      {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      Final output {isExpanded ? "" : `(${v.final_output_preview.slice(0, 60)}...)`}
+                    </button>
+                    {!isExpanded && v.final_output_preview ? (
+                      <p className="mt-1 text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">{v.final_output_preview}</p>
+                    ) : null}
+                    {isExpanded ? (
+                      <div className="mt-1 max-h-60 overflow-y-auto rounded border border-border bg-muted/30 p-2 text-xs whitespace-pre-wrap">
+                        {v.final_output_preview || "(no output available)"}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <Link to={`/runs/${v.run_id}`}><Button type="button" variant="outline" size="sm">Run Detail</Button></Link>
+                    <Link to={`/runs/${v.run_id}/collaboration-graph`}><Button type="button" variant="outline" size="sm">Collaboration</Button></Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
@@ -622,7 +712,7 @@ function AnalysisSection(props: {
   const hasResult = Boolean(a);
 
   return (
-    <Card>
+    <Card id="ai-analysis">
       <CardHeader>
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">AI Experiment Analysis</h2>
