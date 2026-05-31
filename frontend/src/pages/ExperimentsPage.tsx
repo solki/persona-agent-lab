@@ -649,7 +649,22 @@ function AnalysisSection(props: {
             <FormField label="Max Tokens"><Input value={props.maxTokens} onChange={(e) => props.onMaxTokensChange(e.target.value)} placeholder="4096" /></FormField>
           </div>
         ) : null}
-        {props.error ? <Alert title="Analysis Error" tone="error">{props.error}</Alert> : null}
+        {props.error ? (
+          <div className="space-y-2">
+            <Alert title="Analysis Error" tone="error">
+              <div>
+                <p className="text-sm">{props.error.slice(0, 300)}{props.error.length > 300 ? "..." : ""}</p>
+                <p className="mt-2 text-xs text-muted-foreground">Try increasing max_tokens or using a model with stronger JSON output (e.g. deepseek-v4-pro or gpt-4o).</p>
+                {props.error.length > 300 ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-primary hover:underline">Show raw error</summary>
+                    <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">{props.error}</pre>
+                  </details>
+                ) : null}
+              </div>
+            </Alert>
+          </div>
+        ) : null}
         {props.analyzing ? (
           <Alert title="Analyzing">Analyzing experiment data with {props.model || "LLM"}...</Alert>
         ) : hasResult ? null : (

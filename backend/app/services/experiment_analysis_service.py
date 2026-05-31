@@ -29,7 +29,7 @@ from app.schemas.analysis import (
     FlowComparison,
     Signals,
 )
-from app.services import collaboration_service, experiment_service, observatory_service
+from app.services import collaboration_service, experiment_service
 
 
 class ExperimentAnalysisError(ValueError):
@@ -47,15 +47,10 @@ def analyze_experiment(
     request_config: dict[str, Any],
     settings: Optional[Settings] = None,
 ) -> dict[str, Any]:
-    """Run analysis for an experiment and return the full response dict.
-
-    Returns a dict matching ExperimentAnalysisResponse so the API layer
-    can return it directly.
-    """
+    """Run analysis for an experiment and return the full response dict."""
     if settings is None:
         settings = get_settings()
 
-    # Validate experiment has comparison data
     runs = experiment_service.list_experiment_runs(db, experiment.id)
     if not runs:
         raise ExperimentAnalysisError("Experiment has no runs. Run the experiment first.")
@@ -74,16 +69,14 @@ def analyze_experiment(
     max_tokens = int(request_config.get("max_tokens") or saved_cfg.get("max_tokens") or 8192)
     api_key, key_from_env = _resolve_api_key(request_config, settings)
 
-    # Gather data
     data = _gather_data(db, experiment, comparison, latest_run)
 
-    # Run analysis
     if provider_name == "mock":
         result = _mock_analysis(data)
     else:
         result = _llm_analysis(data, provider_name, base_url, model, api_key, temperature, max_tokens)
 
-    # Store result (copy dict so SQLAlchemy detects the JSON column change)
+    # Store result
     from sqlalchemy.orm.attributes import flag_modified
 
     comparison = dict(latest_run.comparison_result or {})
@@ -114,7 +107,6 @@ def analyze_experiment(
 
 
 def _gather_data(db: Session, experiment: Experiment, comparison: dict, latest_run: ExperimentRun) -> dict:
-    """Collect all data needed for the analysis prompt."""
     variants = comparison.get("variants", [])
     supervisor = db.get(Agent, comparison.get("supervisor_agent_id"))
 
@@ -122,7 +114,11 @@ def _gather_data(db: Session, experiment: Experiment, comparison: dict, latest_r
     for v in variants:
         soul = db.get(Soul, v.get("soul_id"))
         if soul:
-            souls_by_id[soul.id] = {"id": soul.id, "name": soul.name, "decision_style": soul.decision_style or "", "principles": (soul.principles or "")[:500]}
+            souls_by_id[soul.id] = {
+                "id": soul.id, "name": soul.name,
+                "decision_style": soul.decision_style or "",
+                "principles": (soul.principles or "")[:500],
+            }
 
     variant_details = []
     for v in variants:
@@ -130,7 +126,8 @@ def _gather_data(db: Session, experiment: Experiment, comparison: dict, latest_r
         run_detail = _safe_run_output(db, run_id) if run_id else {}
         collab = {}
         try:
-            collab = collaboration_service.build_collaboration_graph(db, run_id) if run_id else {}
+            if run_id:
+                collab = collaboration_service.build_collaboration_graph(db, run_id)
         except Exception:
             pass
         variant_details.append({
@@ -147,7 +144,10 @@ def _gather_data(db: Session, experiment: Experiment, comparison: dict, latest_r
             "final_output": (run_detail.get("final_output") or v.get("final_output_preview", ""))[:2000],
             "collab_summary": {
                 "edges_count": len(collab.get("edges", [])),
-                "worker_agent_ids": sorted({e.get("to_agent_id") for e in collab.get("edges", []) if e.get("type") == "delegation" and e.get("to_agent_id")}),
+                "worker_agent_ids": sorted({
+                    e.get("to_agent_id") for e in collab.get("edges", [])
+                    if e.get("type") == "delegation" and e.get("to_agent_id")
+                }),
             },
         })
 
@@ -155,7 +155,11 @@ def _gather_data(db: Session, experiment: Experiment, comparison: dict, latest_r
         "experiment_name": experiment.name,
         "task_prompt": experiment.task_prompt[:3000],
         "supervisor_name": supervisor.name if supervisor else "unknown",
-        "expected_differences": (comparison.get("expected_differences") or experiment.evaluation_config.get("expected_differences", "") if isinstance(experiment.evaluation_config, dict) else ""),
+        "expected_differences": (
+            comparison.get("expected_differences")
+            or (experiment.evaluation_config or {}).get("expected_differences", "")
+            if isinstance(experiment.evaluation_config, dict) else ""
+        ),
         "souls": [souls_by_id.get(v.get("soul_id"), {}) for v in variants],
         "variants": variant_details,
     }
@@ -177,17 +181,56 @@ def _llm_analysis(
 ) -> AnalysisResult:
     prompt = _build_prompt(data)
     response = _call_provider(prompt, provider_name, base_url, model, api_key, temperature, max_tokens)
-    return _parse_response(response.content)
+    raw = response.content
+
+    # Track parse attempts for better error messages
+    last_error = ""
+
+    # Attempt 1: direct parse
+    result, error = _parse_and_validate(raw)
+    if result:
+        return result
+
+    # Attempt 2: extract + repair
+    json_text = _extract_json(raw) or _extract_partial_json(raw)
+    if json_text:
+        repaired = _repair_json(json_text)
+        if repaired:
+            result, error = _parse_and_validate(repaired)
+            if result:
+                return result
+            last_error = error
+
+    # Attempt 3: LLM repair fallback (only for real providers)
+    if provider_name != "mock":
+        try:
+            repaired_raw = _llm_repair(raw, last_error, provider_name, base_url, model, api_key, temperature)
+            result, error = _parse_and_validate(repaired_raw)
+            if result:
+                return result
+            last_error = error
+        except Exception:
+            pass
+
+    # All attempts failed — produce actionable error
+    truncated = raw[:800]
+    hint = ""
+    if len(raw) < max_tokens * 3:  # rough char estimate
+        hint = " The output may be truncated. Try increasing max_tokens (current: {}).".format(max_tokens)
+    raise ExperimentAnalysisError(
+        f"Could not parse analysis LLM output after 3 attempts.{hint} "
+        f"Last validation error: {last_error or 'unknown'}. "
+        f"Raw output (first 800 chars): {truncated}"
+    )
 
 
 def _build_prompt(data: dict) -> str:
     variants_json = json.dumps(data["variants"], indent=2, ensure_ascii=False)
     souls_json = json.dumps(data["souls"], indent=2, ensure_ascii=False)
     expected = data.get("expected_differences", "")
-
     expected_section = ""
     if expected:
-        expected_section = f"\n\n## Expected differences (user hypothesis)\n{expected}"
+        expected_section = f'\n\n## Expected differences (user hypothesis)\n{expected}'
 
     return f"""You are an experiment analysis assistant. Analyze the soul behavior comparison data below.
 
@@ -202,95 +245,94 @@ Task: {data["task_prompt"]}
 ## Variant results
 {variants_json}{expected_section}
 
-## Instructions
-Produce a JSON object with these fields:
+## Output format — valid JSON only
 
-1. "executive_summary": 2-4 sentence summary of key findings.
-2. "flow_comparison": array of per-variant objects with: variant_soul_name, variant_soul_id, delegation_pattern, worker_coverage, decision_style_observed, instruction_style, synthesis_approach.
-3. "behavioral_differences": array of objects with: dimension, observation, variant_a_behavior, variant_b_behavior, significance ("clear_signal"|"suggestive"|"inconclusive"), confidence_rationale.
-4. "expected_vs_actual": (only if expected differences provided) object with: expected, matched (string array), unmatched (string array), surprising (string array). Omit if no expected_differences.
-5. "signals": object with: efficiency (observation + rationale), thoroughness (observation + rationale), safety (observation + rationale), overall_pattern (summary string), caveat (mandatory disclaimer that these are signals, not definitive judgments).
-6. "limitations": array of strings noting limitations of this analysis.
-7. "recommended_next_steps": array of strings with actionable next steps.
+Return EXACTLY this JSON structure. No markdown fences, no text outside the JSON.
+Use double quotes for all strings and keys. No trailing commas. No comments.
+
+{{
+  "executive_summary": "<2-4 sentences>",
+  "flow_comparison": [
+    {{
+      "variant_soul_name": "<string>",
+      "variant_soul_id": <int>,
+      "delegation_pattern": "<string>",
+      "worker_coverage": "<string>",
+      "decision_style_observed": "<string>",
+      "instruction_style": "<string>",
+      "synthesis_approach": "<string>"
+    }}
+  ],
+  "behavioral_differences": [
+    {{
+      "dimension": "<string>",
+      "observation": "<string>",
+      "variant_a_behavior": "<string>",
+      "variant_b_behavior": "<string>",
+      "significance": "clear_signal | suggestive | inconclusive",
+      "confidence_rationale": "<string>"
+    }}
+  ],
+  "signals": {{
+    "efficiency": {{ "observation": "<string>", "rationale": "<string>" }},
+    "thoroughness": {{ "observation": "<string>", "rationale": "<string>" }},
+    "safety": {{ "observation": "<string>", "rationale": "<string>" }},
+    "overall_pattern": "<string>",
+    "caveat": "<mandatory disclaimer: these are signals, not definitive quality judgments>"
+  }},
+  "limitations": ["<string>"],
+  "recommended_next_steps": ["<string>"]
+}}
+
+Only include "expected_vs_actual" if expected differences were provided:
+  "expected_vs_actual": {{
+    "expected": "<string>",
+    "matched": ["<string>"],
+    "unmatched": ["<string>"],
+    "surprising": ["<string>"]
+  }}
 
 Rules:
-- Only report differences supported by the provided data.
-- If variants behaved identically in a dimension, say so.
-- Never declare a "winner" or "better" soul.
-- Use confidence levels: clear_signal (strong evidence), suggestive (visible but could be noise), inconclusive (not enough data).
-- The caveat field in signals is MANDATORY.
-- Return ONLY the JSON object, no other text."""
+- Report only differences supported by the data. Say so if variants behaved identically.
+- Never declare a "winner". Use significance: clear_signal / suggestive / inconclusive.
+- The caveat is MANDATORY.
+- Return ONLY the JSON. No markdown. No explanation."""
 
 
 def _call_provider(
-    prompt: str,
-    provider_name: str,
-    base_url: str,
-    model: str,
-    api_key: str,
-    temperature: float,
-    max_tokens: int,
+    prompt: str, provider_name: str, base_url: str, model: str,
+    api_key: str, temperature: float, max_tokens: int,
 ) -> ProviderResponse:
     if provider_name not in ("openai_compatible", "openai"):
-        raise ExperimentAnalysisError(f"Provider '{provider_name}' is not supported for analysis. Use openai_compatible.")
-
+        raise ExperimentAnalysisError(f"Provider '{provider_name}' is not supported. Use openai_compatible.")
     try:
         provider = OpenAICompatibleProvider(
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            provider_name="experiment_analysis",
-            timeout=120,
+            api_key=api_key, base_url=base_url, model=model,
+            provider_name="experiment_analysis", timeout=120,
         )
     except ProviderConfigurationError as exc:
         raise ExperimentAnalysisError(str(exc))
-
     return provider.generate(prompt, {
-        "model": model,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
+        "model": model, "temperature": temperature, "max_tokens": max_tokens,
     })
 
 
-def _parse_response(raw: str) -> AnalysisResult:
-    json_text = _extract_json(raw)
-
-    # Try parsing the extracted JSON
-    if json_text:
-        result, error = _parse_and_validate(json_text)
-        if result is not None:
-            return result
-        repaired = _repair_json(json_text)
-        if repaired:
-            result, error = _parse_and_validate(repaired)
-            if result is not None:
-                return result
-
-    # If no complete JSON was found (truncated output), try to repair
-    # the raw text directly — the LLM may have hit max_tokens mid-output
-    if not json_text:
-        json_text = _extract_partial_json(raw)
-    if json_text:
-        repaired = _repair_json(json_text)
-        if repaired:
-            result, error = _parse_and_validate(repaired)
-            if result is not None:
-                return result
-
-    raise ExperimentAnalysisError(f"Could not parse analysis LLM output. Raw preview: {raw[:500]}")
-
-
-def _extract_partial_json(raw: str) -> str | None:
-    """Extract a JSON object that starts but may not be complete (truncated).
-
-    Returns the text from the first '{' to the end, which _repair_json
-    can then attempt to close and validate.
-    """
-    start = raw.find("{")
-    if start == -1:
-        return None
-    # Take everything from the first brace to the end
-    return raw[start:]
+def _llm_repair(
+    broken_json: str, validation_error: str,
+    provider_name: str, base_url: str, model: str, api_key: str, temperature: float,
+) -> str:
+    """Make one LLM call to repair broken JSON into valid AnalysisResult JSON."""
+    repair_prompt = (
+        "The following text was supposed to be valid JSON matching the analysis schema "
+        "but failed validation. Repair it into valid JSON. Do NOT change the meaning or "
+        "data values. Only fix: unclosed strings, missing braces/brackets, trailing "
+        "commas, incorrect escaping, or markdown fences.\n\n"
+        f"Validation error: {validation_error[:300]}\n\n"
+        "Return ONLY the repaired JSON object, nothing else.\n\n"
+        f"Broken text:\n{broken_json[:3000]}"
+    )
+    response = _call_provider(repair_prompt, provider_name, base_url, model, api_key, temperature, 4096)
+    return response.content
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +375,7 @@ def _mock_analysis(data: dict) -> AnalysisResult:
             efficiency={"observation": "Similar", "rationale": "Mock analysis."},
             thoroughness={"observation": "Similar", "rationale": "Mock analysis."},
             safety={"observation": "Similar", "rationale": "Mock analysis."},
-            overall_pattern=f"[mock:{digest}] Mock analysis. Real LLM recommended for behavioral insights.",
+            overall_pattern=f"[mock:{digest}] Mock analysis. Real LLM recommended.",
             caveat="Mock analysis — not real LLM output. Re-run with openai_compatible provider for actual analysis.",
         ),
         limitations=["Mock analysis — not real LLM output.", "Run with a real LLM provider for actual behavioral insights."],
@@ -342,7 +384,7 @@ def _mock_analysis(data: dict) -> AnalysisResult:
 
 
 # ---------------------------------------------------------------------------
-# API key resolution
+# API key
 # ---------------------------------------------------------------------------
 
 
@@ -352,15 +394,16 @@ def _resolve_api_key(request_config: dict, settings: Settings) -> tuple[str, boo
         return session_key, False
     if settings.openai_compatible_api_key:
         return settings.openai_compatible_api_key, True
-    raise ExperimentAnalysisError("No API key available. Set OPENAI_COMPATIBLE_API_KEY or provide api_key in request.")
+    raise ExperimentAnalysisError("No API key. Set OPENAI_COMPATIBLE_API_KEY or provide api_key.")
 
 
 # ---------------------------------------------------------------------------
-# JSON parsing helpers (same pattern as action_decision_parser + review_service)
+# JSON parsing helpers
 # ---------------------------------------------------------------------------
 
 
 def _extract_json(raw: str) -> Optional[str]:
+    """Extract the first complete JSON object from raw text."""
     fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
     if fence:
         return fence.group(1)
@@ -392,16 +435,37 @@ def _extract_json(raw: str) -> Optional[str]:
     return None
 
 
-def _parse_and_validate(json_text: str) -> tuple[Optional[AnalysisResult], str]:
+def _extract_partial_json(raw: str) -> Optional[str]:
+    start = raw.find("{")
+    if start == -1:
+        return None
+    return raw[start:]
+
+
+def _parse_and_validate(raw: str) -> tuple[Optional[AnalysisResult], str]:
+    """Try to parse + validate. Handles trailing commas before json.loads."""
+    cleaned = _remove_trailing_commas(raw)
     try:
-        obj = json.loads(json_text)
+        obj = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        try:
+            obj = json.loads(raw)
+        except json.JSONDecodeError as exc2:
+            return None, str(exc2)
+
+    try:
         return AnalysisResult.model_validate(obj), ""
-    except (json.JSONDecodeError, ValueError) as exc:
+    except ValueError as exc:
         return None, str(exc)
 
 
+def _remove_trailing_commas(text: str) -> str:
+    """Remove trailing commas before ] or } that break JSON parsing."""
+    return re.sub(r",\s*([}\]])", r"\1", text)
+
+
 def _repair_json(text: str) -> Optional[str]:
-    for _ in range(3):
+    for _ in range(5):
         repaired = _close_brackets(text)
         if repaired and _is_valid_json(repaired):
             return repaired
@@ -414,8 +478,6 @@ def _repair_json(text: str) -> Optional[str]:
 
 
 def _close_brackets(text: str) -> Optional[str]:
-    # First close any string left open by truncation, so bracket scanning
-    # can find the structural closers that follow the string value.
     fixed = _close_unclosed_string(text)
     stack: list[str] = []
     in_string = False
@@ -439,13 +501,11 @@ def _close_brackets(text: str) -> Optional[str]:
         elif ch in ("}", "]"):
             if stack and stack[-1] == ch:
                 stack.pop()
-    if not stack:
-        return fixed if _is_valid_json(fixed) else None
-    return fixed + "".join(reversed(stack))
+    candidate = fixed if not stack else fixed + "".join(reversed(stack))
+    return candidate if _is_valid_json(candidate) else None
 
 
 def _close_unclosed_string(text: str) -> str:
-    """If text ends inside a string literal, close it."""
     in_string = False
     escape = False
     for ch in text:
@@ -457,13 +517,10 @@ def _close_unclosed_string(text: str) -> str:
             continue
         if ch == '"':
             in_string = not in_string
-    if in_string:
-        return text + '"'
-    return text
+    return text + '"' if in_string else text
 
 
 def _trim_last_field(text: str) -> Optional[str]:
-    # Close unclosed string first so we can find structure-aware commas
     fixed = _close_unclosed_string(text)
     last_comma = fixed.rfind(",")
     if last_comma == -1:
@@ -475,7 +532,7 @@ def _trim_last_field(text: str) -> Optional[str]:
 
 def _is_valid_json(text: str) -> bool:
     try:
-        json.loads(text)
+        json.loads(_remove_trailing_commas(text))
         return True
     except json.JSONDecodeError:
         return False

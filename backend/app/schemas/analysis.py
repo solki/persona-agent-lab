@@ -9,7 +9,7 @@ proposed memories.
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +32,8 @@ class ExperimentAnalysisRequest(BaseModel):
 
 
 class FlowComparison(BaseModel):
+    model_config = {"extra": "ignore"}
+
     variant_soul_name: str
     variant_soul_id: int
     delegation_pattern: str
@@ -42,6 +44,8 @@ class FlowComparison(BaseModel):
 
 
 class BehavioralDifference(BaseModel):
+    model_config = {"extra": "ignore"}
+
     dimension: str
     observation: str
     variant_a_behavior: str
@@ -49,8 +53,22 @@ class BehavioralDifference(BaseModel):
     significance: str  # "clear_signal" | "suggestive" | "inconclusive"
     confidence_rationale: str
 
+    @field_validator("significance", mode="before")
+    @classmethod
+    def _normalize_significance(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            return "inconclusive"
+        lower = v.strip().lower()
+        if lower in ("clear_signal", "clear signal"):
+            return "clear_signal"
+        if lower == "suggestive":
+            return "suggestive"
+        return "inconclusive"
+
 
 class ExpectedVsActual(BaseModel):
+    model_config = {"extra": "ignore"}
+
     expected: str
     matched: list[str] = Field(default_factory=list)
     unmatched: list[str] = Field(default_factory=list)
@@ -58,6 +76,8 @@ class ExpectedVsActual(BaseModel):
 
 
 class Signals(BaseModel):
+    model_config = {"extra": "ignore"}
+
     efficiency: dict[str, Any]
     thoroughness: dict[str, Any]
     safety: dict[str, Any]
@@ -66,6 +86,8 @@ class Signals(BaseModel):
 
 
 class AnalysisResult(BaseModel):
+    model_config = {"extra": "ignore"}
+
     executive_summary: str
     flow_comparison: list[FlowComparison]
     behavioral_differences: list[BehavioralDifference]
