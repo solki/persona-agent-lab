@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import type { Agent, Experiment, ExperimentRun, Soul, SoulComparisonResult, Workflow } from "@/lib/types";
+import type { Agent, AnalysisResult, Experiment, ExperimentAnalysisResponse, ExperimentRun, Soul, SoulComparisonResult, Workflow } from "@/lib/types";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
 const experimentSchema = z.object({
@@ -227,6 +227,17 @@ export function ExperimentFormPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<ExperimentAnalysisResponse | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
+  // Analysis model config
+  const [analysisProvider, setAnalysisProvider] = useState("openai_compatible");
+  const [analysisBaseUrl, setAnalysisBaseUrl] = useState("");
+  const [analysisModel, setAnalysisModel] = useState("deepseek-v4-flash");
+  const [analysisApiKey, setAnalysisApiKey] = useState("");
+  const [analysisTemperature, setAnalysisTemperature] = useState("0.1");
+  const [analysisMaxTokens, setAnalysisMaxTokens] = useState("4096");
+  const [analysisSettingsOpen, setAnalysisSettingsOpen] = useState(false);
   const form = useForm<ExperimentFormValues>({ resolver: zodResolver(experimentSchema), defaultValues: emptyExperiment });
 
   useEffect(() => {
@@ -254,9 +265,31 @@ export function ExperimentFormPage() {
             const runs = await api.listExperimentRuns(experimentId);
             if (runs.length > 0) {
               setExperimentRun(runs[0]);
+              // Check for existing analysis
+              const cmp = runs[0].comparison_result as Record<string, unknown> | null;
+              const aiAnalysis = cmp?.ai_analysis as Record<string, unknown> | null;
+              if (aiAnalysis?.result) {
+                setAnalysisResult({
+                  experiment_id: experimentId,
+                  analyzed_at: (aiAnalysis.analyzed_at as string) ?? "",
+                  provider: (aiAnalysis.provider as string) ?? "",
+                  model: (aiAnalysis.model as string) ?? "",
+                  key_from_env: false,
+                  analysis: aiAnalysis.result as AnalysisResult,
+                });
+              }
             }
           } catch {
             // Experiment has no runs yet — that's fine
+          }
+          // Load saved analysis config
+          if (evalCfg?.analysis_config) {
+            const ac = evalCfg.analysis_config as Record<string, unknown>;
+            if (typeof ac.provider === "string") setAnalysisProvider(ac.provider);
+            if (typeof ac.base_url === "string") setAnalysisBaseUrl(ac.base_url);
+            if (typeof ac.model === "string") setAnalysisModel(ac.model);
+            if (typeof ac.temperature === "number") setAnalysisTemperature(String(ac.temperature));
+            if (typeof ac.max_tokens === "number") setAnalysisMaxTokens(String(ac.max_tokens));
           }
         }
       } catch (loadError) {
@@ -326,6 +359,34 @@ export function ExperimentFormPage() {
       navigate(`/experiments/${created.id}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save experiment.");
+    }
+  }
+
+  async function runAnalysis() {
+    if (!experimentId) return;
+    setAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const payload: Record<string, unknown> = {};
+      if (analysisProvider) payload.provider = analysisProvider;
+      if (analysisBaseUrl) payload.base_url = analysisBaseUrl;
+      if (analysisModel) payload.model = analysisModel;
+      if (analysisApiKey) payload.api_key = analysisApiKey;
+      const t = parseFloat(analysisTemperature);
+      if (!isNaN(t)) payload.temperature = t;
+      const mt = parseInt(analysisMaxTokens, 10);
+      if (!isNaN(mt)) payload.max_tokens = mt;
+      const result = await api.analyzeExperiment(experimentId, payload);
+      setAnalysisResult(result);
+      // Refresh experiment run to get stored analysis
+      try {
+        const runs = await api.listExperimentRuns(experimentId);
+        if (runs.length > 0) setExperimentRun(runs[0]);
+      } catch { /* ok */ }
+    } catch (e) {
+      setAnalysisError(e instanceof Error ? e.message : "Analysis failed.");
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -436,6 +497,30 @@ export function ExperimentFormPage() {
               </CardContent>
             </Card>
             {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} runIds={experimentRun.run_ids} agentById={agentById} /> : null}
+            {/* ----- AI Analysis Section ----- */}
+            {experimentRun?.comparison_result && (experimentRun.comparison_result as Record<string, unknown>)?.experiment_type === "soul_behavior_comparison" ? (
+              <AnalysisSection
+                experimentId={experimentId}
+                analysisResult={analysisResult}
+                analyzing={analyzing}
+                error={analysisError}
+                provider={analysisProvider}
+                baseUrl={analysisBaseUrl}
+                model={analysisModel}
+                apiKey={analysisApiKey}
+                temperature={analysisTemperature}
+                maxTokens={analysisMaxTokens}
+                settingsOpen={analysisSettingsOpen}
+                onProviderChange={setAnalysisProvider}
+                onBaseUrlChange={setAnalysisBaseUrl}
+                onModelChange={setAnalysisModel}
+                onApiKeyChange={setAnalysisApiKey}
+                onTemperatureChange={setAnalysisTemperature}
+                onMaxTokensChange={setAnalysisMaxTokens}
+                onSettingsToggle={() => setAnalysisSettingsOpen(!analysisSettingsOpen)}
+                onRunAnalysis={() => void runAnalysis()}
+              />
+            ) : null}
           </>
         ) : null}
       </div>
@@ -507,6 +592,170 @@ function SoulComparisonView({ comparison, runIds, agentById }: { comparison: Sou
             </Card>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AnalysisSection(props: {
+  experimentId: number | undefined;
+  analysisResult: ExperimentAnalysisResponse | null;
+  analyzing: boolean;
+  error: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  temperature: string;
+  maxTokens: string;
+  settingsOpen: boolean;
+  onProviderChange: (v: string) => void;
+  onBaseUrlChange: (v: string) => void;
+  onModelChange: (v: string) => void;
+  onApiKeyChange: (v: string) => void;
+  onTemperatureChange: (v: string) => void;
+  onMaxTokensChange: (v: string) => void;
+  onSettingsToggle: () => void;
+  onRunAnalysis: () => void;
+}) {
+  const a = props.analysisResult?.analysis;
+  const hasResult = Boolean(a);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">AI Experiment Analysis</h2>
+          <Button type="button" variant="outline" size="sm" onClick={props.onSettingsToggle}>
+            {props.settingsOpen ? "Hide Settings" : "Analysis Settings"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {props.settingsOpen ? (
+          <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-3 md:grid-cols-2">
+            <FormField label="Provider">
+              <Select value={props.provider} onChange={(e) => props.onProviderChange(e.target.value)}>
+                <option value="mock">mock</option>
+                <option value="openai_compatible">openai_compatible</option>
+              </Select>
+            </FormField>
+            <FormField label="Model"><Input value={props.model} onChange={(e) => props.onModelChange(e.target.value)} placeholder="deepseek-v4-flash" /></FormField>
+            <FormField label="Base URL"><Input value={props.baseUrl} onChange={(e) => props.onBaseUrlChange(e.target.value)} placeholder="https://api.deepseek.com" /></FormField>
+            <FormField label="API Key" help={<FieldHelp pattern="tooltip" content="Sent only for this analysis request. Never stored. Falls back to environment variable if empty." />}>
+              <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder={props.analysisResult?.key_from_env ? "(from environment)" : "sk-..."} />
+            </FormField>
+            <FormField label="Temperature"><Input value={props.temperature} onChange={(e) => props.onTemperatureChange(e.target.value)} placeholder="0.1" /></FormField>
+            <FormField label="Max Tokens"><Input value={props.maxTokens} onChange={(e) => props.onMaxTokensChange(e.target.value)} placeholder="4096" /></FormField>
+          </div>
+        ) : null}
+        {props.error ? <Alert title="Analysis Error" tone="error">{props.error}</Alert> : null}
+        {props.analyzing ? (
+          <Alert title="Analyzing">Analyzing experiment data with {props.model || "LLM"}...</Alert>
+        ) : hasResult ? null : (
+          <Button type="button" onClick={props.onRunAnalysis} disabled={props.analyzing}>
+            {props.analyzing ? "Analyzing..." : "Run Analysis"}
+          </Button>
+        )}
+        {hasResult && a ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Analyzed with {props.analysisResult?.provider}/{props.analysisResult?.model}</span>
+              <span>·</span>
+              <span>{new Date(props.analysisResult?.analyzed_at ?? "").toLocaleString()}</span>
+              <Button type="button" variant="outline" size="sm" onClick={props.onRunAnalysis} disabled={props.analyzing}>Re-run</Button>
+            </div>
+            {/* Executive Summary */}
+            <div className="rounded-md border border-border bg-muted/30 p-4">
+              <h3 className="text-sm font-semibold mb-1">Executive Summary</h3>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{a.executive_summary}</p>
+            </div>
+            {/* Flow Comparison */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Flow Comparison</h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {a.flow_comparison.map((fc, i) => (
+                  <div key={i} className="rounded-md border border-border p-3">
+                    <p className="text-sm font-semibold">{fc.variant_soul_name}</p>
+                    <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                      <p><span className="font-medium">Pattern:</span> {fc.delegation_pattern}</p>
+                      <p><span className="font-medium">Coverage:</span> {fc.worker_coverage}</p>
+                      <p><span className="font-medium">Decision style:</span> {fc.decision_style_observed}</p>
+                      <p><span className="font-medium">Instructions:</span> {fc.instruction_style}</p>
+                      <p><span className="font-medium">Synthesis:</span> {fc.synthesis_approach}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Behavioral Differences */}
+            {a.behavioral_differences.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Behavioral Differences</h3>
+                <div className="space-y-2">
+                  {a.behavioral_differences.map((bd, i) => (
+                    <div key={i} className="rounded-md border border-border p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-medium">{bd.dimension}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${bd.significance === "clear_signal" ? "bg-green-100 text-green-800" : bd.significance === "suggestive" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"}`}>{bd.significance}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{bd.observation}</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded bg-muted/50 p-2"><span className="font-medium">Variant A:</span> {bd.variant_a_behavior}</div>
+                        <div className="rounded bg-muted/50 p-2"><span className="font-medium">Variant B:</span> {bd.variant_b_behavior}</div>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground italic">{bd.confidence_rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {/* Expected vs Actual */}
+            {a.expected_vs_actual ? (
+              <div className="rounded-md border border-border p-3">
+                <h3 className="text-sm font-semibold mb-2">Expected vs Actual</h3>
+                <p className="text-xs text-muted-foreground mb-2">Expected: {a.expected_vs_actual.expected.slice(0, 200)}</p>
+                <div className="grid gap-2 md:grid-cols-3 text-xs">
+                  <div className="rounded bg-green-50 p-2"><span className="font-medium text-green-800">Matched:</span><ul className="list-disc pl-4 mt-1">{a.expected_vs_actual.matched.map((m, i) => <li key={i}>{m}</li>)}</ul></div>
+                  <div className="rounded bg-amber-50 p-2"><span className="font-medium text-amber-800">Unmatched:</span><ul className="list-disc pl-4 mt-1">{a.expected_vs_actual.unmatched.map((m, i) => <li key={i}>{m}</li>)}</ul></div>
+                  <div className="rounded bg-blue-50 p-2"><span className="font-medium text-blue-800">Surprising:</span><ul className="list-disc pl-4 mt-1">{a.expected_vs_actual.surprising.map((m, i) => <li key={i}>{m}</li>)}</ul></div>
+                </div>
+              </div>
+            ) : null}
+            {/* Signals */}
+            <div className="rounded-md border border-border p-3">
+              <h3 className="text-sm font-semibold mb-2">Signals</h3>
+              <div className="grid gap-2 md:grid-cols-3 text-sm">
+                {(["efficiency", "thoroughness", "safety"] as const).map((key) => {
+                  const s = props.analysisResult?.analysis?.signals?.[key] as Record<string, unknown> | undefined;
+                  return (
+                    <div key={key} className="rounded bg-muted/30 p-2">
+                      <span className="font-medium capitalize">{key}</span>
+                      <p className="text-xs text-muted-foreground mt-1">{s?.observation ? String(s.observation) : "-"}</p>
+                      {s?.rationale ? <p className="text-xs text-muted-foreground italic mt-0.5">{String(s.rationale)}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-sm">{props.analysisResult?.analysis?.signals?.overall_pattern ?? ""}</p>
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded p-2 italic">⚠️ {props.analysisResult?.analysis?.signals?.caveat ? String(props.analysisResult.analysis.signals.caveat) : ""}</p>
+            </div>
+            {/* Limitations */}
+            {a.limitations.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Limitations</h3>
+                <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-0.5">{a.limitations.map((l, i) => <li key={i}>{l}</li>)}</ul>
+              </div>
+            ) : null}
+            {/* Next Steps */}
+            {a.recommended_next_steps.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Recommended Next Steps</h3>
+                <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-0.5">{a.recommended_next_steps.map((s, i) => <li key={i}>{s}</li>)}</ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

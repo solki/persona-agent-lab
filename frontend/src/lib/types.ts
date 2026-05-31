@@ -332,6 +332,59 @@ export interface CollaborationChainSummary {
   status: string;
 }
 
+export interface FlowComparison {
+  variant_soul_name: string;
+  variant_soul_id: number;
+  delegation_pattern: string;
+  worker_coverage: string;
+  decision_style_observed: string;
+  instruction_style: string;
+  synthesis_approach: string;
+}
+
+export interface BehavioralDifference {
+  dimension: string;
+  observation: string;
+  variant_a_behavior: string;
+  variant_b_behavior: string;
+  significance: "clear_signal" | "suggestive" | "inconclusive";
+  confidence_rationale: string;
+}
+
+export interface ExpectedVsActual {
+  expected: string;
+  matched: string[];
+  unmatched: string[];
+  surprising: string[];
+}
+
+export interface Signals {
+  efficiency: Record<string, unknown>;
+  thoroughness: Record<string, unknown>;
+  safety: Record<string, unknown>;
+  overall_pattern: string;
+  caveat: string;
+}
+
+export interface AnalysisResult {
+  executive_summary: string;
+  flow_comparison: FlowComparison[];
+  behavioral_differences: BehavioralDifference[];
+  expected_vs_actual?: ExpectedVsActual | null;
+  signals: Signals;
+  limitations: string[];
+  recommended_next_steps: string[];
+}
+
+export interface ExperimentAnalysisResponse {
+  experiment_id: number;
+  analyzed_at: string;
+  provider: string;
+  model: string;
+  key_from_env: boolean;
+  analysis: AnalysisResult;
+}
+
 export interface SoulVariantResult {
   soul_id: number;
   soul_name: string;

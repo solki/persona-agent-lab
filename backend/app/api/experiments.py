@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.schemas.analysis import ExperimentAnalysisRequest, ExperimentAnalysisResponse
 from app.schemas.experiments import ExperimentArchiveResponse, ExperimentCreate, ExperimentRead, ExperimentRunRead
-from app.services import experiment_service
+from app.services import experiment_analysis_service, experiment_service
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -75,4 +76,15 @@ def run_experiment(experiment_id: int, db: Session = Depends(get_db)):
     try:
         return experiment_service.run_experiment(db, experiment)
     except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/{experiment_id}/analyze", response_model=ExperimentAnalysisResponse)
+def analyze_experiment(experiment_id: int, payload: ExperimentAnalysisRequest = ExperimentAnalysisRequest(), db: Session = Depends(get_db)):
+    experiment = require_experiment(db, experiment_id)
+    try:
+        request_config = payload.model_dump(exclude_none=True)
+        # Remove api_key from any error logging context by handling it here
+        return experiment_analysis_service.analyze_experiment(db, experiment, request_config)
+    except experiment_analysis_service.ExperimentAnalysisError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

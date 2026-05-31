@@ -5,6 +5,7 @@ import type {
   AgentFeedback,
   AgentMemory,
   CollaborationGraph,
+  ExperimentAnalysisResponse,
   DemoCleanupResponse,
   DemoSeedResponse,
   Experiment,
@@ -137,6 +138,8 @@ export const api = {
   activateExperiment: (id: number) => request<{ message: string }>(`/experiments/${id}/activate`, { method: "POST" }),
   runExperiment: (id: number) => request<ExperimentRun>(`/experiments/${id}/run`, { method: "POST" }),
   listExperimentRuns: (id: number) => request<ExperimentRun[]>(`/experiments/${id}/runs`),
+  analyzeExperiment: (id: number, payload: Record<string, unknown>) =>
+    request<ExperimentAnalysisResponse>(`/experiments/${id}/analyze`, body("POST", payload)),
 
   listRuns: (includeArchived = false) => request<Run[]>(`/runs${includeArchived ? "?include_archived=true" : ""}`),
   getRun: (id: number) => request<Run>(`/runs/${id}`),
