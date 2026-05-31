@@ -6,8 +6,8 @@ from app.schemas.actions import SupervisorDecision
 
 
 class ActionParseResult:
-    def __init__(self, decision: SupervisorDecision, raw: str, parse_success: bool, parse_error: str = ""):
-        self.decision = decision
+    def __init__(self, decision, raw: str, parse_success: bool, parse_error: str = ""):
+        self.decision = decision  # SupervisorDecision or HandoffDecision
         self.raw = raw
         self.parse_success = parse_success
         self.parse_error = parse_error

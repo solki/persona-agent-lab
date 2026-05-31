@@ -46,6 +46,9 @@ Key deliverables carried into Phase 3:
 6. **Test-created records must use TEST or E2E prefixes** in names to distinguish from user-created or demo seed data.
 7. **Clean up only data created during the task. Do not delete user-created or demo seed data.**
 8. **Frontend actions must never fail silently** — show loading, success, and error states.
+9. **The Experiment Insight Analyzer is NOT a user agent.** Do not give it a soul, context, memory, workflow role, or proposed memory capability. It is an internal platform service (`ExperimentAnalysisService`), same category as `ReviewService`.
+10. **API keys must never be persisted, returned, or logged.** Use env var (`OPENAI_COMPATIBLE_API_KEY`) as default; accept session-only override in POST body.
+11. **`worker_agent_ids` is an unordered allowed worker pool** — supervisor can delegate in any order. Never assume it determines execution sequence.
 
 ## Architecture Principles
 
@@ -138,6 +141,8 @@ For any meaningful feature change:
 
 - Full project state, data models, API endpoints, runtime flow: `docs/PROJECT_STATE.md`
 - Phase 2 completion summary and tech debt: `docs/PHASE_2_COMPLETION_SUMMARY.md`
+- Phase 3 M3 current state: `docs/PHASE_3_M3_CURRENT_STATE.md`
+- Experiment Insight Analyzer current state: `docs/EXPERIMENT_INSIGHT_ANALYZER_CURRENT_STATE.md`
 - Phase 3 pre-audit notes: `docs/PHASE_3_PRE_AUDIT_NOTES.md`
 - Historical milestones: `docs/MILESTONE_HISTORY.md`
 - Architecture principles: `docs/architecture.md`

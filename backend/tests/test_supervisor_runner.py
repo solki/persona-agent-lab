@@ -167,7 +167,7 @@ class TestRunnerFactory:
     def test_unknown_type_raises_value_error(self, db_session):
         from app.models.workflow import Workflow
 
-        workflow = Workflow(name="test-bad", workflow_type="handoff_swarm", graph_config={"entry_agent_id": 1, "participant_agent_ids": [1]})
+        workflow = Workflow(name="test-bad", workflow_type="unknown_type", graph_config={})
         db_session.add(workflow)
         db_session.commit()
 

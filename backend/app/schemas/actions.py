@@ -32,3 +32,23 @@ class SupervisorDecision(BaseModel):
             if not self.final_response:
                 raise ValueError("final_response is required when action is 'finish'")
         return self
+
+
+class HandoffDecision(BaseModel):
+    action: Literal["handoff", "finish"]
+    target_agent_id: Optional[int] = None
+    payload: Optional[dict[str, Any]] = None
+    final_response: Optional[str] = None
+    reasoning: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_handoff_fields(self) -> "HandoffDecision":
+        if self.action == "handoff":
+            if self.target_agent_id is None:
+                raise ValueError("target_agent_id is required when action is 'handoff'")
+            if not self.payload:
+                raise ValueError("payload is required when action is 'handoff'")
+        if self.action == "finish":
+            if not self.final_response:
+                raise ValueError("final_response is required when action is 'finish'")
+        return self

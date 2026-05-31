@@ -168,6 +168,9 @@ export function WorkflowFormPage() {
   const [supervisorId, setSupervisorId] = useState<number | null>(null);
   const [workerIds, setWorkerIds] = useState<number[]>([]);
   const [maxIterations, setMaxIterations] = useState(10);
+  const [entryAgentId, setEntryAgentId] = useState<number | null>(null);
+  const [participantIds, setParticipantIds] = useState<number[]>([]);
+  const [maxHandoffs, setMaxHandoffs] = useState(10);
   const [task, setTask] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -189,6 +192,12 @@ export function WorkflowFormPage() {
           setWorkerIds(workerAgentIds(workflowData.graph_config));
           const maxIter = workflowData.graph_config.max_iterations;
           if (typeof maxIter === "number") setMaxIterations(maxIter);
+          const entryId = workflowData.graph_config.entry_agent_id;
+          if (typeof entryId === "number") setEntryAgentId(entryId);
+          const pIds = workflowData.graph_config.participant_agent_ids;
+          if (Array.isArray(pIds)) setParticipantIds(pIds.filter((id): id is number => typeof id === "number"));
+          const mh = workflowData.graph_config.max_handoffs;
+          if (typeof mh === "number") setMaxHandoffs(mh);
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load workflow.");
@@ -235,6 +244,31 @@ export function WorkflowFormPage() {
     });
   }
 
+  function toggleEntryAgent(agentId: number) {
+    setEntryAgentId((current) => {
+      const next = current === agentId ? null : agentId;
+      const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "handoff_swarm");
+      config.entry_agent_id = next;
+      config.participant_agent_ids = participantIds.includes(agentId) ? participantIds : [...participantIds, agentId];
+      if (!participantIds.includes(agentId)) {
+        setParticipantIds([...participantIds, agentId]);
+      }
+      form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true });
+      return next;
+    });
+  }
+
+  function toggleParticipant(agentId: number) {
+    setParticipantIds((current) => {
+      if (agentId === entryAgentId) return current; // entry is always a participant
+      const next = current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId];
+      const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "handoff_swarm");
+      config.participant_agent_ids = next;
+      form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true });
+      return next;
+    });
+  }
+
   async function submit(values: WorkflowFormValues) {
     setError("");
     setMessage("");
@@ -249,6 +283,10 @@ export function WorkflowFormPage() {
       if (supervisorId !== null) graphConfig.supervisor_agent_id = supervisorId;
       graphConfig.worker_agent_ids = workerIds;
       if (!graphConfig.max_iterations) graphConfig.max_iterations = maxIterations;
+    } else if (values.workflow_type === "handoff_swarm") {
+      if (entryAgentId !== null) graphConfig.entry_agent_id = entryAgentId;
+      graphConfig.participant_agent_ids = participantIds;
+      if (!graphConfig.max_handoffs) graphConfig.max_handoffs = maxHandoffs;
     } else if (selectedAgentIds.length > 0) {
       graphConfig.agent_sequence = selectedAgentIds;
     }
@@ -354,9 +392,39 @@ export function WorkflowFormPage() {
                       <Input type="number" min={1} max={50} value={maxIterations} onChange={(e) => { const v = Number(e.target.value); if (v >= 1) { setMaxIterations(v); const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "supervisor"); config.max_iterations = v; form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true }); } }} />
                     </FormField>
                   </>
+                ) : form.watch("workflow_type") === "handoff_swarm" ? (
+                  <>
+                    <FormField label="Entry agent" help={<FieldHelp pattern="tooltip" content="The first agent to receive the task. Must also be selected as a participant." />}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {agents.map((agent) => (
+                          <label key={agent.id} className="flex items-center gap-2 text-sm">
+                            <input type="radio" name="entry_agent" checked={entryAgentId === agent.id} onChange={() => toggleEntryAgent(agent.id)} />
+                            <span>{agent.name}</span>
+                            <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {entryAgentId ? <p className="mt-1 text-xs text-muted-foreground">Entry: {agentById[entryAgentId] ?? `Agent ${entryAgentId}`}</p> : null}
+                    <FormField label="Participant agents" help={<FieldHelp pattern="tooltip" content="Agents allowed to participate in the handoff chain. Entry agent is automatically included. This is an allowed pool, not execution order." />}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {agents.map((agent) => (
+                          <label key={agent.id} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={participantIds.includes(agent.id)} onChange={() => toggleParticipant(agent.id)} disabled={agent.id === entryAgentId} />
+                            <span>{agent.name}</span>
+                            <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {participantIds.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">Participants: {participantIds.map((id) => agentById[id] ?? `Agent ${id}`).join(", ")}</p> : null}
+                    <FormField label="Max handoffs" help={<FieldHelp pattern="tooltip" content="Maximum handoffs before the run is failed. Prevents infinite loops. Default: 10." />}>
+                      <Input type="number" min={1} max={50} value={maxHandoffs} onChange={(e) => { const v = Number(e.target.value); if (v >= 1) { setMaxHandoffs(v); const config = parseConfigOrDefault(form.getValues("graphConfigJson"), "handoff_swarm"); config.max_handoffs = v; form.setValue("graphConfigJson", prettyJson(config), { shouldDirty: true }); } }} />
+                    </FormField>
+                  </>
                 ) : (
                   <>
-                    <FormField label="Agent sequence" help={form.watch("workflow_type") === "handoff_swarm" ? <FieldHelp pattern="tooltip" content="Entry agent + participants for handoff swarm. Configure handoff policies per agent." /> : undefined}>
+                    <FormField label="Agent sequence">
                       <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
                         {agents.map((agent) => (
                           <label key={agent.id} className="flex items-center gap-2 text-sm">
@@ -427,8 +495,13 @@ function parseConfigOrDefault(value: string, workflowType?: string) {
     if (workflowType === "supervisor" && !parsed.worker_agent_ids) {
       parsed.worker_agent_ids = [];
     }
+    if (workflowType === "handoff_swarm" && !parsed.participant_agent_ids) {
+      parsed.participant_agent_ids = [];
+    }
     return parsed;
   } catch {
-    return workflowType === "supervisor" ? { supervisor_agent_id: null, worker_agent_ids: [], max_iterations: 10 } : { agent_sequence: [] };
+    if (workflowType === "supervisor") return { supervisor_agent_id: null, worker_agent_ids: [], max_iterations: 10 };
+    if (workflowType === "handoff_swarm") return { entry_agent_id: null, participant_agent_ids: [], max_handoffs: 10 };
+    return { agent_sequence: [] };
   }
 }
