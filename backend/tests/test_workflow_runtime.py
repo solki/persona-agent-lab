@@ -6,7 +6,8 @@ from app.models.memory import AgentMemory
 from app.models.observatory import AgentExecution, AgentExecutionEvent, LearningEvent, TokenUsage
 from app.models.run import TraceEvent
 from app.models.workflow import Workflow
-from app.runtime.workflow_runner import WorkflowRunner
+from app.runtime.runner_factory import create_runner
+from app.runtime.workflow_runner import SequentialRunner
 from app.services import observatory_service
 
 
@@ -130,7 +131,9 @@ def test_workflow_start_creates_run_and_queued_executions_before_completion(clie
         },
     ).json()
 
-    started_run = WorkflowRunner(db_session).start(db_session.get(Workflow, workflow["id"]), "Start with monitor.")
+    started_run = create_runner(db_session, db_session.get(Workflow, workflow["id"])).start(
+        db_session.get(Workflow, workflow["id"]), "Start with monitor."
+    )
 
     assert started_run.status == "running"
     executions = observatory_service.list_executions_for_run(db_session, started_run.id)
@@ -139,7 +142,7 @@ def test_workflow_start_creates_run_and_queued_executions_before_completion(clie
     monitor = observatory_service.monitor_for_run(db_session, started_run)
     assert monitor["active_agent_execution"].agent_id == first_agent["id"]
 
-    completed_run = WorkflowRunner(db_session).execute_run(started_run.id)
+    completed_run = create_runner(db_session, db_session.get(Workflow, workflow["id"])).execute_run(started_run.id)
     assert completed_run.status == "completed"
 
 

@@ -9,7 +9,7 @@ from app.models.learning import AgentEvaluation, AgentFeedback
 from app.models.observatory import AgentExecution, AgentExecutionEvent, LearningEvent, TokenUsage
 from app.models.run import Run, TraceEvent
 from app.models.workflow import Workflow
-from app.runtime.workflow_runner import WorkflowRunner
+from app.runtime.runner_factory import create_runner
 from app.schemas.experiments import ExperimentCreate
 
 
@@ -107,7 +107,6 @@ def delete_experiment(db: Session, experiment: Experiment, force: bool = False) 
 
 
 def run_experiment(db: Session, experiment: Experiment) -> ExperimentRun:
-    runner = WorkflowRunner(db)
     run_ids: list[int] = []
     agent_results = []
 
@@ -126,7 +125,7 @@ def run_experiment(db: Session, experiment: Experiment) -> ExperimentRun:
         db.commit()
         db.refresh(workflow)
 
-        run = runner.run(workflow, experiment.task_prompt)
+        run = create_runner(db, workflow).run(workflow, experiment.task_prompt)
         run_ids.append(run.id)
         agent_results.append(
             {

@@ -1,199 +1,260 @@
 # Project State
 
-Last updated after promoting frontend-v2 to the official frontend.
+Last updated 2026-05-30 — pre-Phase-3 audit. Phase 1 and Phase 2 are complete.
 
 ## Project Purpose
 
 Agent Swarm Lab is a configurable platform for creating, editing, deleting, configuring, and composing independent AI agents. Each agent owns its model settings, soul/persona, system prompt, context entries, memory records, tool permissions, and handoff policy. Agents are isolated by default and must not share context, memory, tools, prompts, settings, or hidden runtime state unless explicit workflow output or a permission-checked handoff payload allows it.
 
-Milestone 9 status: implemented.
+## Phase Status
 
-Milestone 10 status: implemented.
-
-Phase 2 Milestone 1 (Real LLM Hardening): implemented.
-
-Phase 2 Milestone 2 (Frontend Learning Loop): implemented.
-
-Phase 2 Milestone 3 (LLM Reflection): implemented.
-
-Phase 2 Milestone 4 (Customer Escalation Learning Demo): implemented.
+- Milestone 9 (Agent Learning Loop): implemented
+- Milestone 10 (Runtime Observatory): implemented
+- Phase 2 M1 (Real LLM Hardening): implemented
+- Phase 2 M2 (Frontend Learning Loop): implemented
+- Phase 2 M3 (LLM Reflection): implemented
+- Phase 2 M4 (Customer Escalation Learning Demo): implemented
+- Dynamic Reviewer Feedback (PR #7): implemented
+- Field Help Tooltips + Adminer: implemented
+- **Phase 3: starting — branch `feature/phase3`**
 
 ## Current Architecture
 
-- Backend: FastAPI, Pydantic settings and schemas, SQLAlchemy models/services, PostgreSQL persistence, Qdrant vector-store abstraction, Tool Gateway, deterministic context assembler, provider factory, workflow runner, experiment runner, feedback-driven learning loop, and runtime observatory.
-- Frontend: Vite, React, TypeScript, Tailwind CSS, shadcn/ui primitives, typed API client with Vite dev proxy, dashboard, and complete configuration management for souls, agents, tools, workflows, runs, experiments, agent-tool assignment, and policy-aware CRUD lifecycle actions. Playwright E2E coverage.
-- Infrastructure: Docker Compose starts PostgreSQL and Qdrant for local development. PostgreSQL uses host port `5433` by default. Qdrant uses `6333` and `6334`. The `/demo` page provides one-click idempotent seeding and cleanup. The `POST /demo/seed` and `DELETE /demo/seed` API endpoints support programmatic seed and cleanup.
-- Skills: Project-specific skills live under `.skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, and `agent-lab-experiment-design`.
-- Documentation: Architecture, setup, isolation, memory/context, workflow runtime, and experiment design guides are under `docs/`.
+- **Backend**: FastAPI, Pydantic v2 settings and schemas, SQLAlchemy 2.x models/services, PostgreSQL 16 persistence, Qdrant vector-store abstraction, Tool Gateway (3-layer authorization), deterministic context assembler, provider factory (mock + openai_compatible functional; openai/anthropic/ollama placeholders), workflow runner (sequential only), experiment runner, feedback-driven human learning loop, agent-to-agent reviewer feedback, runtime observatory, and admin cleanup.
+- **Frontend**: Vite + React + TypeScript + Tailwind CSS + shadcn/ui, typed API client (56 functions), NotificationContext for proposed-memory badges, and complete CRUD/run/monitor/review/demo UIs with Playwright E2E coverage.
+- **Infrastructure**: Docker Compose (PostgreSQL 16 on host port 5433, Qdrant on 6333/6334, Adminer on 8080), backend `uvicorn` dev server, frontend Vite dev server proxy. The `/demo` page provides one-click idempotent seeding and cleanup. `POST /demo/seed` and `DELETE /demo/seed` API endpoints. CLI seed script at `backend/scripts/seed_demo.py`.
+- **Skills**: Project-specific skills under `.claude/skills/`: `agent-lab-planning`, `agent-lab-implementation`, `agent-lab-review`, `agent-lab-experiment-design`.
+- **Documentation**: Architecture, setup, isolation, memory/context, workflow runtime, experiment design, agent learning loop, runtime observatory, reviewer feedback design, reviewer feedback manual test, manual E2E test guide, frontend field help audit, frontend v2 evaluation, milestone history, and next-session prompt under `docs/`.
 
 ## Current Backend Modules
 
-- `app/main.py`: FastAPI app factory, CORS, router registration, startup table initialization when `CREATE_TABLES_ON_STARTUP=true`.
-- `app/config.py`: Pydantic settings for database, CORS, Qdrant, Tavily, and LLM providers.
-- `app/database.py`: SQLAlchemy base, engine/session setup, local table initialization, and `postgresql://` to `postgresql+psycopg://` normalization.
-- `app/api/`: Routers for health, agents, souls, tools, contexts, memories, workflows, runs, experiments, learning, and observatory.
-- `app/models/`: SQLAlchemy models for agents, souls, tools, contexts, memories, learning feedback/evaluations/proposed memories/events, observatory execution records/events/token usage, workflows, runs, trace events, experiments, and experiment runs.
-- `app/schemas/`: Pydantic request/response schemas and policy schemas, including demo seed/cleanup response schemas.
-- `app/services/`: Persistence and scoped access services for agents, souls, tools, contexts, memories, learning, observatory, workflows, runs, trace events, experiments, and demo (idempotent seed and cleanup).
-- `app/runtime/`: Context assembler, workflow runner, handoff policy evaluator, mock provider, OpenAI-compatible provider, provider placeholders, provider factory, and provider interface.
-- `app/memory/`: Vector store schemas, disabled vector store, and Qdrant adapter shell.
-- `app/tools/`: Tool Gateway, local tool registry, and Tavily search wrapper.
-- `backend/tests/`: Pytest suite with SQLite-backed API/service/runtime tests and deterministic mock LLM mode.
+- `app/main.py`: FastAPI app factory, CORS, 14 router registrations, startup table initialization when `CREATE_TABLES_ON_STARTUP=true`.
+- `app/config.py`: Pydantic settings for database, CORS, Qdrant, Tavily, and LLM providers (mock/openai_compatible/openai/anthropic/ollama).
+- `app/database.py`: SQLAlchemy base, engine/session setup, local table initialization, `postgresql://` to `postgresql+psycopg://` normalization, inline schema migration helper.
+- `app/api/`: 14 routers for health, agents, souls, tools, contexts, memories, workflows, runs, experiments, learning, observatory, admin, and demo.
+- `app/models/`: 11 model files, 18 SQLAlchemy tables — see Data Models section below.
+- `app/schemas/`: 14 schema files, 63 Pydantic models for request/response validation, nested policy configs, demo responses, learning types, observatory types, and admin cleanup.
+- `app/services/`: Scoped persistence services for agents, souls, tools, contexts, memories, learning, observatory, workflows, runs, trace events, experiments, review, and demo.
+- `app/runtime/`: Context assembler, workflow runner (sequential), handoff policy evaluator, mock provider, OpenAI-compatible provider (real LLM via OpenAI SDK), provider placeholders (OpenAI/Anthropic/Ollama), provider factory, and provider interface.
+- `app/memory/`: Vector store schemas, disabled vector store (null object), and Qdrant adapter (search/upsert stubs awaiting embedding provider).
+- `app/tools/`: Tool Gateway with 3-layer authorization (registry+DB+assignment), local tool registry (ExecutableTool protocol), and Tavily search wrapper.
+- `backend/tests/`: 123 tests across 16 test files, all passing with `LLM_PROVIDER=mock`.
 
 ## Current Frontend Modules
 
-- `src/App.tsx`: App root with refine resource registration, React Router routes, NotificationProvider wrapper, and dashboard Overview component.
-- `src/pages/AgentsPage.tsx`: Agent list (`AgentsPage`), create/edit form (`AgentFormPage`), detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review, feedback-derived approval badges, and memory CRUD (`AgentDetailPage`).
-- `src/pages/SoulsPage.tsx`: Soul/persona list (`SoulsPage`), create and edit form (`SoulFormPage`) with confirmed delete support and blocked-delete error display.
-- `src/pages/ToolsPage.tsx`: Tool registry list (`ToolsPage`), create and edit form (`ToolFormPage`) with config JSON editor and active flag controls.
-- `src/pages/WorkflowsPage.tsx`: Workflow list (`WorkflowsPage`), create/edit form with agent picker (`WorkflowFormPage`), and workflow run panel with confirmed delete and sequence removal.
-- `src/pages/RunsPage.tsx`: Run list (`RunsPage`) with active/archived/status/workflow filters, archiving, activation, guarded permanent delete; run detail viewer (`RunDetailPage`) with collapsible input/output/config, trace events, learning feedback panel, token usage, and execution detail; live monitor page (`RunMonitorPage`) with polling-based status updates, agent execution cards, event stream, and token summary.
-- `src/pages/ExperimentsPage.tsx`: Experiment list (`ExperimentsPage`), create/edit form (`ExperimentFormPage`) with comparison view, archive/activate, and guarded delete with force-delete fallback for experiments with runs.
-- `src/pages/DemoPage.tsx`: Phase 2 acceptance demo page with idempotent seed, created/reused summary grid, acceptance checklist with checkboxes, complaint text blocks with copy buttons, suggested feedback, quick links, and cleanup. (`DemoPage`).
-- `src/components/shared/`: AppLayout (sidebar navigation shell), PageHeader, StatusBadge, ConfirmDialog, NoticeDialog, FormField, EmptyState, JsonCollapse, Alert, and reusable collapsed JSON/event viewers.
-- `src/components/ui/`: shadcn/ui-style primitives (button, card, input, label, select, textarea).
-- `src/lib/api.ts`: Typed backend API wrapper using `VITE_API_BASE_URL` with Vite `/api` dev proxy.
-- `src/lib/types.ts`: Frontend TypeScript interfaces matching backend schemas.
-- `src/lib/NotificationContext.tsx`: React context providing shared notification state with `totalCount` and `refresh()` across the app.
-- `src/index.css`: Tailwind CSS with custom dark lab theme tokens, dot-grid utility, and live-pulse animation.
-- `e2e/frontend.spec.ts`: Playwright E2E tests covering soul/agent/tool CRUD, workflow run, run archive/activate, experiment archive/force-delete, agent isolation assertions, demo page seed/cleanup, and Phase 2 acceptance learning loop.
+- `src/App.tsx`: App root with React Router routes, NotificationProvider wrapper, and dashboard Overview component.
+- `src/pages/AgentsPage.tsx` (858 lines): Agent list, create/edit form, detail page with soul selection, active flag, policy JSON editors, agent-tool assignments, context CRUD, proposed-memory review with notification badges, memory CRUD, and reviewer feedback.
+- `src/pages/SoulsPage.tsx` (293 lines): Soul list, create/edit form with FieldHelp tooltips.
+- `src/pages/ToolsPage.tsx` (280 lines): Tool registry list, create/edit form.
+- `src/pages/WorkflowsPage.tsx` (339 lines): Workflow list, create/edit form with agent picker and run panel.
+- `src/pages/RunsPage.tsx` (1084 lines): Run list with bulk archive/activate, detail view with learning feedback and reviewer feedback sections, live polling monitor.
+- `src/pages/ExperimentsPage.tsx` (354 lines): Experiment list, create/detail form with run.
+- `src/pages/DemoPage.tsx` (370 lines): Phase 2 acceptance demo with idempotent seed/cleanup, acceptance checklist, and quick links.
+- `src/components/shared/`: AppLayout (sidebar with notification badges), PageHeader, StatusBadge, ConfirmDialog, NoticeDialog, FormField, EmptyState, JsonCollapse, Alert, FieldHelp.
+- `src/components/ui/`: shadcn/ui-style primitives (Button, Card, CardHeader, CardContent, Input, Label, Select, Textarea).
+- `src/lib/api.ts` (157 lines): 56 typed API functions using `VITE_API_BASE_URL`.
+- `src/lib/types.ts` (301 lines): 30 TypeScript interfaces matching backend schemas.
+- `src/lib/NotificationContext.tsx`: React context for proposed-memory notifications with `totalCount` and `refresh()`.
+- `src/lib/utils.ts` (35 lines): Utility helpers.
+- `src/index.css`: Tailwind CSS with dark lab theme, dot-grid utility, and live-pulse animation.
+- `e2e/frontend.spec.ts`: Playwright E2E tests covering full CRUD, workflow run, archive/activate, experiments, isolation, demo, and Phase 2 acceptance.
 
 ## Current Data Models
 
-- `Agent`: `id`, `name`, `description`, `role`, `system_prompt`, `soul_id`, `llm_provider`, `model`, `temperature`, `max_tokens`, `memory_policy`, `context_policy`, `handoff_policy`, `is_active`, timestamps.
-- `Soul`: persona fields including principles, decision style, collaboration style, failure handling style, escalation style, and active flag.
-- `Tool`: name, description, type, JSON config, active flag, timestamps.
-- `AgentTool`: many-to-many assignment table between agents and tools.
-- `AgentContext`: agent-scoped title, type, content, priority, active flag, timestamps.
-- `AgentMemory`: agent-scoped type, content, source, importance, status, timestamps, last accessed timestamp.
-- `AgentFeedback`: run id, agent id, optional trace event id, optional rating, feedback text, feedback type, creation timestamp.
-- `AgentEvaluation`: run id, agent id, evaluator type, rubric scores, issues, recommendations, creation timestamp.
-- `ProposedMemory`: agent id, optional source feedback/evaluation ids, type, content, importance, status, creation timestamp, approval/rejection timestamps.
-- `LearningEvent`: run id, agent id, event type, source type/id, content, status, timestamp.
-- `AgentExecution`: run id, agent id, agent name snapshot, status, sequence index, timestamps, elapsed milliseconds, input/output payloads, error, provider/model/temperature, config snapshot.
-- `AgentExecutionEvent`: execution id, run id, agent id, event type, payload, timestamp.
-- `TokenUsage`: run id, execution id, agent id, provider, model, prompt/completion/total tokens, estimated cost, raw usage, timestamp.
-- `Workflow`: name, description, type, graph config, active flag, timestamps.
-- `Run`: workflow id, input, output, status, config snapshot, started/ended/archive timestamps, creation timestamp.
-- `TraceEvent`: run id, event type, optional agent id, payload, timestamp.
-- `Experiment`: name, description, task prompt, selected agent ids, evaluation config, archive timestamp, timestamps.
-- `ExperimentRun`: experiment id, run ids, comparison result, timestamp.
+18 SQLAlchemy tables registered in `Base.metadata`:
+
+| Table | Key Fields | FK Relationships |
+|-------|------------|------------------|
+| `souls` | `id`, `name`, `description`, `principles`, `decision_style`, `collaboration_style`, `failure_handling_style`, `escalation_style`, `is_active` | Referenced by `agents.soul_id` |
+| `agents` | `id`, `name`, `description`, `role`, `system_prompt`, `soul_id`, `llm_provider`, `model`, `temperature`, `max_tokens`, `memory_policy` (JSON), `context_policy` (JSON), `handoff_policy` (JSON), `is_active` | `soul_id` → `souls`; referenced by 10+ tables |
+| `tools` | `id`, `name` (UNIQUE), `description`, `tool_type`, `config` (JSON), `is_active` | Referenced by `agent_tools` |
+| `agent_tools` | `agent_id`, `tool_id` (composite PK) | → `agents`, → `tools` |
+| `agent_contexts` | `id`, `agent_id`, `title`, `context_type`, `content`, `priority`, `is_active` | `agent_id` → `agents` |
+| `agent_memories` | `id`, `agent_id`, `memory_type`, `content`, `source`, `importance`, `status`, `last_accessed_at` | `agent_id` → `agents` |
+| `agent_feedback` | `id`, `run_id`, `agent_id`, `trace_event_id`, `rating`, `feedback_text`, `feedback_type` | → `runs`, → `agents`, → `trace_events` |
+| `agent_evaluations` | `id`, `run_id`, `agent_id`, `evaluator_type`, `scores` (JSON), `issues` (JSON), `recommendations` (JSON) | → `runs`, → `agents` |
+| `proposed_memories` | `id`, `agent_id`, `source_feedback_id`, `source_evaluation_id`, `memory_type`, `content`, `importance`, `status`, `approved_at`, `rejected_at` | → `agents`, → `agent_feedback`, → `agent_evaluations` |
+| `learning_events` | `id`, `run_id` (nullable), `agent_id`, `event_type`, `source_type`, `source_id`, `content`, `status` | → `runs` (nullable), → `agents` |
+| `agent_executions` | `id`, `run_id`, `agent_id`, `agent_name_snapshot`, `status`, `sequence_index`, `started_at`, `ended_at`, `elapsed_ms`, `input_payload` (JSON), `output_payload` (JSON), `error_message`, `provider`, `model`, `temperature`, `config_snapshot` (JSON) | → `runs`, → `agents` |
+| `agent_execution_events` | `id`, `execution_id`, `run_id`, `agent_id`, `event_type`, `payload` (JSON) | → `agent_executions`, → `runs`, → `agents` |
+| `token_usage` | `id`, `run_id`, `execution_id`, `agent_id`, `provider`, `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `estimated_cost`, `raw_usage` (JSON) | → `runs`, → `agent_executions`, → `agents` |
+| `workflows` | `id`, `name`, `description`, `workflow_type`, `graph_config` (JSON), `is_active` | Referenced by `runs.workflow_id` |
+| `runs` | `id`, `workflow_id`, `input` (JSON), `output` (JSON), `status`, `config_snapshot` (JSON), `started_at`, `ended_at`, `archived_at` | → `workflows`; referenced by 8 tables |
+| `trace_events` | `id`, `run_id`, `event_type`, `agent_id` (nullable), `payload` (JSON) | → `runs`, → `agents` (nullable) |
+| `experiments` | `id`, `name`, `description`, `task_prompt`, `agent_ids` (JSON), `evaluation_config` (JSON), `archived_at` | Referenced by `experiment_runs` |
+| `experiment_runs` | `id`, `experiment_id`, `run_ids` (JSON), `comparison_result` (JSON) | → `experiments` |
+
+**No enum types in models** -- all type-like fields (`status`, `event_type`, `memory_type`, etc.) are plain `String` columns. Enum constraints exist at the Pydantic schema level via `Literal`.
+
+**Computed/defaults**: `Agent.__init__` applies sentinel defaults for provider/model/temperature/max_tokens/policies. `ProposedMemory` has `source_type`, `source_summary`, and `source_run_id` computed properties that traverse FKs.
 
 ## Current API Endpoints
 
-- Health: `GET /health`
-- Agents: `GET /agents`, `POST /agents`, `GET /agents/{agent_id}`, `PUT /agents/{agent_id}`, `DELETE /agents/{agent_id}`
-- Agent tools: `GET /agents/{agent_id}/tools`, `POST /agents/{agent_id}/tools/{tool_id}`, `DELETE /agents/{agent_id}/tools/{tool_id}`
-- Souls: `GET /souls`, `POST /souls`, `GET /souls/{soul_id}`, `PUT /souls/{soul_id}`, `DELETE /souls/{soul_id}`
-- Tools: `GET /tools`, `POST /tools`, `GET /tools/{tool_id}`, `PUT /tools/{tool_id}`, `DELETE /tools/{tool_id}`
-- Contexts: `GET /agents/{agent_id}/contexts`, `POST /agents/{agent_id}/contexts`, `PUT /agents/{agent_id}/contexts/{context_id}`, `DELETE /agents/{agent_id}/contexts/{context_id}`
-- Memories: `GET /agents/{agent_id}/memories`, `POST /agents/{agent_id}/memories`, `PUT /agents/{agent_id}/memories/{memory_id}`, `DELETE /agents/{agent_id}/memories/{memory_id}`, `POST /agents/{agent_id}/memories/{memory_id}/approve`, `POST /agents/{agent_id}/memories/{memory_id}/reject`
-- Learning feedback: `POST /runs/{run_id}/agents/{agent_id}/feedback`, `GET /agents/{agent_id}/feedback`
-- Learning evaluations: `POST /runs/{run_id}/agents/{agent_id}/evaluate`, `GET /runs/{run_id}/evaluations`
-- Proposed memories: `POST /agents/{agent_id}/proposed-memories`, `GET /agents/{agent_id}/proposed-memories`, `GET /proposed-memory-notifications`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
-- Reflection: `POST /runs/{run_id}/agents/{agent_id}/reflect`
-- Workflows: `GET /workflows`, `POST /workflows`, `GET /workflows/{workflow_id}`, `PUT /workflows/{workflow_id}`, `DELETE /workflows/{workflow_id}`, `POST /workflows/{workflow_id}/run`, `POST /workflows/{workflow_id}/run-async`
-- Runs: `GET /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/archive`, `POST /runs/{run_id}/activate`, `DELETE /runs/{run_id}/hard-delete`, `DELETE /runs/{run_id}` compatibility archive, `GET /runs/{run_id}/trace`
-- Observatory: `GET /runs/{run_id}/monitor`, `GET /runs/{run_id}/executions`, `GET /runs/{run_id}/executions/{execution_id}`, `GET /runs/{run_id}/executions/{execution_id}/events`, `GET /runs/{run_id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
-- Experiments: `GET /experiments`, `POST /experiments`, `GET /experiments/{experiment_id}`, `DELETE /experiments/{experiment_id}`, `POST /experiments/{experiment_id}/archive`, `POST /experiments/{experiment_id}/activate`, `POST /experiments/{experiment_id}/run`
-- Demo: `POST /demo/seed` (idempotent seed), `DELETE /demo/seed` (cleanup all demo data)
+- **Health**: `GET /health`
+- **Souls**: `GET /souls`, `POST /souls`, `GET /souls/{id}`, `PUT /souls/{id}`, `DELETE /souls/{id}`
+- **Agents**: `GET /agents`, `POST /agents`, `GET /agents/{id}`, `PUT /agents/{id}`, `DELETE /agents/{id}`
+- **Agent tools**: `GET /agents/{agent_id}/tools`, `POST /agents/{agent_id}/tools/{tool_id}`, `DELETE /agents/{agent_id}/tools/{tool_id}`
+- **Tools**: `GET /tools`, `POST /tools`, `GET /tools/{id}`, `PUT /tools/{id}`, `DELETE /tools/{id}?force=true`
+- **Contexts**: `GET /agents/{agent_id}/contexts`, `POST /agents/{agent_id}/contexts`, `PUT /agents/{agent_id}/contexts/{context_id}`, `DELETE /agents/{agent_id}/contexts/{context_id}`
+- **Memories**: `GET /agents/{agent_id}/memories`, `POST /agents/{agent_id}/memories`, `PUT /agents/{agent_id}/memories/{memory_id}`, `DELETE /agents/{agent_id}/memories/{memory_id}`
+- **Proposed Memories**: `GET /agents/{agent_id}/proposed-memories`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/approve`, `POST /agents/{agent_id}/proposed-memories/{memory_id}/reject`
+- **Notifications**: `GET /proposed-memory-notifications`
+- **Learning -- Human Feedback**: `POST /runs/{run_id}/agents/{agent_id}/feedback`
+- **Learning -- Evaluations**: `POST /runs/{run_id}/agents/{agent_id}/evaluate`
+- **Learning -- Reflection**: `POST /runs/{run_id}/agents/{agent_id}/reflect`
+- **Learning -- Reviewer Feedback**: `POST /runs/{run_id}/agents/{target_agent_id}/review` (request body: `{reviewer_agent_id, trace_event_id?}`)
+- **Workflows**: `GET /workflows`, `POST /workflows`, `GET /workflows/{id}`, `PUT /workflows/{id}`, `DELETE /workflows/{id}`, `POST /workflows/{id}/run`
+- **Runs**: `GET /runs?include_archived=true`, `GET /runs/{id}`, `POST /runs/{id}/archive`, `POST /runs/{id}/activate`, `DELETE /runs/{id}/hard-delete`, `GET /runs/{id}/trace`
+- **Observatory**: `GET /runs/{id}/monitor`, `GET /runs/{id}/executions`, `GET /runs/{id}/executions/{exec_id}`, `GET /runs/{id}/executions/{exec_id}/events`, `GET /runs/{id}/token-usage`, `GET /agents/{agent_id}/evolution`, `GET /agents/{agent_id}/performance-summary`
+- **Experiments**: `GET /experiments?include_archived=true`, `POST /experiments`, `GET /experiments/{id}`, `DELETE /experiments/{id}?force=true`, `POST /experiments/{id}/archive`, `POST /experiments/{id}/activate`, `POST /experiments/{id}/run`
+- **Demo**: `POST /demo/seed`, `DELETE /demo/seed`
+- **Admin**: `POST /admin/cleanup-lab-data`
 
-## Current Runtime Flow
+## Current Workflow Runtime Behavior
 
 1. A workflow run accepts a task via `POST /workflows/{workflow_id}/run`.
-2. The MVP runner supports fully functional `sequential` workflows. `supervisor` and `handoff_swarm` remain placeholders.
-3. The runner loads active agents from `workflow.graph_config.agent_sequence`.
-4. A `Run` is created with status `running`, input task, and a config snapshot of the workflow and participating agents.
-5. Trace events record run start and workflow load.
-6. For each agent, the runner creates an `AgentExecution`, records execution events for context assembly, memory retrieval, model request/response, token usage, and completion/failure, records legacy trace events, and passes the output as the next sequential task.
-7. The run is marked `completed`, output is persisted, and a `run_completed` trace event is written.
+2. Only `sequential` workflows are functional; `supervisor` and `handoff_swarm` are placeholders (raise `ValueError`).
+3. `WorkflowRunner.start()` validates the workflow and agents, creates a Run with a full config snapshot (workflow + all participating agent configs), emits `run_started` and `workflow_loaded` trace events, and pre-creates `AgentExecution` records for each agent in `graph_config.agent_sequence`.
+4. `WorkflowRunner.execute_run()` iterates agents in sequence:
+   - Loads or creates execution record; emits `agent_selected`.
+   - Calls `ContextAssembler.assemble()` which builds a 9-section prompt:
+     1. Platform safety and execution rules
+     2. Soul/persona
+     3. Agent role
+     4. System prompt
+     5. Agent-specific context entries (active, ordered by priority)
+     6. Agent-specific retrieved memory (active, ordered by importance desc)
+     7. Workflow-level shared context
+     8. Current task
+     9. Output format instruction
+   - Context assembly is scoped by `agent_id` — cross-agent context/memory leakage is prevented.
+   - Emits `context_assembled`, `memory_retrieved` trace + execution events.
+   - Calls `provider.generate()` with assembled prompt and agent config.
+   - Records token usage via `observatory_service.record_token_usage()`.
+   - Completes execution with `agent_output`, `memory_proposed`, `memory_write_proposed` events.
+   - Passes the agent's output as `current_task` to the next agent (chain-of-agents pattern).
+5. Run is marked `completed` with `final_output` as last agent's content and `agent_outputs` array.
+6. `fail_run()` fails all queued/running executions and marks run as `failed`.
+7. Config snapshots taken at run start enable deterministic replay/comparison.
 
-## Current Provider Configuration
+## Current Learning Loop Behavior
 
-- Default: `LLM_PROVIDER=mock`.
-- Supported selector values: `mock`, `openai_compatible`, `openai`, `anthropic`, `ollama`.
-- `mock` uses deterministic placeholder output with prompt digest metadata.
-- `openai_compatible` uses the OpenAI Python SDK with configurable `OPENAI_COMPATIBLE_API_KEY`, `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_MODEL`, and optional `OPENAI_COMPATIBLE_PROVIDER_NAME`.
-- Standard `openai`, `anthropic`, and `ollama` provider classes are placeholders and raise `NotImplementedError` if used for generation.
-- LLM API keys must stay in backend-only environment files or deployment secrets. They must not be added to frontend environment files.
+### Human Feedback Path
 
-## Current Context And Memory Behavior
+```
+Run output → human feedback (POST .../feedback) → reflection (POST .../reflect)
+→ proposed memory (status=pending) → manual approve/reject
+→ active AgentMemory (if approved) → future ContextAssembler retrieves it
+→ re-run shows behavioral change
+```
 
-- Context entries are stored under `/agents/{agent_id}/contexts` and service queries always filter by `agent_id`.
-- Context updates and deletes through the wrong agent route return `404`.
-- The frontend supports context create, edit, delete, priority changes, and active/inactive status from the agent detail page.
-- Memory entries are stored under `/agents/{agent_id}/memories` and service queries always filter by `agent_id`.
-- Memory updates, deletes, approve, and reject operations through the wrong agent route return `404`.
-- The frontend supports memory create, edit, delete, status changes, approve, and reject from the agent detail page.
-- Memory statuses are `active`, `pending`, `rejected`, and `archived`; default created memory is `pending`.
-- Proposed memory statuses are `pending`, `approved`, and `rejected`; proposed memories always start as `pending`.
-- Feedback and evaluations are linked to a specific `run_id` and participating `agent_id`.
-- Reflection converts feedback or evaluation into an agent-scoped proposed memory.
-- Approving a proposed memory creates an active `AgentMemory` for the same `agent_id`.
-- Rejecting a proposed memory does not create `AgentMemory`.
-- Agent memory policy defaults to `{"write_mode": "manual_review", "retrieval_enabled": true}`.
-- Context assembly includes active context for the current agent and active memory for the current agent only.
-- Approved feedback-derived memory uses the same active-memory retrieval path as manual memory.
-- The observatory records only the context and memory injected into the current execution.
-- Context assembly is deterministic and traceable through section order and metadata.
-- Qdrant access is behind `QdrantVectorStore`. Search and upsert require `agent_id`.
-- Vector search and vector upsert are not fully implemented yet because embeddings are not configured.
+- Feedback is scoped to `run_id` + `agent_id`.
+- Reflection service: calls LLM via provider if real provider configured; falls back to mock on parse failure. Accepts JSON in markdown fences.
+- Proposed memories reference `source_feedback_id` (human feedback) or `source_evaluation_id` (evaluation).
+- Approval creates active `AgentMemory`; rejection does not.
+- `GET /proposed-memory-notifications` counts only pending proposed memories linked to feedback or evaluation sources.
+- Notification badges displayed in sidebar and agent cards via `NotificationContext`.
 
-## Current Workflow And Experiment Behavior
+### Reviewer Feedback Path (PR #7)
 
-- Workflow definitions are separate from agent definitions.
-- Sequential workflows are functional and run agents in `graph_config.agent_sequence`.
-- Supervisor and handoff swarm workflow types are accepted by schema but are runtime placeholders.
-- Handoff evaluation exists as `HandoffEngine`, but handoff workflows are not implemented.
-- Experiments require two or more agent ids.
-- Experiment runs create a single-agent sequential workflow per selected agent, run the same task for each selected agent, and persist an `ExperimentRun` with run ids, trace links, outputs, task prompt, and evaluation config.
-- Experiments preserve isolation by running each selected agent in its own workflow run.
-- Before/after learning experiments are supported manually by comparing a baseline run with a later run after proposed-memory approval.
-- Runtime observatory pages support polling-based run monitoring, collapsed event payload inspection, execution detail inspection, token usage review, run archiving, and agent evolution timelines. The workflow run page starts monitor-first async runs and redirects to `/runs/{run_id}/monitor`.
+```
+Run output → reviewer agent selected → POST /runs/{run_id}/agents/{target_agent_id}/review
+→ reviewer LLM derives criteria from target definition, evaluates, applies quality/risk checks
+→ produces AgentEvaluation (scores, derived_criteria, quality_checks, risk_flags, memory_decision)
+→ optionally creates ProposedMemory if memory_decision is "corrective" or "refinement"
+```
 
-## Current Frontend Configuration Behavior
+- `ReviewService` (`backend/app/services/review_service.py`): builds review prompt from target agent's full definition (role, system_prompt, soul, contexts, memories, tools), reviewer agent's system_prompt + review_methodology contexts, task input, and actual output.
+- Mock reviewer: signal-detection logic — checks output for order IDs, chargeback keywords, escalation mentions, refund caution, specificity. "PERFECT" keyword triggers `memory_decision: "none"`.
+- Real LLM reviewer: calls provider, parses JSON, repairs truncated/malformed JSON with 3-attempt repair strategy.
+- Evaluation stored with `evaluator_type = "agent_reviewer"`. Reviewer identity stored in `issues._meta` (reviewer_agent_id, reviewer_agent_name, memory_decision).
+- Three memory decisions: `corrective` (high importance, agent made errors), `refinement` (medium importance, minor improvements), `none` (no memory created).
+- Response includes `reviewed_execution_id`, `reviewed_output`, `reviewed_target_agent_name`, `reviewer_agent_name`, and `proposed_memory` (nullable).
+- Frontend: `ReviewerFeedbackSection` component on Run Detail page with reviewer selector, collapsible results (derived criteria PASS/FAIL, quality checks, risk flags, memory decision badge, proposed memory card), and approve/reject actions.
 
-- Agent create/edit exposes soul selection, active status, provider, free-text model, temperature, max tokens, system prompt, and JSON editors for memory, context, and handoff policies.
-- Policy editors validate JSON before submitting to the backend. Default templates use manual memory review, active context inclusion, and handoff disabled.
-- Agent detail shows summary fields, read-only policy JSON, scoped context CRUD, scoped memory CRUD, proposed-memory review, and scoped tool assignment/unassignment.
-- Sidebar Agents, the Agents list, and the Agent detail Proposed Memories section show amber approval badges only for pending `ProposedMemory` rows created from feedback or evaluation sources. Manual pending `AgentMemory` rows and reviewed proposed memories do not trigger these badges.
-- Tools expose name, description, type, JSON config, active status, edit, and delete controls. Tool config JSON is validated before submit.
-- Souls expose persona fields and can be created, edited, or deleted.
-- Agents, souls, tools, contexts, memories, workflows, experiments, and assigned tools use in-app confirmation dialogs for destructive actions. Runs use confirmed archive and activate actions so learning history is preserved; permanent delete is limited to archived runs that pass backend safety checks, and blocked deletes open warning dialogs. Experiment deletion is blocked (409) when the experiment has been run; use the `?force=true` query parameter only for test cleanup. Mutations show loading states, success/error messages, and refresh or redirect after success.
-- Soul deletion is blocked while agents still reference the soul; referenced souls should be deactivated. Tool deletion is blocked while agents are assigned to the tool; assigned tools should be unassigned or deactivated. Workflow deletion is blocked while runs still reference the workflow; referenced workflows should be deactivated. Agent deletion removes only that agent's owned configuration when no runtime history exists.
-- CRUD lifecycle labels are standardized: Delete is hard delete for unused records, Archive hides historical/runtime records while preserving evidence, Deactivate disables reusable configuration, and Unassign removes relationship rows only.
-- Active/inactive or review status badges are shown for agents, tools, contexts, and memories.
+### Rubric Validation
 
-## Current Test Coverage Summary
+- Human evaluations require all 9 EVALUATION_RUBRIC keys: `task_completion`, `persistence`, `collaboration`, `evidence_discipline`, `tool_usage_quality`, `handoff_quality`, `customer_readiness`, `safety`, `clarity`.
+- Agent reviewer evaluations skip the rigid rubric; scores can be any keys (dynamic). Values must still be 1-5.
 
-- Health endpoint and startup/CORS/table initialization.
-- SQLAlchemy model registration and agent default isolation policies.
-- Agent, soul, tool CRUD and agent-tool assignment, including blocked soul deletion, referenced soul deactivation, and blocked assigned-tool deletion.
-- Agent context CRUD scoped by `agent_id`.
-- Agent memory CRUD scoped by `agent_id`, including approve/reject review flow.
-- Agent feedback, evaluation, reflection, proposed-memory approval/rejection, feedback-derived proposed-memory notification counts, and cross-agent learning-memory isolation.
-- Context assembler agent-scoped context and memory injection.
-- Tool Gateway allowed, denied, unknown tool, trace persistence, and Tavily missing API key behavior.
-- Qdrant config loading, empty API key acceptance, collection prefix naming, and `agent_id` requirement.
-- Provider factory selection and OpenAI-compatible validation with mocked SDK calls.
-- Workflow CRUD, blocked workflow deletion while runs exist, sequential run trace events, config snapshots, and context/memory isolation in runs.
-- Runtime observatory execution records, execution events, mock token usage estimates, monitor endpoint, performance summaries, and evolution isolation.
-- Run archive hides runs from the default list while preserving trace, execution, token, feedback, evaluation, proposed-memory, learning-event, agent, workflow, tool, soul, context, and active-memory records. Run activation restores archived runs to the active list without changing those records. Permanent delete is guarded by backend safety checks.
-- Experiment CRUD including safe delete (204 for clean experiments, 409 when runs exist), experiment archive/activate with related runs preserved, and experiment run isolation/comparison behavior.
-- Frontend has lint, TypeScript typecheck, production build, and Playwright E2E scripts.
-- Playwright E2E covers the BI Dashboard Discrepancy journey, delete confirmation/cancel/success flows, blocked delete errors, nested context/memory edit/delete, tool deletion, run archiving and activation with learning records, guarded run-delete warnings, monitor collapsed/expanded payloads, feedback-derived proposed-memory approval badges, learning loop approval, re-run memory retrieval, and agent isolation assertions. Screenshot evidence is written under `docs/evidence/`.
+## Current Memory Lifecycle
 
-## Current Known Limitations
+- `AgentMemory.status`: `pending` (default), `active`, `rejected`, `archived`.
+- `ProposedMemory.status`: `pending` (default) → `approved` or `rejected`.
+- Memory policy defaults: `{"write_mode": "manual_review", "retrieval_enabled": true}`.
+- Only `status="active"` memories are retrieved by `ContextAssembler`.
+- Memory CRUD is scoped by `agent_id` — cross-agent operations return 404.
+- Run archiving preserves all feedback, evaluations, proposed memories, learning events, trace events, execution records, and token usage. Activating a run restores it without changing learning records.
+- Hard delete is blocked when learning records exist.
+- Vector search/upsert are Qdrant adapter stubs awaiting an embedding provider.
 
-- Vector embedding search and Qdrant upsert are adapter shells, not semantic retrieval.
-- Real standard OpenAI, Anthropic, and Ollama providers remain placeholders.
-- Supervisor and handoff swarm workflows are placeholders.
-- Handoff policy is modeled and has an evaluator, but full handoff runtime integration is not implemented.
-- The before/after learning comparison flow is manual; there is no dedicated comparison dashboard yet.
-- Runtime monitoring is polling-based; WebSocket streaming is not implemented.
-- Run hard delete is not exposed as the default cleanup behavior because learning records can reference run feedback and evaluations.
-- Learning updates only agent memory; soul/persona is not rewritten automatically.
-- No Alembic migrations; local startup can create tables automatically for MVP development.
-- No authentication, authorization, multi-user isolation, or production deployment setup.
-- Frontend E2E tests require a running backend and local services; they are not yet wired into a containerized one-command stack.
-- The `/demo` page and `POST /demo/seed` API provide one-click seeding. No containerized one-command stack yet.
+## Current Demo Seed Behavior
+
+`POST /demo/seed` idempotently creates:
+- 4 souls (Triaging Analyst, Policy Gatekeeper, Empathetic Communicator, Quality Auditor)
+- 4 agents (Escalation Triage, Policy Guardrail, Customer Response Writer, Escalation Quality Reviewer — role=`quality-reviewer`)
+- 3 agents in the sequential workflow (Triage → Guardrail → Writer); reviewer is NOT in workflow
+- Contexts and memories per agent definition
+- Workflow: "Demo:Customer Escalation Recovery Workflow"
+- No runs, feedback, or proposed memories
+- Re-seeding restores original values if content was modified
+- Two complaint texts and feedback text available in demo data
+- Acceptance checklist with 7 items
+
+The reviewer agent (4th agent) has `role="quality-reviewer"`, `context_type="review_methodology"` context entries (Universal Quality Checklist, Risk & Safety Checklist), and an active memory about common escalation triage gaps. Not part of the workflow — intended for post-run reviewer evaluation.
+
+CLI seed alternative: `python backend/scripts/seed_demo.py`.
+
+## What Phase 2 Proves
+
+1. **Real LLM integration works**: OpenAI-compatible provider calls real LLMs through the provider abstraction; mock provider stays deterministic for tests.
+2. **Learning loop is complete**: Human feedback → reflection → proposed memory → approve → active memory → re-run shows behavioral change.
+3. **Agent-to-agent review works**: Reviewer agent evaluates target agent's output using dynamically derived criteria, stores structured evaluation, and optionally generates proposed memories.
+4. **Observatory is comprehensive**: Every step (context assembly, memory retrieval, LLM call, token usage, execution lifecycle) is traced and queryable.
+5. **Isolation holds**: Cross-agent context/memory leakage is prevented at the service, context assembler, and API levels.
+6. **Demo is reproducible**: Idempotent seed + deterministic mock mode enables repeatable acceptance testing.
+7. **Frontend is complete**: All CRUD, runtime, learning, review, and demo flows have React UIs with proper error/loading/empty states.
+
+## Known Issues / Limitations
+
+1. **Vector embedding search and Qdrant upsert** are adapter shells, not semantic retrieval (awaiting embedding provider).
+2. **Real OpenAI, Anthropic, and Ollama providers** remain `NotImplementedError` placeholders — only `mock` and `openai_compatible` are functional.
+3. **Supervisor and handoff swarm workflows** are placeholders. `HandoffEngine` exists but is not integrated into a workflow runner.
+4. **Before/after learning comparison** is manual; no dedicated comparison dashboard.
+5. **Runtime monitoring is polling-based** (2s interval); no WebSocket streaming.
+6. **Run hard delete** is gated behind archive + safety checks; learning-preserving archive is the default cleanup path.
+7. **No Alembic migrations** — `database.py` uses inline column inspection + ALTER TABLE for schema evolution.
+8. **No authentication, authorization, multi-user isolation**, or production deployment setup.
+9. **Frontend E2E tests** require a running backend and local services; no containerized one-command stack.
+10. **No `frontend/.env.example`** — new developers must create `.env.local` manually (or rely on Vite defaults).
+
+## What Must Not Be Changed Accidentally
+
+- **Agent isolation rules** — context, memory, tools, and prompt assembly must remain scoped by `agent_id`.
+- **Soul/persona must not be auto-rewritten** — soul updates require explicit user action.
+- **Tool Gateway 3-layer authorization** — registry check, DB tool check, agent-tool assignment check must all pass.
+- **Config snapshots at run start** — must capture full workflow+agent config for reproducibility.
+- **Archiving semantics** — archive must hide from default lists but preserve all learning and observatory records.
+- **Delete safety** — agents deleted only when no run history; workflows deleted only when no runs; souls/tools deleted only when no active references; experiments force-deleted only with `?force=true`.
+- **Mock provider determinism** — the mock provider must never be changed in a way that breaks test determinism.
+- **Demo seed idempotency** — re-seeding must restore original values and produce same IDs.
+
+## Verification Status (2026-05-30)
+
+| Check | Result |
+|-------|--------|
+| Backend pytest | 123 passed, 0 failed, 0 skipped (2.59s) |
+| Frontend lint | Passed (eslint --max-warnings 0) |
+| Frontend typecheck | Passed (tsc --noEmit) |
+| Frontend build | Passed (vite build, 1.36s) |
+
+## Recommended Phase 3 Starting Point
+
+1. Assess priority of supervisor/handoff-swarm workflow types per user needs.
+2. Implement WebSocket-based live monitoring as an alternative to polling.
+3. Wire up an embedding provider to enable semantic vector search/upsert through Qdrant.
+4. Implement at least one more real provider (OpenAI or Anthropic) depending on user preference.
+5. Add before/after comparison dashboard for learning experiments.
+6. Set up Alembic for proper database migrations.
+7. Containerize the full stack (backend + frontend + PostgreSQL + Qdrant) for one-command E2E testing.
+8. Assess whether multi-user isolation / auth is needed for the next milestone.

@@ -25,6 +25,7 @@ Use this skill when designing:
 - Reproducibility tests using config snapshots and trace events
 - Manual review workflows for proposed memory writes
 - Evaluation datasets, rubrics, metrics, or run reports
+- **Learning experiments** — testing whether agents improve from feedback across runs
 
 ## When Not to Use
 
@@ -32,7 +33,6 @@ Do not use this skill for:
 
 - Implementing production features directly
 - Reviewing code without designing an experiment
-- Legacy market-research experiments or unrelated report validation
 - Uncontrolled prompt tinkering where inputs, configs, and traces are not captured
 - Experiments that intentionally share private agent memory or context without an explicit policy under test
 
@@ -41,6 +41,8 @@ Do not use this skill for:
 ### 1. Make the hypothesis explicit
 
 Every experiment should state what is being tested before running it. Avoid experiments that merely explore outputs without a question, baseline, or measurable outcome.
+
+**Always define what behavior should change and what should not change** as a result of the experiment.
 
 ### 2. Control one dimension at a time where practical
 
@@ -63,6 +65,8 @@ When multiple factors change, document why and treat conclusions as directional.
 
 Experiments must not rely on hidden shared global memory, context, or settings. Each agent's configuration must be explicit, and any sharing must be represented as workflow input or permission-checked handoff payload.
 
+**Experiment records must not use hidden shared state.**
+
 ### 4. Capture reproducibility artifacts
 
 Each run should save:
@@ -82,12 +86,57 @@ Each run should save:
 
 Agent Swarm Lab experiments should test whether the platform protects boundaries. A polished answer is a failure if it used unauthorized tools, private memory, hidden context, or unapproved handoff data.
 
+## Learning Experiment Canonical Flow
+
+When designing experiments that test the learning loop, include this end-to-end sequence:
+
+1. **Baseline run** → agent produces output
+2. **Good output test**: reviewer evaluates good output → returns `memory_decision: "none"` → **no memory created** (negative control)
+3. **Bad output test**: reviewer evaluates bad output → returns `corrective` or `refinement` → **pending `ProposedMemory` created**
+4. **Approve** the proposed memory → **active `AgentMemory` created**
+5. **Re-run** the same or similar task → **behavior changes** (agent now uses the approved memory)
+6. **Re-review** the improved output → reviewer confirms **no further memory needed** (proves learning was effective)
+
+Each step must be independently verifiable with trace events and config snapshots.
+
+## Soul Experiment Focus
+
+When designing experiments that test soul/persona effects:
+
+- **Compare action and coordination behavior**, not only final wording. A soul change should produce observably different decision-making, not just different phrasing.
+- Keep all other variables (model, temperature, system prompt, context, memory, tools) identical.
+- Run multiple trials to distinguish soul-driven variation from LLM randomness.
+
+## Before/After Criteria
+
+Every experiment must define:
+
+- **Before criteria** — what the agent's behavior looks like before the intervention (baseline).
+- **After criteria** — what specific observable change proves the intervention worked.
+- **Success signal** — the measurement or assertion that confirms the after criteria.
+- **Failure signal** — what would disprove the hypothesis.
+
+## Negative Controls
+
+Include negative controls to prevent false positives:
+
+- **Reviewer negative control**: A good output fed to the reviewer must produce `none` (no memory). This proves the reviewer does **not** invent unnecessary corrections.
+- **Isolation negative control**: Agent A's approved memory must not affect Agent B's behavior. Run Agent B on the same task before and after Agent A's memory approval — output should be identical.
+- **Rejection negative control**: A rejected proposed memory must not appear in context assembly for future runs.
+
+## Test Data Rules
+
+- **Test-created records must use TEST or E2E prefixes** in names.
+- **Clean up only experiment-created data** after the experiment. Do not delete user-created or demo seed data.
+- **Never use broad cleanup or admin cleanup** to tear down experiment data unless the experiment explicitly tests cleanup behavior.
+- **Preserve agent isolation** — experiment records for one agent must not contaminate another agent's data.
+
 ## Workflow
 
 For each experiment:
 
 1. Define the research question.
-2. Define the hypothesis.
+2. Define the hypothesis (what should change, what should not change).
 3. Define the agents under test:
    - Agent IDs
    - Provider and model settings
@@ -101,22 +150,28 @@ For each experiment:
 4. Define the workflow separately from the agent definitions.
 5. Define what, if anything, may be shared and through which explicit policy.
 6. Define input fixtures and expected observable behavior.
-7. Define metrics and rubrics.
-8. Define isolation assertions:
-   - No cross-agent memory access
-   - No cross-agent context access
-   - No unauthorized tool access
-   - No implicit prompt or setting inheritance
-   - No private sender state in receiving-agent inputs
-9. Define trace and snapshot requirements.
-10. Run the smallest useful experiment first.
-11. Compare results against the hypothesis.
-12. Record conclusions, limitations, and follow-up experiments.
+7. Define before/after criteria with explicit success/failure signals.
+8. Define negative controls (reviewer, isolation, rejection).
+9. Define metrics and rubrics.
+10. Define isolation assertions:
+    - No cross-agent memory access
+    - No cross-agent context access
+    - No unauthorized tool access
+    - No implicit prompt or setting inheritance
+    - No private sender state in receiving-agent inputs
+11. Define trace and snapshot requirements.
+12. Run the smallest useful experiment first.
+13. Compare results against the hypothesis.
+14. Record conclusions, limitations, and follow-up experiments.
 
 ## Checklist
 
 - [ ] The experiment has a clear research question.
-- [ ] The hypothesis is stated before execution.
+- [ ] The hypothesis states what should and should not change.
+- [ ] Before/after criteria with explicit success/failure signals are defined.
+- [ ] The learning experiment canonical flow is followed where applicable.
+- [ ] Soul experiments compare action/coordination, not only wording.
+- [ ] Negative controls are included (reviewer none, isolation, rejection).
 - [ ] Agent definitions are explicit and independent.
 - [ ] Workflow composition is defined separately.
 - [ ] Soul/persona and system prompt are varied or held constant intentionally.
@@ -132,6 +187,7 @@ For each experiment:
 - [ ] Config snapshots are captured.
 - [ ] Metrics and rubrics are defined before evaluation.
 - [ ] Expected failure cases are included for permission and isolation tests.
+- [ ] Test data uses TEST/E2E prefixes and is safely cleaned up.
 - [ ] Conclusions distinguish facts, observations, inferences, and open questions.
 
 ## Expected Output
@@ -140,26 +196,33 @@ When designing an experiment, produce:
 
 1. Experiment Name
 2. Research Question
-3. Hypothesis
-4. Variables and Controls
-5. Agent Configurations
-6. Workflow Configuration
-7. Isolation and Permission Assertions
-8. Input Fixtures
-9. Metrics and Rubric
-10. Trace and Snapshot Requirements
-11. Execution Plan
-12. Analysis Plan
-13. Risks and Limitations
-14. Follow-up Experiments
+3. Hypothesis (what changes, what does not change)
+4. Before/After Criteria (success signal, failure signal)
+5. Variables and Controls
+6. Negative Controls (reviewer none, isolation, rejection)
+7. Agent Configurations
+8. Workflow Configuration
+9. Isolation and Permission Assertions
+10. Input Fixtures
+11. Learning Flow Steps (if applicable)
+12. Metrics and Rubric
+13. Trace and Snapshot Requirements
+14. Execution Plan
+15. Test Data Hygiene Plan
+16. Analysis Plan
+17. Risks and Limitations
+18. Follow-up Experiments
 
 ## Done Criteria
 
 An experiment design is complete when:
 
 - The hypothesis, variables, controls, and metrics are clear.
+- Before/after criteria with success/failure signals are defined.
+- Negative controls are included.
 - Agent configs and workflow configs are separate.
 - Isolation and permission assertions are testable.
 - Trace events and config snapshots are required.
+- Test data rules (TEST/E2E prefixes, safe cleanup) are specified.
 - The design can be rerun and compared.
 - The expected output can identify both behavior quality and policy enforcement failures.
