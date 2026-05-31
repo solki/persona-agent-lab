@@ -105,6 +105,45 @@ class TestAnalysisEndpoint:
         assert "ai_analysis" in cmp_result
         assert cmp_result["ai_analysis"]["result"]["executive_summary"]
 
+    def test_mock_analysis_survives_page_reload(self, client):
+        """Simulate page refresh: fresh GET returns persisted ai_analysis."""
+        experiment = _create_soul_comp_experiment(client)
+        client.post(f"/experiments/{experiment['id']}/analyze", json={"provider": "mock"})
+
+        # Simulate page reload — fresh GET
+        runs = client.get(f"/experiments/{experiment['id']}/runs").json()
+        assert len(runs) >= 1
+        ai = runs[0]["comparison_result"].get("ai_analysis")
+        assert ai is not None, "ai_analysis should persist across requests"
+        assert ai["result"]["executive_summary"]
+
+    def test_edit_experiment_does_not_delete_ai_analysis(self, client):
+        """Editing experiment name/config should not erase ai_analysis."""
+        experiment = _create_soul_comp_experiment(client)
+        client.post(f"/experiments/{experiment['id']}/analyze", json={"provider": "mock"})
+
+        # Edit experiment name
+        client.put(f"/experiments/{experiment['id']}", json={"name": "Updated Name"})
+
+        # ai_analysis should still be there
+        runs = client.get(f"/experiments/{experiment['id']}/runs").json()
+        assert len(runs) >= 1
+        assert "ai_analysis" in runs[0].get("comparison_result", {})
+
+    def test_rerun_creates_fresh_comparison_without_stale_analysis(self, client):
+        """Re-running experiment creates new ExperimentRun without ai_analysis."""
+        experiment = _create_soul_comp_experiment(client)
+        client.post(f"/experiments/{experiment['id']}/analyze", json={"provider": "mock"})
+
+        # Re-run
+        client.post(f"/experiments/{experiment['id']}/run")
+
+        # Latest run should NOT have ai_analysis (fresh run)
+        runs = client.get(f"/experiments/{experiment['id']}/runs").json()
+        assert len(runs) >= 2  # at least two runs now
+        latest = runs[0]  # newest first
+        assert "ai_analysis" not in latest.get("comparison_result", {}), "Fresh run should not have stale ai_analysis"
+
     def test_analysis_response_does_not_include_api_key(self, client):
         experiment = _create_soul_comp_experiment(client)
 

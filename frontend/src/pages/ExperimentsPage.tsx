@@ -524,12 +524,19 @@ export function ExperimentFormPage() {
                 </Button>
               </CardContent>
             </Card>
-            {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} agentById={agentById} hasAnalysis={analysisResult !== null} /> : null}
+            {experimentRun?.comparison_result ? (
+              <SoulComparisonView
+                comparison={experimentRun.comparison_result as unknown as SoulComparisonResult}
+                agentById={agentById}
+                hasAnalysis={analysisResult !== null || Boolean((experimentRun.comparison_result as Record<string, unknown>)?.ai_analysis)}
+              />
+            ) : null}
             {/* ----- AI Analysis Section ----- */}
             {experimentRun?.comparison_result && (experimentRun.comparison_result as Record<string, unknown>)?.experiment_type === "soul_behavior_comparison" ? (
               <AnalysisSection
                 experimentId={experimentId}
                 analysisResult={analysisResult}
+                storedAnalysis={(experimentRun.comparison_result as Record<string, unknown>)?.ai_analysis as Record<string, unknown> | undefined}
                 analyzing={analyzing}
                 error={analysisError}
                 provider={analysisProvider}
@@ -725,6 +732,7 @@ function SoulComparisonView({ comparison, agentById, hasAnalysis }: { comparison
 function AnalysisSection(props: {
   experimentId: number | undefined;
   analysisResult: ExperimentAnalysisResponse | null;
+  storedAnalysis?: Record<string, unknown>;
   analyzing: boolean;
   error: string;
   provider: string;
@@ -745,7 +753,10 @@ function AnalysisSection(props: {
   onSettingsToggle: () => void;
   onRunAnalysis: () => void;
 }) {
-  const a = props.analysisResult?.analysis;
+  // Use storedAnalysis from experiment run as fallback (survives refresh)
+  const storedResult = props.storedAnalysis?.result as AnalysisResult | undefined;
+  const a = props.analysisResult?.analysis ?? storedResult;
+  const storedMeta = props.storedAnalysis;
   const hasResult = Boolean(a);
 
   return (
@@ -770,7 +781,7 @@ function AnalysisSection(props: {
             <FormField label="Model"><Input value={props.model} onChange={(e) => props.onModelChange(e.target.value)} placeholder="deepseek-v4-flash" /></FormField>
             <FormField label="Base URL"><Input value={props.baseUrl} onChange={(e) => props.onBaseUrlChange(e.target.value)} placeholder="https://api.deepseek.com" /></FormField>
             <FormField label="API Key" help={<FieldHelp pattern="tooltip" content="Sent only for this analysis request. Never stored. Falls back to environment variable if empty." />}>
-              <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder={props.analysisResult?.key_from_env ? "(from environment)" : "sk-..."} />
+              <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder={props.analysisResult?.key_from_env || props.storedAnalysis ? "(from environment)" : "sk-..."} />
             </FormField>
             <FormField label="Temperature"><Input value={props.temperature} onChange={(e) => props.onTemperatureChange(e.target.value)} placeholder="0.1" /></FormField>
             <FormField label="Max Tokens"><Input value={props.maxTokens} onChange={(e) => props.onMaxTokensChange(e.target.value)} placeholder="8192" /></FormField>
@@ -817,9 +828,9 @@ function AnalysisSection(props: {
         {hasResult && a ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Analyzed with {props.analysisResult?.provider}/{props.analysisResult?.model}</span>
+              <span>Analyzed with {props.analysisResult?.provider ?? (storedMeta?.provider as string) ?? "unknown"}/{props.analysisResult?.model ?? (storedMeta?.model as string) ?? "unknown"}</span>
               <span>·</span>
-              <span>{new Date(props.analysisResult?.analyzed_at ?? "").toLocaleString()}</span>
+              <span>{new Date(props.analysisResult?.analyzed_at ?? (storedMeta?.analyzed_at as string) ?? "").toLocaleString()}</span>
               <Button type="button" variant="outline" size="sm" onClick={props.onRunAnalysis} disabled={props.analyzing}>Re-run</Button>
             </div>
             {/* Executive Summary */}
@@ -884,7 +895,7 @@ function AnalysisSection(props: {
               <h3 className="text-sm font-semibold mb-2">Signals</h3>
               <div className="grid gap-2 md:grid-cols-3 text-sm">
                 {(["efficiency", "thoroughness", "safety"] as const).map((key) => {
-                  const s = props.analysisResult?.analysis?.signals?.[key] as Record<string, unknown> | undefined;
+                  const s = a?.signals?.[key] as Record<string, unknown> | undefined;
                   return (
                     <div key={key} className="rounded bg-muted/30 p-2">
                       <span className="font-medium capitalize">{key}</span>
@@ -894,8 +905,8 @@ function AnalysisSection(props: {
                   );
                 })}
               </div>
-              <p className="mt-2 text-sm">{props.analysisResult?.analysis?.signals?.overall_pattern ?? ""}</p>
-              <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded p-2 italic">⚠️ {props.analysisResult?.analysis?.signals?.caveat ? String(props.analysisResult.analysis.signals.caveat) : ""}</p>
+              <p className="mt-2 text-sm">{a?.signals?.overall_pattern ?? ""}</p>
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded p-2 italic">⚠️ {a?.signals?.caveat ? String(a.signals.caveat) : ""}</p>
             </div>
             {/* Limitations */}
             {a.limitations.length > 0 ? (
