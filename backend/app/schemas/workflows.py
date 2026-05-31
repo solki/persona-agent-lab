@@ -51,10 +51,18 @@ def _check_graph_config(workflow_type: str, graph_config: dict[str, Any]) -> Non
             if not isinstance(wid, int):
                 raise ValueError("graph_config.worker_agent_ids must contain only integers")
     elif workflow_type == "handoff_swarm":
-        if not graph_config.get("entry_agent_id"):
+        entry_id = graph_config.get("entry_agent_id")
+        if not entry_id:
             raise ValueError("graph_config.entry_agent_id is required for handoff_swarm workflows")
+        if not isinstance(entry_id, int):
+            raise ValueError("graph_config.entry_agent_id must be an integer")
         participant_ids = graph_config.get("participant_agent_ids", [])
         if not isinstance(participant_ids, list) or len(participant_ids) == 0:
             raise ValueError("graph_config.participant_agent_ids must be a non-empty list for handoff_swarm workflows")
+        for pid in participant_ids:
+            if not isinstance(pid, int):
+                raise ValueError("graph_config.participant_agent_ids must contain only integers")
+        if entry_id not in participant_ids:
+            raise ValueError("graph_config.entry_agent_id must be included in participant_agent_ids")
     elif workflow_type == "sequential":
         pass  # agent_sequence is optional at schema level; validated at runtime
