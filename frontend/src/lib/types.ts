@@ -332,6 +332,33 @@ export interface CollaborationChainSummary {
   status: string;
 }
 
+export interface SoulVariantResult {
+  soul_id: number;
+  soul_name: string;
+  run_id: number;
+  status: string;
+  delegation_count: number;
+  worker_order: number[];
+  unique_workers_used: number;
+  supervisor_iterations: number;
+  final_decision?: string | null;
+  total_tokens: number;
+  estimated_cost: number;
+  avg_instruction_length?: number | null;
+  final_output_preview: string;
+  collaboration_graph_url: string;
+}
+
+export interface SoulComparisonResult {
+  experiment_type: "soul_behavior_comparison";
+  experiment_id: number;
+  workflow_id: number;
+  supervisor_agent_id: number;
+  supervisor_agent_name: string;
+  task_prompt: string;
+  variants: SoulVariantResult[];
+}
+
 export interface CollaborationGraph {
   run_id: number;
   workflow_type: string;

@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import type { Agent, Experiment } from "@/lib/types";
+import type { Agent, Experiment, ExperimentRun, Soul, SoulComparisonResult, Workflow } from "@/lib/types";
 import { parseJsonObject, prettyJson } from "@/lib/utils";
 
 const experimentSchema = z.object({
@@ -215,8 +215,15 @@ export function ExperimentFormPage() {
   const experimentId = id ? Number(id) : undefined;
   const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [souls, setSouls] = useState<Soul[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [experiment, setExperiment] = useState<Experiment | null>(null);
+  const [experimentRun, setExperimentRun] = useState<ExperimentRun | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [experimentType, setExperimentType] = useState<"standard" | "soul_behavior_comparison">("standard");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState<number | null>(null);
+  const [selectedSoulIds, setSelectedSoulIds] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
@@ -226,13 +233,22 @@ export function ExperimentFormPage() {
     async function load() {
       setError("");
       try {
-        const agentData = await api.listAgents();
+        const [agentData, soulData, workflowData] = await Promise.all([api.listAgents(), api.listSouls(), api.listWorkflows()]);
         setAgents(agentData);
+        setSouls(soulData);
+        setWorkflows(workflowData);
         if (experimentId) {
           const experimentData = await api.getExperiment(experimentId);
           setExperiment(experimentData);
           setSelectedAgentIds(experimentData.agent_ids);
           form.reset(toExperimentFormValues(experimentData));
+          const evalCfg = experimentData.evaluation_config as Record<string, unknown>;
+          if (evalCfg?.experiment_type === "soul_behavior_comparison") {
+            setExperimentType("soul_behavior_comparison");
+            setSelectedWorkflowId((evalCfg.workflow_id as number) ?? null);
+            setSelectedSupervisorId((evalCfg.supervisor_agent_id as number) ?? null);
+            setSelectedSoulIds((evalCfg.soul_ids as number[]) ?? []);
+          }
         }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load experiment.");
@@ -242,16 +258,32 @@ export function ExperimentFormPage() {
   }, [experimentId, form]);
 
   const agentById = useMemo(() => Object.fromEntries(agents.map((agent) => [agent.id, agent.name])), [agents]);
+  const soulById = useMemo(() => Object.fromEntries(souls.map((s) => [s.id, s.name])), [souls]);
+
+  const selectedWorkflow = useMemo(
+    () => workflows.find((w) => w.id === selectedWorkflowId),
+    [workflows, selectedWorkflowId]
+  );
+  const workflowGraph = (selectedWorkflow?.graph_config ?? {}) as Record<string, unknown>;
+  const workflowSupervisorId = typeof workflowGraph.supervisor_agent_id === "number" ? workflowGraph.supervisor_agent_id : null;
+  const workflowWorkerIds: number[] = Array.isArray(workflowGraph.worker_agent_ids) ? workflowGraph.worker_agent_ids.filter((id): id is number => typeof id === "number") : [];
+
+  // Auto-populate supervisor from workflow config
+  useEffect(() => {
+    if (workflowSupervisorId !== null && selectedSupervisorId !== workflowSupervisorId && !experimentId) {
+      setSelectedSupervisorId(workflowSupervisorId);
+    }
+  }, [workflowSupervisorId, selectedSupervisorId, experimentId]);
 
   function toggleAgent(agentId: number) {
     setSelectedAgentIds((current) => current.includes(agentId) ? current.filter((id) => id !== agentId) : [...current, agentId]);
   }
 
+  function toggleSoul(soulId: number) {
+    setSelectedSoulIds((current) => current.includes(soulId) ? current.filter((id) => id !== soulId) : [...current, soulId]);
+  }
+
   async function submit(values: ExperimentFormValues) {
-    if (selectedAgentIds.length < 2) {
-      setError("Select at least two agents for an experiment.");
-      return;
-    }
     setError("");
     setMessage("");
     let evaluationConfig: Record<string, unknown>;
@@ -261,12 +293,25 @@ export function ExperimentFormPage() {
       setError(parseError instanceof Error ? parseError.message : "Invalid evaluation config JSON.");
       return;
     }
+
+    if (experimentType === "soul_behavior_comparison") {
+      if (!selectedWorkflowId) { setError("Select a supervisor workflow."); return; }
+      if (!selectedSupervisorId) { setError("Select a supervisor agent."); return; }
+      if (selectedSoulIds.length < 2) { setError("Select at least two souls to compare."); return; }
+      evaluationConfig.experiment_type = "soul_behavior_comparison";
+      evaluationConfig.workflow_id = selectedWorkflowId;
+      evaluationConfig.supervisor_agent_id = selectedSupervisorId;
+      evaluationConfig.soul_ids = selectedSoulIds;
+    } else {
+      if (selectedAgentIds.length < 2) { setError("Select at least two agents for an experiment."); return; }
+    }
+
     try {
       const created = await api.createExperiment({
         name: values.name,
         description: values.description,
         task_prompt: values.task_prompt,
-        agent_ids: selectedAgentIds,
+        agent_ids: experimentType === "soul_behavior_comparison" ? workflowWorkerIds : selectedAgentIds,
         evaluation_config: evaluationConfig
       });
       navigate(`/experiments/${created.id}`);
@@ -276,14 +321,13 @@ export function ExperimentFormPage() {
   }
 
   async function runExperiment() {
-    if (!experimentId) {
-      return;
-    }
+    if (!experimentId) return;
     setRunning(true);
     setError("");
     try {
       const result = await api.runExperiment(experimentId);
-      setMessage(`Experiment run created with runs ${result.run_ids.join(", ")}.`);
+      setExperimentRun(result);
+      setMessage(`Experiment run completed — ${result.run_ids.length} variant(s).`);
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "Unable to run experiment.");
     } finally {
@@ -291,9 +335,11 @@ export function ExperimentFormPage() {
     }
   }
 
+  const isSoulComp = experimentType === "soul_behavior_comparison";
+
   return (
     <>
-      <PageHeader title={experimentId ? "Experiment Detail" : "New Experiment"} description="Select agents by name and preserve related workflow runs when archiving experiment history." />
+      <PageHeader title={experimentId ? "Experiment Detail" : "New Experiment"} description={isSoulComp ? "Compare how different supervisor souls affect coordination behavior on the same task." : "Select agents by name and preserve related workflow runs when archiving experiment history."} />
       <div className="space-y-4">
         {message ? <Alert title="Experiment" tone="success">{message}</Alert> : null}
         {error ? <Alert title="Error" tone="error">{error}</Alert> : null}
@@ -302,23 +348,66 @@ export function ExperimentFormPage() {
           <CardContent>
             <form className="grid gap-4 lg:grid-cols-2" onSubmit={form.handleSubmit(submit)}>
               <FormField label="Name" error={form.formState.errors.name?.message}><Input {...form.register("name")} disabled={Boolean(experimentId)} /></FormField>
+              <FormField label="Experiment type" help={<FieldHelp pattern="tooltip" content="Standard: compare individual agents on the same task. Soul Behavior Comparison: run the same supervisor workflow with different souls on the supervisor agent." />}>
+                <Select value={experimentType} onChange={(e) => setExperimentType(e.target.value as typeof experimentType)} disabled={Boolean(experimentId)}>
+                  <option value="standard">Standard (agent comparison)</option>
+                  <option value="soul_behavior_comparison">Soul Behavior Comparison</option>
+                </Select>
+              </FormField>
               <FormField label="Description"><Textarea {...form.register("description")} disabled={Boolean(experimentId)} /></FormField>
-              <div className="lg:col-span-2">
-                <FormField label="Agents">
-                  <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
-                    {agents.map((agent) => (
-                      <label key={agent.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} disabled={Boolean(experimentId)} onChange={() => toggleAgent(agent.id)} />
-                        <span>{agent.name}</span>
-                        <StatusBadge status={agent.is_active ? "active" : "inactive"} />
-                      </label>
-                    ))}
+
+              {isSoulComp ? (
+                <>
+                  <div className="lg:col-span-2">
+                    <FormField label="Supervisor workflow" help={<FieldHelp pattern="tooltip" content="The supervisor workflow to run. Workers and task stay the same; only the supervisor's soul changes." />}>
+                      <Select value={selectedWorkflowId ?? ""} onChange={(e) => { const v = e.target.value; setSelectedWorkflowId(v ? Number(v) : null); setSelectedSupervisorId(null); }} disabled={Boolean(experimentId)}>
+                        <option value="">Select a workflow...</option>
+                        {workflows.filter((w) => w.workflow_type === "supervisor").map((w) => <option key={w.id} value={w.id}>{w.name} (id={w.id})</option>)}
+                      </Select>
+                    </FormField>
                   </div>
-                </FormField>
-                {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Selected: {selectedAgentIds.map((agentId) => agentById[agentId] ?? `Agent ${agentId}`).join(", ")}</p> : null}
-              </div>
+                  {selectedWorkflowId && workflowSupervisorId ? (
+                    <div className="lg:col-span-2">
+                      <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1">
+                        <p><span className="text-muted-foreground">Supervisor:</span> {agentById[workflowSupervisorId] ?? `Agent ${workflowSupervisorId}`} (id={workflowSupervisorId})</p>
+                        <p><span className="text-muted-foreground">Workers:</span> {workflowWorkerIds.map((wid) => agentById[wid] ?? `Agent ${wid}`).join(", ")}</p>
+                        <p className="text-xs text-muted-foreground">Only the supervisor's soul will change between variants. Workers, task, and workflow stay constant.</p>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="lg:col-span-2">
+                    <FormField label="Souls to compare" help={<FieldHelp pattern="tooltip" content="Select 2 or more souls. The supervisor will be run once with each soul. Choose souls with different decision styles to see behavioral differences." />}>
+                      <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                        {souls.map((soul) => (
+                          <label key={soul.id} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={selectedSoulIds.includes(soul.id)} disabled={Boolean(experimentId)} onChange={() => toggleSoul(soul.id)} />
+                            <span>{soul.name}</span>
+                            <StatusBadge status={soul.is_active ? "active" : "inactive"} />
+                          </label>
+                        ))}
+                      </div>
+                    </FormField>
+                    {selectedSoulIds.length > 0 ? <p className="mt-1 text-xs text-muted-foreground">Selected: {selectedSoulIds.map((sid) => soulById[sid] ?? `Soul ${sid}`).join(", ")}</p> : null}
+                  </div>
+                </>
+              ) : (
+                <div className="lg:col-span-2">
+                  <FormField label="Agents">
+                    <div className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-2">
+                      {agents.map((agent) => (
+                        <label key={agent.id} className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={selectedAgentIds.includes(agent.id)} disabled={Boolean(experimentId)} onChange={() => toggleAgent(agent.id)} />
+                          <span>{agent.name}</span>
+                          <StatusBadge status={agent.is_active ? "active" : "inactive"} />
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  {selectedAgentIds.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">Selected: {selectedAgentIds.map((agentId) => agentById[agentId] ?? `Agent ${agentId}`).join(", ")}</p> : null}
+                </div>
+              )}
               <div className="lg:col-span-2"><FormField label="Task prompt" error={form.formState.errors.task_prompt?.message}><Textarea rows={7} {...form.register("task_prompt")} disabled={Boolean(experimentId)} /></FormField></div>
-              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation rubric" content="Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5. Additional keys may be added for custom evaluators." />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId)} /></FormField></div>
+              <div className="lg:col-span-2"><FormField label="Evaluation config JSON" help={<FieldHelp pattern="popover" title="Evaluation config" content={isSoulComp ? "Auto-populated from the selections above. Contains experiment_type, workflow_id, supervisor_agent_id, and soul_ids." : "Evaluation rubric configuration.\n\nRequired score dimensions: task_completion, persistence, collaboration, evidence_discipline, tool_usage_quality, handoff_quality, customer_readiness, safety, clarity.\n\nEach scored 1-5."} />}><Textarea className="font-mono" rows={6} {...form.register("evaluationConfigJson")} disabled={Boolean(experimentId)} /></FormField></div>
               <div className="flex items-end gap-2">
                 {!experimentId ? <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Saving..." : "Save experiment"}</Button> : null}
                 <Link to="/experiments"><Button type="button" variant="outline">Back to experiments</Button></Link>
@@ -337,10 +426,80 @@ export function ExperimentFormPage() {
                 </Button>
               </CardContent>
             </Card>
+            {experimentRun?.comparison_result ? <SoulComparisonView comparison={experimentRun.comparison_result as unknown as SoulComparisonResult} runIds={experimentRun.run_ids} agentById={agentById} /> : null}
           </>
         ) : null}
       </div>
     </>
+  );
+}
+
+function SoulComparisonView({ comparison, runIds, agentById }: { comparison: SoulComparisonResult; runIds: number[]; agentById: Record<number, string> }) {
+  if (comparison.experiment_type !== "soul_behavior_comparison") {
+    return null;
+  }
+  const variants = comparison.variants ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-base font-semibold">Soul Comparison Results</h2>
+        <p className="text-sm text-muted-foreground">
+          Supervisor: {comparison.supervisor_agent_name} · {variants.length} variants · <Link to={`/runs/${runIds[0]}`} className="text-primary hover:underline">View first run</Link>
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {variants.length === 0 ? <EmptyState title="No variants" body="Run the experiment to see comparison data." /> : null}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Soul</th>
+                <th className="py-2 pr-3 font-medium">Run</th>
+                <th className="py-2 pr-3 font-medium">Status</th>
+                <th className="py-2 pr-3 font-medium">Delegations</th>
+                <th className="py-2 pr-3 font-medium">Workers Used</th>
+                <th className="py-2 pr-3 font-medium">Iterations</th>
+                <th className="py-2 pr-3 font-medium">Tokens</th>
+                <th className="py-2 pr-3 font-medium">Decision</th>
+                <th className="py-2 pr-3 font-medium">Output Preview</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.map((v) => (
+                <tr key={v.run_id} className="border-b border-border hover:bg-muted/30">
+                  <td className="py-2 pr-3 font-medium">{v.soul_name}</td>
+                  <td className="py-2 pr-3"><Link to={`/runs/${v.run_id}`} className="text-primary hover:underline">#{v.run_id}</Link></td>
+                  <td className="py-2 pr-3"><StatusBadge status={v.status} /></td>
+                  <td className="py-2 pr-3">{v.delegation_count}</td>
+                  <td className="py-2 pr-3">{v.unique_workers_used}</td>
+                  <td className="py-2 pr-3">{v.supervisor_iterations}</td>
+                  <td className="py-2 pr-3">{v.total_tokens}</td>
+                  <td className="py-2 pr-3">{v.final_decision ?? "-"}</td>
+                  <td className="py-2 pr-3 max-w-[200px] truncate text-muted-foreground" title={v.final_output_preview}>{v.final_output_preview.slice(0, 80)}{v.final_output_preview.length > 80 ? "..." : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {variants.map((v) => (
+            <Card key={v.run_id}>
+              <CardHeader className="pb-1"><h3 className="text-sm font-semibold">{v.soul_name}<span className="ml-2 text-xs text-muted-foreground font-normal">Run #{v.run_id}</span></h3></CardHeader>
+              <CardContent className="text-xs space-y-1">
+                <p><span className="text-muted-foreground">Worker order:</span> {v.worker_order.length > 0 ? v.worker_order.map((id) => agentById[id] ?? `#${id}`).join(" → ") : "none delegated"}</p>
+                {v.avg_instruction_length != null ? <p><span className="text-muted-foreground">Avg instruction length:</span> {Math.round(v.avg_instruction_length)} chars</p> : null}
+                <p><span className="text-muted-foreground">Tokens:</span> {v.total_tokens} total</p>
+                <div className="flex gap-2 mt-2">
+                  <Link to={`/runs/${v.run_id}`}><Button type="button" variant="outline" size="sm">Run Detail</Button></Link>
+                  <Link to={`/runs/${v.run_id}/collaboration-graph`}><Button type="button" variant="outline" size="sm">Collaboration</Button></Link>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
