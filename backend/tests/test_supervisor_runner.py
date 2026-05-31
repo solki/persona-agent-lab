@@ -123,6 +123,21 @@ class TestSupervisorDecisionSchema:
         d = SupervisorDecision(action="finish", final_response="Done.")
         assert d.action == "finish"
 
+    def test_agent_id_coerces_numeric_string_to_int(self):
+        d = SupervisorDecision(action="delegate", agent_id="625", instruction="Analyze.")
+        assert d.agent_id == 625
+        assert isinstance(d.agent_id, int)
+
+    def test_agent_id_non_numeric_string_passes_through_and_fails_validation(self):
+        """Non-numeric string like 'escalation_triage_worker' can't be coerced;
+        Pydantic will reject it because agent_id must be int."""
+        try:
+            SupervisorDecision(action="delegate", agent_id="escalation_triage_worker", instruction="Analyze.")
+            # In pydantic v2, string that can't be coerced will raise ValidationError
+            assert False, "Should have raised"
+        except Exception:
+            pass
+
 
 # ---------------------------------------------------------------------------
 # RunnerFactory

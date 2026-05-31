@@ -99,7 +99,7 @@ class SupervisorRunner:
 
         for iteration in range(1, max_iterations + 1):
             supervisor_context = self._assemble_supervisor_context(
-                supervisor, current_task, accumulated_outputs, iteration, max_iterations,
+                supervisor, current_task, accumulated_outputs, iteration, max_iterations, workers,
             )
             self._emit_context_events(run.id, supervisor.id, supervisor_execution, supervisor_context)
 
@@ -250,7 +250,7 @@ class SupervisorRunner:
             self.db, run.id, agent, sequence_index, input_payload, provider=self.settings.llm_provider,
         )
 
-    def _assemble_supervisor_context(self, supervisor: Agent, task: str, accumulated: list[dict], iteration: int, max_iter: int) -> Any:
+    def _assemble_supervisor_context(self, supervisor: Agent, task: str, accumulated: list[dict], iteration: int, max_iter: int, workers: list[Agent] | None = None) -> Any:
         accumulated_text = "No worker outputs yet."
         if accumulated:
             lines = []
@@ -258,15 +258,23 @@ class SupervisorRunner:
                 lines.append(f"[{item['agent_name']} (id={item['agent_id']})]: {item['content']}")
             accumulated_text = "\n\n".join(lines)
 
+        worker_list_text = "No workers available."
+        if workers:
+            worker_lines = []
+            for w in workers:
+                worker_lines.append(f"- Worker ID {w.id}: {w.name} (role: {w.role})")
+            worker_list_text = "\n".join(worker_lines)
+
         base = self.context_assembler.assemble(supervisor.id, task)
         supervisor_prompt = (
             f"{base.prompt}\n\n"
+            f"## Available workers (use these agent_id values in delegate actions)\n{worker_list_text}\n\n"
             f"## Accumulated worker outputs (iteration {iteration}/{max_iter})\n{accumulated_text}\n\n"
             "## Output format instruction\n"
             "You MUST respond with a JSON object. Choose one of:\n"
             '{"action": "delegate", "agent_id": <int>, "instruction": "<what the worker should do>", "reasoning": "<why>"}\n'
             '{"action": "finish", "final_response": "<your complete final response>", "reasoning": "<why>"}\n'
-            "Do not include any text outside the JSON object."
+            "Use only worker IDs from the available workers list above. Do not include any text outside the JSON object."
         )
         base.prompt = supervisor_prompt
         return base
