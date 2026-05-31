@@ -269,6 +269,7 @@ def test_soul_comparison_experiment_creates_variants(client):
         assert "worker_order" in v
         assert "total_tokens" in v
         assert "final_output_preview" in v
+        assert "full_final_output" in v
         assert "collaboration_graph_url" in v
         assert v["collaboration_graph_url"].startswith("/runs/")
 

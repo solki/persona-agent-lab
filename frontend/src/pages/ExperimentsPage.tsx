@@ -667,15 +667,14 @@ function SoulComparisonView({ comparison, runIds, agentById, hasAnalysis }: { co
                       <p className="mt-1 text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">{v.final_output_preview}</p>
                     ) : null}
                     {isExpanded ? (
-                      <div className="mt-1 max-h-60 overflow-y-auto rounded border border-border bg-muted/30 p-2 text-xs whitespace-pre-wrap">
-                        {v.final_output_preview || "(no output available)"}
+                      <div className="mt-1 max-h-80 overflow-y-auto rounded border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
+                        {v.full_final_output || v.final_output_preview || "(no output available)"}
                       </div>
                     ) : null}
                   </div>
 
                   <div className="flex gap-2 pt-1">
                     <Link to={`/runs/${v.run_id}`}><Button type="button" variant="outline" size="sm">Run Detail</Button></Link>
-                    <Link to={`/runs/${v.run_id}/collaboration-graph`}><Button type="button" variant="outline" size="sm">Collaboration</Button></Link>
                   </div>
                 </CardContent>
               </Card>

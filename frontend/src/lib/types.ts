@@ -399,6 +399,7 @@ export interface SoulVariantResult {
   estimated_cost: number;
   avg_instruction_length?: number | null;
   final_output_preview: string;
+  full_final_output: string;
   collaboration_graph_url: string;
 }
 
