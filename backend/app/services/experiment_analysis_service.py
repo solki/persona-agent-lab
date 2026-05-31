@@ -414,10 +414,13 @@ def _repair_json(text: str) -> Optional[str]:
 
 
 def _close_brackets(text: str) -> Optional[str]:
+    # First close any string left open by truncation, so bracket scanning
+    # can find the structural closers that follow the string value.
+    fixed = _close_unclosed_string(text)
     stack: list[str] = []
     in_string = False
     escape = False
-    for ch in text:
+    for ch in fixed:
         if escape:
             escape = False
             continue
@@ -437,15 +440,35 @@ def _close_brackets(text: str) -> Optional[str]:
             if stack and stack[-1] == ch:
                 stack.pop()
     if not stack:
-        return text if _is_valid_json(text) else None
-    return text + "".join(reversed(stack))
+        return fixed if _is_valid_json(fixed) else None
+    return fixed + "".join(reversed(stack))
+
+
+def _close_unclosed_string(text: str) -> str:
+    """If text ends inside a string literal, close it."""
+    in_string = False
+    escape = False
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+    if in_string:
+        return text + '"'
+    return text
 
 
 def _trim_last_field(text: str) -> Optional[str]:
-    last_comma = text.rfind(",")
+    # Close unclosed string first so we can find structure-aware commas
+    fixed = _close_unclosed_string(text)
+    last_comma = fixed.rfind(",")
     if last_comma == -1:
         return None
-    trimmed = text[:last_comma]
+    trimmed = fixed[:last_comma]
     closed = _close_brackets(trimmed)
     return closed or trimmed + "}"
 
